@@ -5,6 +5,7 @@ import { renderPeople, roleLabel } from './people.js';
 import { renderWeek } from './week.js';
 import { renderFarm } from './farm.js';
 import { renderCrops } from './crops.js';
+import { renderDashboard } from './dashboard.js';
 
 const $ = id => document.getElementById(id);
 const FARM_KEY = 'fbc_farm';
@@ -14,6 +15,7 @@ let farm = null;
 let myUserId = null;
 
 const ROUTES = {
+  dashboard: { title: 'Dashboard', render: renderDashboard },
   people: { title: 'People', render: renderPeople },
   week:   { title: 'Weekly plan', render: renderWeek },
   farm:   { title: 'Farm setup', render: renderFarm },
@@ -137,7 +139,7 @@ async function start() {
     $('who').textContent = user.email || '';
     await loadFarms();
     await paintMyRole();
-    if (!location.hash) location.hash = '#/people';
+    if (!location.hash) location.hash = '#/dashboard';
     await route();
   } catch (err) {
     // The server answering "no" about who you are is a dead session: expired or

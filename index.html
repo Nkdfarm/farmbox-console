@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FarmBox Console</title>
+  <meta name="description" content="Run a FarmBox: people, plans, procedures, crops.">
+  <meta name="theme-color" content="#f1e7d3">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
+  <link rel="stylesheet" href="styles.css?v=20260912f">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FarmBox">
+</head>
+<body>
+
+<!-- sign in ─────────────────────────────────────────────────────────────── -->
+<main class="signin" id="signin" hidden>
+  <form class="card card-pad" id="signinForm">
+    <div class="brand">
+      <span class="mark">FB</span>
+      <span><b>FarmBox Console</b><small>Naked Farm</small></span>
+    </div>
+    <div class="field" style="margin-bottom:var(--space-4)">
+      <label for="si-email">E-mail</label>
+      <input id="si-email" type="email" autocomplete="username" required>
+    </div>
+    <div class="field" style="margin-bottom:var(--space-5)">
+      <label for="si-pass">Password</label>
+      <input id="si-pass" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-primary" style="width:100%" id="si-go" type="submit">Sign in</button>
+    <div class="note bad" id="si-err" hidden style="margin-top:var(--space-4)"></div>
+  </form>
+</main>
+
+<!-- the console ─────────────────────────────────────────────────────────── -->
+<div class="shell" id="shell" hidden>
+  <nav class="rail" aria-label="Sections">
+    <div class="brand">
+      <span class="mark">FB</span>
+      <span><b>FarmBox</b><small>Console</small></span>
+    </div>
+
+    <div class="rail-group">This FarmBox</div>
+    <a href="#/dashboard" aria-disabled="true">Dashboard <span class="later">later</span></a>
+    <a href="#/farm" data-route="farm">Farm setup</a>
+    <a href="#/crops" data-route="crops">Crops &amp; plan</a>
+    <a href="#/procedures" aria-disabled="true">Procedures <span class="later">later</span></a>
+
+    <div class="rail-group">Labour</div>
+    <a href="#/people" data-route="people">People</a>
+    <a href="#/week" data-route="week">Weekly plan</a>
+
+    <div class="rail-group">Franchisor</div>
+    <a href="#/units" aria-disabled="true">All FarmBoxes <span class="later">later</span></a>
+
+    <div class="rail-foot">
+      <div id="who"></div>
+      <button class="btn btn-ghost btn-sm" id="signout" style="margin-top:var(--space-2)">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="field" style="min-width:220px">
+        <label for="farmPick">FarmBox</label>
+        <select id="farmPick" aria-label="Which FarmBox"></select>
+      </div>
+      <div class="grow"></div>
+      <span class="pill" id="envPill">Supabase</span>
+    </header>
+    <main class="page" id="page"></main>
+  </div>
+</div>
+
+<script type="module" src="js/app.js?v=20260912f"></script>
+<script>
+  // Installable, and it still opens when the signal drops between the
+  // office and the container. The worker is network-first, so being
+  // installed never means running last week's code.
+  if ('serviceWorker' in navigator) {
+    addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>

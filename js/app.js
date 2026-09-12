@@ -14,6 +14,7 @@ import { renderPrices } from './prices.js';
 import { renderReports } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
+import { renderHarvest } from './harvest.js';
 import { watchForUpdates, VERSION } from './update.js';
 
 const $ = id => document.getElementById(id);
@@ -30,6 +31,7 @@ const ROUTES = {
   farm:   { title: 'Farm setup', render: renderFarm },
   crops:  { title: 'Crops & plan', render: renderCrops },
   cropdb: { title: 'Crop database', render: renderCropDb },
+  harvest: { title: 'Harvest', render: renderHarvest },
   procedures: { title: 'Procedures', render: renderProcedures },
   maintenance: { title: 'Maintenance', render: renderMaintenance },
   purchasing: { title: 'Purchasing', render: renderPurchasing },

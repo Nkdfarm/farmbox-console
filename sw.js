@@ -7,14 +7,14 @@
 // office and the container where the signal drops.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'farmbox-console-20260913c';
+const CACHE = 'farmbox-console-20260913d';
 
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260913c',
+  './styles.css?v=20260913d',
   './manifest.json',
-  './js/app.js?v=20260913c',
+  './js/app.js?v=20260913d',
   './js/api.js',
   './js/ui.js',
   './js/people.js',
@@ -31,6 +31,7 @@ const SHELL = [
   './js/reports.js',
   './js/network.js',
   './js/issues.js',
+  './js/harvest.js',
   './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

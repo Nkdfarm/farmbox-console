@@ -7,14 +7,14 @@
 // office and the container where the signal drops.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'farmbox-console-20260913a';
+const CACHE = 'farmbox-console-20260913b';
 
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260913a',
+  './styles.css?v=20260913b',
   './manifest.json',
-  './js/app.js?v=20260913a',
+  './js/app.js?v=20260913b',
   './js/api.js',
   './js/ui.js',
   './js/people.js',
@@ -27,9 +27,15 @@ const SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  // addAll fails whole if any one URL 404s, which would leave no cache at all
+  // One file at a time, not addAll: addAll fails whole if any one URL 404s and
+  // would leave no cache at all. And each is fetched with cache: 'reload', so
+  // installing a new worker cannot fill its fresh cache from the browser's
+  // stale one.
   e.waitUntil(caches.open(CACHE)
-    .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null))))
+    .then(c => Promise.all(SHELL.map(u =>
+      fetch(u, { cache: 'reload' })
+        .then(r => (r.ok ? c.put(u, r) : null))
+        .catch(() => null))))
     .then(() => self.skipWaiting()));
 });
 
@@ -45,13 +51,14 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;  // Supabase answers for itself
 
-  // no-cache, not the browser's default: only app.js and styles.css carry a ?v=,
-  // so a static host's heuristic caching can serve an hour-old api.js against a
-  // fresh app.js — the two halves of a change, out of step, with nothing on
-  // screen to say so. Revalidating every same-origin GET costs a 304 and makes
+  // no-cache, not the browser's default, and for the page itself as much as
+  // for its parts. Only app.js and styles.css carry a ?v=, so a static host's
+  // caching can pair a fresh script with an hour-old module — or, worse, serve
+  // yesterday's index.html against today's app.js, which is a rail that says
+  // one thing and a page that does another. Revalidating costs a 304 and makes
   // "deployed" mean "loaded".
   e.respondWith(
-    fetch(req.mode === 'navigate' ? req : new Request(req.url, { cache: 'no-cache' }))
+    fetch(req.url, { cache: 'no-cache' })
       .then(res => {
         if (res && res.ok) {
           const copy = res.clone();

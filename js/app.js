@@ -77,11 +77,16 @@ $('signout').addEventListener('click', () => {
 // RLS decides what comes back: a farm manager sees one row, the franchisor
 // sees every FarmBox in the world. Same query either way.
 async function loadFarms() {
-  farms = await select('farm', 'select=id,name,code,status&status=eq.active&order=name');
+  // A FarmBox in setup has to be reachable, or a unit commissioned five
+  // minutes ago cannot be configured: it is exactly the farm somebody needs
+  // to open. Its state is shown beside the name rather than hidden.
+  farms = await select('farm',
+    'select=id,name,code,status&status=in.(active,setup)&order=name');
   const pick = $('farmPick');
   pick.textContent = '';
   farms.forEach(f => {
-    const o = el('option', null, `${f.name} · ${f.code}`);
+    const o = el('option', null,
+      `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
     o.value = f.id;
     pick.append(o);
   });
@@ -151,7 +156,7 @@ async function route() {
     return;
   }
   try {
-    await ROUTES[name].render(page, farm, { switchFarm });
+    await ROUTES[name].render(page, farm, { switchFarm, reloadFarms: loadFarms });
   } catch (err) {
     page.textContent = '';
     page.append(el('div', 'note bad', err.message));

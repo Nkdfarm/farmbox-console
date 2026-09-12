@@ -6,6 +6,15 @@ import { renderWeek } from './week.js';
 import { renderFarm } from './farm.js';
 import { renderCrops } from './crops.js';
 import { renderDashboard } from './dashboard.js';
+import { renderProcedures } from './procedures.js';
+import { renderCropDb } from './cropdb.js';
+import { renderMaintenance } from './maintenance.js';
+import { renderPurchasing } from './purchasing.js';
+import { renderPrices } from './prices.js';
+import { renderReports } from './reports.js';
+import { renderNetwork } from './network.js';
+import { renderIssues } from './issues.js';
+import { watchForUpdates, VERSION } from './update.js';
 
 const $ = id => document.getElementById(id);
 const FARM_KEY = 'fbc_farm';
@@ -20,6 +29,14 @@ const ROUTES = {
   week:   { title: 'Weekly plan', render: renderWeek },
   farm:   { title: 'Farm setup', render: renderFarm },
   crops:  { title: 'Crops & plan', render: renderCrops },
+  cropdb: { title: 'Crop database', render: renderCropDb },
+  procedures: { title: 'Procedures', render: renderProcedures },
+  maintenance: { title: 'Maintenance', render: renderMaintenance },
+  purchasing: { title: 'Purchasing', render: renderPurchasing },
+  prices: { title: 'Prices & market', render: renderPrices },
+  reports: { title: 'Reports', render: renderReports },
+  issues: { title: 'Issues', render: renderIssues },
+  units:  { title: 'All FarmBoxes', render: renderNetwork },
 };
 
 // ── sign in ────────────────────────────────────────────────────────────────
@@ -88,6 +105,18 @@ async function paintMyRole() {
   } catch { pill.hidden = true; }
 }
 
+// Switching FarmBox from anywhere: the picker, or a row on All FarmBoxes.
+function switchFarm(id) {
+  const next = farms.find(f => f.id === id);
+  if (!next) return;
+  farm = next;
+  $('farmPick').value = farm.id;
+  try { localStorage.setItem(FARM_KEY, farm.id); } catch { /* private window */ }
+  paintMyRole();
+  location.hash = '#/dashboard';
+  route();
+}
+
 $('farmPick').addEventListener('change', e => {
   farm = farms.find(f => f.id === e.target.value) || farm;
   try { localStorage.setItem(FARM_KEY, farm.id); } catch { /* private window */ }
@@ -97,8 +126,8 @@ $('farmPick').addEventListener('change', e => {
 
 // ── routing ────────────────────────────────────────────────────────────────
 function currentRoute() {
-  const name = (location.hash || '#/people').replace(/^#\/?/, '').split('/')[0];
-  return ROUTES[name] ? name : 'people';
+  const name = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/')[0];
+  return ROUTES[name] ? name : 'dashboard';
 }
 
 async function route() {
@@ -120,7 +149,7 @@ async function route() {
     return;
   }
   try {
-    await ROUTES[name].render(page, farm);
+    await ROUTES[name].render(page, farm, { switchFarm });
   } catch (err) {
     page.textContent = '';
     page.append(el('div', 'note bad', err.message));
@@ -128,6 +157,10 @@ async function route() {
 }
 
 window.addEventListener('hashchange', route);
+
+// Say so when a newer console is deployed: an installed tab can sit on an old
+// copy of itself for days otherwise.
+watchForUpdates();
 
 // ── boot ───────────────────────────────────────────────────────────────────
 async function start() {
@@ -137,6 +170,8 @@ async function start() {
     const user = await me();
     myUserId = user.id;
     $('who').textContent = user.email || '';
+    const v = document.getElementById('version');
+    if (v) v.textContent = 'v' + VERSION;
     await loadFarms();
     await paintMyRole();
     if (!location.hash) location.hash = '#/dashboard';

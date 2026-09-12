@@ -122,3 +122,81 @@ export function busy(button, on, label) {
     button.textContent = button.dataset.label || label || 'Save';
   }
 }
+
+// A table, because six of the console's screens are one. Columns are
+// { key, label, align, fmt, title } — fmt gets (value, row) and may return a
+// node or a string. Anything wide scrolls inside its own box rather than
+// pushing the page sideways.
+export function table(columns, rows, opts = {}) {
+  const wrap = el('div', 'table-wrap');
+  const t = el('table');
+  const thead = el('thead');
+  const htr = el('tr');
+  columns.forEach(c => {
+    const th = el('th', c.align === 'right' ? 'right' : null, c.label);
+    htr.append(th);
+  });
+  thead.append(htr);
+  t.append(thead);
+
+  const tb = el('tbody');
+  rows.forEach(r => {
+    const tr = el('tr');
+    if (opts.rowClass) tr.className = opts.rowClass(r) || '';
+    columns.forEach(c => {
+      const td = el('td', c.align === 'right' ? 'right' : null);
+      const v = c.fmt ? c.fmt(r[c.key], r) : r[c.key];
+      if (v instanceof Node) td.append(v);
+      else td.textContent = v == null || v === '' ? '—' : String(v);
+      if (c.title) td.title = c.title(r) || '';
+      tr.append(td);
+    });
+    if (opts.onRow) { tr.style.cursor = 'pointer'; tr.onclick = () => opts.onRow(r); }
+    tb.append(tr);
+  });
+  t.append(tb);
+  wrap.append(t);
+  if (!rows.length) {
+    wrap.textContent = '';
+    wrap.append(el('div', 'empty', opts.empty || 'Nothing here yet.'));
+  }
+  return wrap;
+}
+
+// Head of a page: title, one sentence saying what it is for, and whatever
+// buttons belong to the whole screen.
+export function pageHead(title, blurb, ...right) {
+  const head = el('div', 'page-head');
+  const titles = el('div');
+  titles.append(el('h1', null, title));
+  if (blurb) titles.append(el('p', null, blurb));
+  head.append(titles, el('div', 'spacer'));
+  right.filter(Boolean).forEach(n => head.append(n));
+  return head;
+}
+
+export function card(title, ...kids) {
+  const c = el('div', 'card');
+  c.style.marginBottom = 'var(--space-4)';
+  if (title) {
+    const h = el('div', 'card-pad row');
+    h.append(el('div', 'sec-title', title));
+    h.append(el('div', 'spacer'));
+    c.append(h);
+    c._head = h;
+  }
+  kids.filter(Boolean).forEach(k => c.append(k));
+  return c;
+}
+
+export const num = (v, dp = 0) =>
+  v == null ? '—' : Number(v).toLocaleString(undefined,
+    { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
+// A local date, printed short. Never through toISOString.
+export function shortDate(s) {
+  if (!s) return '—';
+  const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined,
+    { day: 'numeric', month: 'short' });
+}

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20260913b">
+  <link rel="stylesheet" href="styles.css?v=20260913c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -51,18 +51,25 @@
     <a href="#/dashboard" data-route="dashboard">Dashboard</a>
     <a href="#/farm" data-route="farm">Farm setup</a>
     <a href="#/crops" data-route="crops">Crops &amp; plan</a>
-    <a href="#/procedures" aria-disabled="true">Procedures <span class="later">later</span></a>
+    <a href="#/cropdb" data-route="cropdb">Crop database</a>
+    <a href="#/procedures" data-route="procedures">Procedures</a>
+    <a href="#/maintenance" data-route="maintenance">Maintenance</a>
+    <a href="#/purchasing" data-route="purchasing">Purchasing</a>
+    <a href="#/prices" data-route="prices">Prices &amp; market</a>
+    <a href="#/issues" data-route="issues">Issues</a>
+    <a href="#/reports" data-route="reports">Reports</a>
 
     <div class="rail-group">Labour</div>
     <a href="#/people" data-route="people">People</a>
     <a href="#/week" data-route="week">Weekly plan</a>
 
     <div class="rail-group">Franchisor</div>
-    <a href="#/units" aria-disabled="true">All FarmBoxes <span class="later">later</span></a>
+    <a href="#/units" data-route="units">All FarmBoxes</a>
 
     <div class="rail-foot">
       <div id="who"></div>
       <button class="btn btn-ghost btn-sm" id="signout" style="margin-top:var(--space-2)">Sign out</button>
+      <div id="version" class="rail-version"></div>
     </div>
   </nav>
 
@@ -79,7 +86,7 @@
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20260913b"></script>
+<script type="module" src="js/app.js?v=20260913c"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

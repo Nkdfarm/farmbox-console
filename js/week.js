@@ -7,7 +7,7 @@
 // them, least of all the work the planner could not place.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast, drawer, confirmDrawer, initials, busy } from './ui.js';
+import { el, toast, drawer, confirmDrawer, avatar, busy } from './ui.js';
 import { roleLabel } from './people.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -210,7 +210,7 @@ function rosterCard() {
     tr.append(cell(el('span', 'mono', 'Worker ' + (i + 1))));
 
     const who = el('div', 'who');
-    who.append(el('div', 'avatar r-' + r.role, initials(r.name)));
+    who.append(avatar(r));
     const names = el('div');
     names.append(el('b', null, r.name));
     names.append(el('small', null, roleLabel(r.role)));
@@ -289,9 +289,20 @@ function taskRow(task) {
 
   tr.append(cell(el('span', 'chip fam-' + task.family, task.family)));
 
-  const who = el('div', 'chips');
+  // faces first, like a card on a project board; the names beside them, so a
+  // face is never the only way to tell who it is
+  const who = el('div', 'assignees');
   if (!task.workers.length) who.append(el('span', 'pill bad', 'nobody'));
-  task.workers.forEach(w => who.append(el('span', 'chip', w.name)));
+  else {
+    const stack = el('div', 'avatars');
+    task.workers.slice(0, 3).forEach(w => {
+      const a = avatar({ worker_id: w.id, name: w.name }, 'sm');
+      a.title = w.name;
+      stack.append(a);
+    });
+    if (task.workers.length > 3) stack.append(el('div', 'avatar sm more', '+' + (task.workers.length - 3)));
+    who.append(stack, el('small', null, task.workers.map(w => w.name).join(', ')));
+  }
   tr.append(cell(who));
 
   const act = el('div', 'acts');
@@ -316,6 +327,7 @@ function reassign(task) {
   const pick = (id, label, hint) => {
     const b = el('button', 'btn' + (current.has(id) ? ' btn-accent' : ''), label);
     b.style.justifyContent = 'flex-start';
+    if (id) { b.style.paddingLeft = '6px'; b.prepend(avatar({ worker_id: id, name: label }, 'sm')); }
     b.onclick = async () => {
       d.close();
       try {

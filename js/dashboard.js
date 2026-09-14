@@ -11,7 +11,7 @@
 // because it is the one thing that has not happened yet.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast } from './ui.js';
+import { el, toast, icon } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -74,6 +74,7 @@ function tiles() {
 
   wrap.append(tile({
     label: 'Overdue',
+    icon: 'clock',
     value: t.overdue,
     tone: t.overdue ? 'bad' : 'ok',
     sub: t.overdue ? 'open, with the day already past' : 'nothing is late',
@@ -82,6 +83,7 @@ function tiles() {
 
   wrap.append(tile({
     label: 'Open issues',
+    icon: 'alert',
     value: i.open,
     tone: i.critical ? 'bad' : i.open ? 'warn' : 'ok',
     sub: i.critical ? `${i.critical} critical, oldest ${i.oldest_days} d`
@@ -92,6 +94,7 @@ function tiles() {
 
   wrap.append(tile({
     label: 'This week',
+    icon: 'check',
     value: `${t.week.done}/${t.week.planned}`,
     sub: t.week.open ? `${t.week.open} still open` : 'the week is clear',
     tone: '',
@@ -101,6 +104,7 @@ function tiles() {
 
   wrap.append(tile({
     label: 'Occupied',
+    icon: 'layers',
     value: `${o.pct}%`,
     sub: `${o.occupied} of ${o.positions} positions${o.proposed ? ` · ${o.proposed} proposed` : ''}`,
     tone: o.pct >= 80 ? 'ok' : o.pct >= 40 ? '' : 'warn',
@@ -109,6 +113,7 @@ function tiles() {
 
   wrap.append(tile({
     label: 'Harvest, 7 days',
+    icon: 'basket',
     value: `${h.d7.kg} kg`,
     sub: h.d14.kg > h.d7.kg ? `${h.d14.kg} kg within 14` : 'nothing more within 14 days',
     tone: '',
@@ -124,6 +129,7 @@ function tiles() {
   }[l.status] || [l.status, ''];
   wrap.append(tile({
     label: 'Next week',
+    icon: 'calendar',
     value: l.tasks,
     sub: `${planWords[0]}${l.unassigned ? ` · ${l.unassigned} with no name on them` : ''}`,
     tone: planWords[1],
@@ -133,6 +139,7 @@ function tiles() {
   if (p.waiting) {
     wrap.append(tile({
       label: 'To order',
+    icon: 'cart',
       value: p.waiting,
       tone: p.late ? 'bad' : 'warn',
       sub: p.late ? `${p.late} already past the order-by date`
@@ -143,12 +150,18 @@ function tiles() {
   return wrap;
 }
 
-function tile({ label, value, sub, tone, list, families, go }) {
+function tile({ label, value, sub, tone, list, families, go, icon: glyph }) {
   const node = el(go ? 'a' : 'div', 'tile' + (tone ? ' ' + tone : ''));
   if (go) node.href = go;
-  node.append(el('div', 'tile-label', label));
-  node.append(el('div', 'tile-value', String(value)));
-  if (sub) node.append(el('div', 'tile-sub', sub));
+  if (glyph) {
+    const badge = el('div', 'tile-icon');
+    badge.append(icon(glyph));
+    node.append(badge);
+  }
+  const body = el('div', 'tile-body');
+  body.append(el('div', 'tile-value', String(value)));
+  body.append(el('div', 'tile-label', label));
+  if (sub) body.append(el('div', 'tile-sub', sub));
 
   if (families?.length) {
     const row = el('div', 'tile-fams');
@@ -158,15 +171,16 @@ function tile({ label, value, sub, tone, list, families, go }) {
       c.append(el('i'), document.createTextNode(`${f.done}/${f.planned}`));
       row.append(c);
     });
-    node.append(row);
+    body.append(row);
   }
 
   if (list?.length) {
     const ul = el('ul', 'tile-list');
     list.slice(0, 3).forEach(x => ul.append(el('li', null, x)));
     if (list.length > 3) ul.append(el('li', 'more', `and ${list.length - 3} more`));
-    node.append(ul);
+    body.append(ul);
   }
+  node.append(body);
   return node;
 }
 

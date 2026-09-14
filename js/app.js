@@ -1,6 +1,6 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select } from './api.js';
-import { el, toast } from './ui.js';
+import { el, toast, icon, avatar } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek } from './week.js';
 import { renderFarm } from './farm.js';
@@ -19,6 +19,38 @@ import { watchForUpdates, VERSION } from './update.js';
 
 const $ = id => document.getElementById(id);
 const FARM_KEY = 'fbc_farm';
+
+// The rail's icons, the brand mark and the sign-out button are named in the
+// markup and drawn here, so the SVGs live in one place (ui.js).
+document.querySelectorAll('[data-icon]').forEach(n => n.prepend(icon(n.dataset.icon)));
+// the page name as a tooltip, for when a narrow window folds the rail to icons
+document.querySelectorAll('.rail a').forEach(a => { a.title = a.textContent.trim(); });
+
+// The menu folds to its icons for more room on the page. A person's choice is
+// remembered; until they make one, a narrow window folds it and a wide one
+// opens it. The choice is also kept in memory, so a private window (no
+// localStorage) still toggles.
+const RAIL_KEY = 'fbc_rail';
+const narrow = matchMedia('(max-width: 900px)');
+let railChoice = null;
+try { railChoice = localStorage.getItem(RAIL_KEY); } catch { /* private window */ }
+
+function paintRail() {
+  const folded = railChoice ? railChoice === 'folded' : narrow.matches;
+  $('shell').classList.toggle('collapsed', folded);
+  const label = folded ? 'Expand the menu' : 'Collapse the menu';
+  const t = $('railToggle');
+  t.setAttribute('aria-expanded', String(!folded));
+  t.setAttribute('aria-label', label);
+  t.title = label;
+}
+$('railToggle').addEventListener('click', () => {
+  railChoice = $('shell').classList.contains('collapsed') ? 'open' : 'folded';
+  try { localStorage.setItem(RAIL_KEY, railChoice); } catch { /* private window */ }
+  paintRail();
+});
+narrow.addEventListener('change', paintRail);
+paintRail();
 
 let farms = [];
 let farm = null;
@@ -176,7 +208,12 @@ async function start() {
   try {
     const user = await me();
     myUserId = user.id;
+    const name = user.user_metadata?.name || user.user_metadata?.full_name ||
+      (user.email || '').split('@')[0].replace(/^./, c => c.toUpperCase());
+    $('whoName').textContent = name;
     $('who').textContent = user.email || '';
+    $('meAvatar').textContent = '';
+    $('meAvatar').append(avatar({ id: user.id, name }));
     const v = document.getElementById('version');
     if (v) v.textContent = 'v' + VERSION;
     await loadFarms();

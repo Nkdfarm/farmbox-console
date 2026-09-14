@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, select } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer,
-         initials, suggestPassword, busy } from './ui.js';
+         avatar, suggestPassword, busy } from './ui.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -172,7 +172,7 @@ function personRow(p) {
   if (!p.active) tr.className = 'off';
 
   const who = el('div', 'who');
-  who.append(el('div', 'avatar r-' + p.role, initials(p.name)));
+  who.append(avatar(p));
   const names = el('div');
   names.append(el('b', null, p.name));
   names.append(el('small', null, p.email || 'no e-mail'));

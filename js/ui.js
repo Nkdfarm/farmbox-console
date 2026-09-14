@@ -200,3 +200,76 @@ export function shortDate(s) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined,
     { day: 'numeric', month: 'short' });
 }
+
+// ── icons ──────────────────────────────────────────────────────────────────
+// One line-icon set on a 24 grid with a round 1.75 stroke, so the rail, the
+// tiles and the buttons speak the same language. Everything is currentColor:
+// the stylesheet decides the colour, never the icon.
+const ICONS = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  farm: '<path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11"/><circle cx="16" cy="6" r="2.25"/><circle cx="10" cy="12" r="2.25"/><circle cx="18" cy="18" r="2.25"/>',
+  sprout: '<path d="M12 21v-9"/><path d="M12 12C12 8 9 5 4 5c0 4 3 7 8 7Z"/><path d="M12 10c0-3.5 2.5-6 7-6 0 3.5-2.5 6-7 6Z"/>',
+  basket: '<path d="M3 10h18l-1.8 8.4A2 2 0 0 1 17.2 20H6.8a2 2 0 0 1-2-1.6Z"/><path d="m8 10 3-6M16 10l-3-6"/><path d="M9 14v2.5M12 14v2.5M15 14v2.5"/>',
+  database: '<ellipse cx="12" cy="5.5" rx="8" ry="2.5"/><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13"/><path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"/>',
+  clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3.5A1.5 1.5 0 0 1 10.5 2h3A1.5 1.5 0 0 1 15 3.5V4"/><path d="m9 13 2 2 4-4"/>',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/>',
+  cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.6l2.5 12.2a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 1.9-1.5L21.5 7H6"/>',
+  trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-3"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.3a3.5 3.5 0 0 1 0 7.4M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+  calendar: '<rect x="3" y="4.5" width="18" height="17" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 14h.01M12 14h.01M16.5 14h.01M7.5 17.5h.01M12 17.5h.01"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
+  chevronLeft: '<path d="m14.5 17-5-5 5-5"/>',
+};
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export function icon(name) {
+  const s = document.createElementNS(SVG_NS, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('fill', 'none');
+  s.setAttribute('stroke', 'currentColor');
+  s.setAttribute('stroke-width', '1.75');
+  s.setAttribute('stroke-linecap', 'round');
+  s.setAttribute('stroke-linejoin', 'round');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = ICONS[name] || '';
+  return s;
+}
+
+// ── faces ──────────────────────────────────────────────────────────────────
+// Demo portraits until people have photos of their own: men, Black and brown,
+// hand-picked from randomuser.me's set so the demo looks like the people who
+// work in a FarmBox. The face is picked by a hash of the person's id, so
+// somebody keeps the same one on every page and every reload. A real
+// photo_url, when there is one, always wins; with no signal the initials stay
+// where the photo would have been.
+const FACES = [5, 12, 16, 25, 30, 38, 39, 48, 49, 50, 53, 54, 55, 56, 58, 59,
+               65, 69, 80, 83, 91, 95];
+const hash = s => {
+  let h = 2166136261;
+  for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+};
+export const demoFace = key => {
+  const h = hash(key);
+  return `https://randomuser.me/api/portraits/men/${FACES[h % FACES.length]}.jpg`;
+};
+
+// p is anything with a name and an id: { worker_id | id, name, role?, photo_url? }.
+// size is '', 'sm' or 'lg'.
+export function avatar(p, size = '') {
+  const cls = ['avatar', size, p.role && 'r-' + p.role].filter(Boolean).join(' ');
+  const box = el('div', cls, initials(p.name));
+  const img = new Image();
+  img.alt = '';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.onload = () => { box.textContent = ''; box.append(img); box.classList.add('has-photo'); };
+  img.src = p.photo_url || demoFace(p.worker_id ?? p.id ?? p.name);
+  return box;
+}

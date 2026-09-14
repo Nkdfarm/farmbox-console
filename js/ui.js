@@ -225,6 +225,7 @@ const ICONS = {
   check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
   chevronLeft: '<path d="m14.5 17-5-5 5-5"/>',
+  chevronRight: '<path d="m9.5 7 5 5-5 5"/>',
 };
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

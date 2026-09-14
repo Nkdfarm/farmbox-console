@@ -11,7 +11,7 @@
 // because it is the one thing that has not happened yet.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast, icon } from './ui.js';
+import { el, toast, icon, num } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -49,7 +49,7 @@ function paint() {
   mount.append(head);
 
   mount.append(tiles());
-  mount.append(weekStrip());
+  mount.append(calendarCard());
   mount.append(bays());
 }
 
@@ -184,26 +184,268 @@ function tile({ label, value, sub, tone, list, families, go, icon: glyph }) {
   return node;
 }
 
-// ── the week, day by day ───────────────────────────────────────────────────
-// Harvest and transplant are the two dates a week is built around; everything
-// else can move a day and nobody notices.
-function weekStrip() {
-  const card = el('div', 'card');
-  const head = el('div', 'card-pad row');
-  head.append(el('div', 'sec-title', 'This week'));
-  head.append(el('div', 'spacer'));
-  head.append(el('span', 'hint', 'Harvests and transplants. Closed days are shaded.'));
-  card.append(head);
+// ── the crop calendar: a week, a month or a year ───────────────────────────
+// Sowing, transplant and harvest are the dates a crop plan is built around.
+// The card used to show this week and nothing else, and a plan is read further
+// out than that. So it chooses its own window — a week, a month or a year —
+// and which one, from the menu or with the arrows. A month is a grid of days
+// and a year is twelve bars of harvest weight; clicking a day opens its week,
+// clicking a month opens the month. The view is remembered, the period is not:
+// the dashboard always opens on today.
+const CAL_KEY = 'fbc_cal_view';
+const VIEWS = [['week', 'Week'], ['month', 'Month'], ['year', 'Year']];
+const KIND_ORDER = { harvest: 0, transplant: 1, sow: 2 };
+const cal = { view: 'week', anchor: new Date() };
+try {
+  const v = localStorage.getItem(CAL_KEY);
+  if (VIEWS.some(x => x[0] === v)) cal.view = v;
+} catch { /* private window */ }
+let calSeq = 0;
 
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const isoDow = d => ((d.getDay() + 6) % 7) + 1;
+const mondayOf = d => addDays(d, 1 - isoDow(d));
+// ISO week: the week holding the year's first Thursday is week 1
+const isoWeek = d => {
+  const thu = addDays(d, 4 - isoDow(d));
+  const jan1 = new Date(thu.getFullYear(), 0, 1);
+  return 1 + Math.floor(Math.round((thu - jan1) / 86400000) / 7);
+};
+
+// The window a view shows around a date. `first`/`last` are the period itself;
+// `from`/`to` are what is fetched, which for a month runs Monday to Sunday so
+// the grid shows the edges of the months beside it.
+function windowOf(view, anchor) {
+  if (view === 'week') {
+    const from = mondayOf(anchor), to = addDays(from, 6);
+    return { from, to, first: from, last: to };
+  }
+  if (view === 'month') {
+    const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    return { from: mondayOf(first), to: addDays(mondayOf(last), 6), first, last };
+  }
+  const first = new Date(anchor.getFullYear(), 0, 1);
+  const last = new Date(anchor.getFullYear(), 11, 31);
+  return { from: first, to: last, first, last };
+}
+
+// n periods before or after. A month or a year keeps the month it is on, so
+// going from Year back to Month lands where the person was looking.
+function stepAnchor(view, anchor, n) {
+  if (view === 'week') return addDays(anchor, 7 * n);
+  if (view === 'month') return new Date(anchor.getFullYear(), anchor.getMonth() + n, 1);
+  return new Date(anchor.getFullYear() + n, anchor.getMonth(), 1);
+}
+
+const periodKey = (view, d) => ymd(windowOf(view, d).first);
+
+function periodLabel(view, d) {
+  const w = windowOf(view, d);
+  if (view === 'week') {
+    const f = x => x.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `Week ${isoWeek(w.first)} · ${f(w.first)} – ${f(w.last)} ${w.last.getFullYear()}`;
+  }
+  if (view === 'month') return w.first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return String(w.first.getFullYear());
+}
+
+// The rolling menu: half a year of weeks either side, a year of months, three
+// years. The arrows go further than the menu reaches, and the menu follows.
+function periodMenu(view, anchor) {
+  const span = { week: 26, month: 12, year: 3 }[view];
+  const now = periodKey(view, new Date());
+  const s = el('select');
+  s.setAttribute('aria-label', 'Which ' + view);
+  for (let i = -span; i <= span; i++) {
+    const d = stepAnchor(view, anchor, i);
+    const key = periodKey(view, d);
+    const o = el('option', null, periodLabel(view, d) + (key === now ? ' · now' : ''));
+    o.value = key;
+    s.append(o);
+  }
+  s.value = periodKey(view, anchor);
+  return s;
+}
+
+function calendarCard() {
+  const card = el('div', 'card cal');
+  card.style.marginBottom = 'var(--space-4)';
+
+  const head = el('div', 'cal-head');
+  const titles = el('div');
+  titles.append(el('div', 'sec-title', 'Crop calendar'));
+  const summary = el('div', 'hint');
+  titles.append(summary);
+  const controls = el('div', 'cal-controls');
+  head.append(titles, el('div', 'spacer'), controls);
+
+  const body = el('div', 'cal-body');
+  const legend = el('div', 'cal-legend');
+  [['harvest', 'Harvest'], ['transplant', 'Transplant'], ['sow', 'Sowing']].forEach(([k, label]) => {
+    const item = el('span', k);
+    item.append(el('i'), document.createTextNode(label));
+    legend.append(item);
+  });
+  legend.append(el('span', 'spacer'));
+  legend.append(el('span', null, 'Validated and growing batches · closed days shaded'));
+
+  card.append(head, body, legend);
+  loadCalendar({ summary, controls, body });
+  return card;
+}
+
+function goCalendar(parts, view, anchor) {
+  cal.view = view;
+  cal.anchor = anchor;
+  try { localStorage.setItem(CAL_KEY, view); } catch { /* private window */ }
+  loadCalendar(parts);
+}
+
+function paintControls(parts) {
+  const { controls } = parts;
+  controls.textContent = '';
+
+  const seg = el('div', 'seg');
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Calendar view');
+  VIEWS.forEach(([v, label]) => {
+    const b = el('button', 'seg-btn', label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(cal.view === v));
+    b.onclick = () => { if (cal.view !== v) goCalendar(parts, v, cal.anchor); };
+    seg.append(b);
+  });
+
+  const arrow = (name, n, label) => {
+    const b = el('button', 'btn btn-sm btn-icon');
+    b.type = 'button';
+    b.append(icon(name));
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    b.onclick = () => goCalendar(parts, cal.view, stepAnchor(cal.view, cal.anchor, n));
+    return b;
+  };
+
+  const menu = periodMenu(cal.view, cal.anchor);
+  menu.onchange = () => {
+    const d = parse(menu.value);
+    goCalendar(parts, cal.view,
+      cal.view === 'year' ? new Date(d.getFullYear(), cal.anchor.getMonth(), 1) : d);
+  };
+  const pick = el('div', 'field');
+  pick.append(menu);
+
+  const back = el('button', 'btn btn-sm',
+    { week: 'This week', month: 'This month', year: 'This year' }[cal.view]);
+  back.type = 'button';
+  back.hidden = periodKey(cal.view, cal.anchor) === periodKey(cal.view, new Date());
+  back.onclick = () => goCalendar(parts, cal.view, new Date());
+
+  controls.append(seg, arrow('chevronLeft', -1, 'Earlier'), pick,
+                  arrow('chevronRight', 1, 'Later'), back);
+}
+
+async function loadCalendar(parts) {
+  const seq = ++calSeq;
+  const { body, summary } = parts;
+  paintControls(parts);
+  const w = windowOf(cal.view, cal.anchor);
+  summary.textContent = periodLabel(cal.view, cal.anchor);
+  body.textContent = '';
+  body.append(el('div', 'empty cal-loading', 'Reading the calendar…'));
+
+  let res;
+  try {
+    res = await rpc('crop_calendar', { p_farm: farm.id, p_from: ymd(w.from), p_to: ymd(w.to) });
+  } catch (e) {
+    if (seq !== calSeq) return;
+    body.textContent = '';
+    // A console published ahead of its database migration: this week still
+    // comes from the dashboard's own copy, and the note says what is missing.
+    if (/could not find the function/i.test(e.message) && data.calendar?.length) {
+      body.append(el('div', 'note warn cal-note',
+        'Other weeks, months and years need the crop_calendar database update. Showing this week.'));
+      body.append(weekView(dashboardWeek(), parse(data.calendar[0].date)));
+    } else {
+      body.append(el('div', 'note bad cal-note', e.message));
+    }
+    return;
+  }
+  if (seq !== calSeq) return;   // a newer choice is already on its way
+
+  body.textContent = '';
+  summary.textContent = periodLabel(cal.view, cal.anchor) + ' · ' + totals(res, w);
+  body.append(cal.view === 'week' ? weekView(res, w.from)
+            : cal.view === 'month' ? monthView(res, w, parts)
+            : yearView(res, w.first.getFullYear(), parts));
+}
+
+// The dashboard's own calendar in the shape crop_calendar answers with.
+function dashboardWeek() {
+  return {
+    today: data.today,
+    operating_days: data.farm.operating_days,
+    days: data.calendar.map(d => ({ date: d.date, tasks: d.tasks, done: d.done })),
+    events: data.calendar.flatMap(d => [
+      ...d.harvests.map(x => ({ date: d.date, kind: 'harvest', crop: x.crop, position: x.position, kg: x.kg })),
+      ...d.transplants.map(x => ({ date: d.date, kind: 'transplant', crop: x.crop, position: x.position })),
+    ]),
+  };
+}
+
+// Counted over the period itself, not the grid: a month's summary does not
+// include the last days of the month before.
+function totals(res, w) {
+  const a = ymd(w.first), b = ymd(w.last);
+  let kg = 0, h = 0, t = 0, s = 0;
+  (res.days || []).forEach(r => {
+    const k = String(r.date).slice(0, 10);
+    if (k < a || k > b) return;
+    kg += Number(r.harvest_kg) || 0;
+    h += r.harvests || 0;
+    t += r.transplants || 0;
+    s += r.sowings || 0;
+  });
+  if (!h && !t && !s) return 'nothing sown, transplanted or harvested';
+  const bits = [];
+  if (h) bits.push(`${num(kg)} kg from ${h} harvest${h === 1 ? '' : 's'}`);
+  if (t) bits.push(`${t} transplant${t === 1 ? '' : 's'}`);
+  if (s) bits.push(`${s} sowing${s === 1 ? '' : 's'}`);
+  return bits.join(' · ');
+}
+
+const byDate = rows => {
+  const m = new Map();
+  (rows || []).forEach(r => {
+    const k = String(r.date).slice(0, 10);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  });
+  return m;
+};
+const dayIndex = rows => new Map((rows || []).map(r => [String(r.date).slice(0, 10), r]));
+const openOn = (res, d) => !res.operating_days || res.operating_days.includes(isoDow(d));
+const todayKey = res => String(res.today || ymd(new Date())).slice(0, 10);
+const eventDetail = x => x.kind === 'harvest' ? `${x.position} · ${x.kg ?? '—'} kg`
+                       : x.kind === 'transplant' ? `${x.position} · in`
+                       : `${x.position} · sown`;
+
+// ── week: seven columns, the batches by name ──
+function weekView(res, from) {
   const strip = el('div', 'week-strip');
-  const today = data.today;
-  data.calendar.forEach(d => {
-    const col = el('div', 'day' + (d.open ? '' : ' closed') + (d.date === today ? ' today' : ''));
+  const events = byDate(res.events), days = dayIndex(res.days), today = todayKey(res);
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(from, i), key = ymd(d), open = openOn(res, d);
+    const col = el('div', 'day' + (open ? '' : ' closed') + (key === today ? ' today' : ''));
     const h = el('div', 'day-head');
-    h.append(el('span', 'day-name', dayLabel(d.date)));
-    if (d.tasks) {
-      const n = el('span', 'day-count', `${d.done}/${d.tasks}`);
-      n.title = `${d.tasks} task${d.tasks === 1 ? '' : 's'}, ${d.done} done`;
+    h.append(el('span', 'day-name', dayLabel(key)));
+    const info = days.get(key);
+    if (info?.tasks) {
+      const n = el('span', 'day-count', `${info.done}/${info.tasks}`);
+      n.title = `${info.tasks} task${info.tasks === 1 ? '' : 's'}, ${info.done} done`;
       h.append(n);
     }
     col.append(h);
@@ -211,31 +453,93 @@ function weekStrip() {
     // A transplant day can hold a dozen batches. Three fit in a seventh of the
     // width; the rest are a count that opens the plan, because a column tall
     // enough for twelve pushes everything below the fold on every other day.
-    const events = [
-      ...d.harvests.map(x => ['harvest', x.crop, `${x.position} · ${x.kg ?? '—'} kg`]),
-      ...d.transplants.map(x => ['transplant', x.crop, `${x.position} · in`]),
-    ];
-    events.slice(0, 3).forEach(([kind, crop, detail]) => {
-      const c = el('div', 'ev ' + kind);
-      c.append(el('b', null, crop));
-      c.append(el('span', null, detail));
+    const list = (events.get(key) || []).slice()
+      .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.crop.localeCompare(b.crop));
+    list.slice(0, 3).forEach(x => {
+      const c = el('div', 'ev ' + x.kind);
+      c.append(el('b', null, x.crop));
+      c.append(el('span', null, eventDetail(x)));
       col.append(c);
     });
-    if (events.length > 3) {
-      const more = el('a', 'ev more', `+${events.length - 3} more`);
+    if (list.length > 3) {
+      const more = el('a', 'ev more', `+${list.length - 3} more`);
       more.href = '#/crops';
-      more.title = events.slice(3).map(e => `${e[1]} · ${e[2]}`).join('\n');
+      more.title = list.slice(3).map(x => `${x.crop} · ${eventDetail(x)}`).join('\n');
       col.append(more);
     }
-    // An empty open day says nothing: seven repetitions of "nothing planted"
-    // is noise, and the day's own emptiness already says it.
-    if (!d.harvests.length && !d.transplants.length && !d.open) {
-      col.append(el('div', 'ev none', 'closed'));
-    }
+    if (!list.length && !open) col.append(el('div', 'ev none', 'closed'));
     strip.append(col);
+  }
+  return strip;
+}
+
+// ── month: a grid of days, counts per day, names in the tooltip ──
+function monthView(res, w, parts) {
+  const grid = el('div', 'month-grid');
+  DAY_NAME.slice(1).forEach(n => grid.append(el('div', 'mg-dow', n)));
+  const days = dayIndex(res.days), events = byDate(res.events), today = todayKey(res);
+  for (let d = w.from; d <= w.to; d = addDays(d, 1)) {
+    const key = ymd(d), info = days.get(key) || {};
+    const cell = el('button', 'mg-day'
+      + (d.getMonth() === w.first.getMonth() ? '' : ' out')
+      + (openOn(res, d) ? '' : ' closed')
+      + (key === today ? ' today' : ''));
+    cell.type = 'button';
+    cell.append(el('span', 'mg-num', String(d.getDate())));
+    if (info.harvests) cell.append(el('span', 'mc harvest', `${info.harvests} · ${num(info.harvest_kg)} kg`));
+    if (info.transplants) cell.append(el('span', 'mc transplant', `${info.transplants} in`));
+    if (info.sowings) cell.append(el('span', 'mc sow', `${info.sowings} sown`));
+    const names = (events.get(key) || []).map(x => `${x.crop} · ${eventDetail(x)}`);
+    cell.title = [
+      d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+      ...names.slice(0, 10),
+      names.length > 10 ? `and ${names.length - 10} more` : '',
+      'Click to open the week',
+    ].filter(Boolean).join('\n');
+    const day = d;
+    cell.onclick = () => goCalendar(parts, 'week', day);
+    grid.append(cell);
+  }
+  return grid;
+}
+
+// ── year: twelve months, harvest weight as the bar ──
+function yearView(res, year, parts) {
+  const months = Array.from({ length: 12 }, () => ({ kg: 0, harvests: 0, transplants: 0, sowings: 0 }));
+  (res.days || []).forEach(r => {
+    const d = parse(String(r.date).slice(0, 10));
+    if (d.getFullYear() !== year) return;
+    const m = months[d.getMonth()];
+    m.kg += Number(r.harvest_kg) || 0;
+    m.harvests += r.harvests || 0;
+    m.transplants += r.transplants || 0;
+    m.sowings += r.sowings || 0;
   });
-  card.append(strip);
-  return card;
+  const max = Math.max(1, ...months.map(m => m.kg));
+  const now = new Date();
+  const chart = el('div', 'year-chart');
+  months.forEach((m, i) => {
+    const first = new Date(year, i, 1);
+    const col = el('button', 'yc-month' + (year === now.getFullYear() && i === now.getMonth() ? ' now' : ''));
+    col.type = 'button';
+    col.append(el('div', 'yc-kg', m.kg ? `${num(m.kg)} kg` : '—'));
+    const track = el('div', 'yc-track');
+    const bar = el('div', 'yc-bar');
+    bar.style.height = m.kg ? `${Math.max(3, Math.round((100 * m.kg) / max))}%` : '0';
+    track.append(bar);
+    col.append(track);
+    col.append(el('div', 'yc-name', first.toLocaleDateString(undefined, { month: 'short' })));
+    const sub = el('div', 'yc-sub');
+    if (m.transplants) sub.append(el('span', 't', `${m.transplants} in`));
+    if (m.sowings) sub.append(el('span', 's', `${m.sowings} sown`));
+    col.append(sub);
+    col.title = `${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}: `
+      + `${num(m.kg)} kg from ${m.harvests} harvests · ${m.transplants} transplants · `
+      + `${m.sowings} sowings\nClick to open the month`;
+    col.onclick = () => goCalendar(parts, 'month', first);
+    chart.append(col);
+  });
+  return chart;
 }
 
 // ── how full each bay is ───────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select, rpc,
-         connection, onConnection, newPage } from './api.js';
+         connection, onConnection, newPage, reconnect } from './api.js';
 import { el, toast, icon, avatar, pref } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek } from './week.js';
@@ -204,14 +204,36 @@ const clock = t => {
     d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 };
 
-function paintConnection({ online, savedAt }) {
+function paintConnection({ phase, attempt, attempts, savedAt }) {
   const n = $('net');
-  n.textContent = '';
-  n.className = 'pill net ' + (online ? 'is-online' : 'warn');
-  n.append(icon(online ? 'wifi' : 'wifiOff'), el('span', null, online ? 'Connected' : 'Offline'));
-  n.title = online ? 'Connected — everything on screen is live'
-                   : 'Offline — read only until the connection is back';
+  // Redrawn only when the phase changes, so the Connecting bar keeps its
+  // place and fills smoothly from one attempt to the next.
+  if (n.dataset.phase !== phase) {
+    n.dataset.phase = phase;
+    n.textContent = '';
+    n.className = 'pill net ' +
+      (phase === 'online' ? 'is-online' : phase === 'connecting' ? 'is-connecting' : 'warn');
+    n.append(icon(phase === 'offline' ? 'wifiOff' : 'wifi'),
+      el('span', null, phase === 'online' ? 'Connected'
+                     : phase === 'connecting' ? 'Connecting…' : 'Offline'));
+    if (phase === 'connecting') {
+      const track = el('span', 'net-bar');
+      track.append(el('i'));
+      n.append(track);
+    }
+    n.disabled = phase !== 'offline';
+  }
+  if (phase === 'connecting') {
+    const fill = n.querySelector('.net-bar i');
+    void fill.offsetWidth;        // start the transition from where it is now
+    fill.style.width = (attempt / attempts * 100) + '%';
+    n.title = `No answer from the server — trying again (${attempt} of ${attempts})`;
+  } else {
+    n.title = phase === 'online' ? 'Connected — everything on screen is live'
+                                 : 'Offline — read only. Click to try to connect again.';
+  }
 
+  const online = phase !== 'offline';
   const bar = $('offlineBar');
   bar.hidden = online;
   bar.textContent = online ? '' :
@@ -221,6 +243,7 @@ function paintConnection({ online, savedAt }) {
     'Changes need a connection.';
 }
 paintConnection(connection());
+$('net').addEventListener('click', () => reconnect());
 
 let wasOnline = connection().online;
 onConnection(state => {

@@ -146,25 +146,70 @@ function forgetAll() {
   try { caches.delete(DATA_CACHE); } catch { /* nothing kept */ }
 }
 
-// ── connected / offline ────────────────────────────────────────────────────
-// `online` is what the last request found, not only what the browser guesses:
+// ── connected / connecting / offline ───────────────────────────────────────
+// `phase` is what the requests found, not only what the browser guesses:
 // navigator.onLine says true on a Wi-Fi with no internet behind it.
+// A failed request does not declare the console offline on the spot: it tries
+// the server CONNECT_TRIES times, CONNECT_GAP apart, and the top bar shows that
+// as "Connecting" with a bar filling up (styles.css times the fill to the gap).
+// Only then is it Offline, and it keeps asking quietly every 15 s.
 // `savedAt` is the oldest copy shown since the page was opened, so the banner
 // can say how old what is on screen is.
-const net = { online: navigator.onLine !== false, savedAt: null };
+export const CONNECT_TRIES = 3;
+export const CONNECT_GAP = 1500;
+const net = { phase: 'online', online: true, attempt: 0, attempts: CONNECT_TRIES, savedAt: null };
 const listeners = new Set();
 let probeTimer = null;
+let connecting = null;
 
 export const connection = () => ({ ...net });
 export function onConnection(cb) { listeners.add(cb); return () => listeners.delete(cb); }
 const emit = () => listeners.forEach(cb => { try { cb({ ...net }); } catch { /* a listener's problem */ } });
 
-function setOnline(on) {
-  if (on === net.online) return;
-  net.online = on;
+function setPhase(phase, attempt = 0) {
+  if (phase === net.phase && attempt === net.attempt) return;
+  net.phase = phase;
+  net.online = phase === 'online';
+  net.attempt = attempt;
   clearInterval(probeTimer);
-  probeTimer = on ? null : setInterval(probe, 15_000);
+  probeTimer = phase === 'offline'
+    ? setInterval(async () => { if (await reachable()) setPhase('online'); }, 15_000)
+    : null;
   emit();
+}
+const setOnline = on => { if (on) setPhase('online'); else reconnect(); };
+
+// Is Supabase reachable? Any answer at all, even a refusal, means yes. Four
+// seconds at most: a Wi-Fi with no internet behind it can hang for a minute.
+async function reachable() {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 4000);
+  try {
+    await fetch(URL_BASE + '/auth/v1/health',
+      { headers: { apikey: ANON }, cache: 'no-store', signal: ctl.signal });
+    return true;
+  } catch { return false; }
+  finally { clearTimeout(t); }
+}
+
+// Try to reach the server, showing each attempt; ends Connected or Offline.
+// One run at a time — every failed request during it joins the same run.
+export function reconnect() {
+  if (connecting) return connecting;
+  connecting = (async () => {
+    for (let i = 1; i <= CONNECT_TRIES; i++) {
+      // a real request got through meanwhile: that settles it
+      if (i > 1 && net.phase === 'online') return true;
+      setPhase('connecting', i);
+      const t0 = Date.now();
+      if (await reachable()) { setPhase('online'); return true; }
+      if (i < CONNECT_TRIES) await new Promise(r => setTimeout(r, Math.max(0, CONNECT_GAP - (Date.now() - t0))));
+    }
+    if (net.phase === 'online') return true;
+    setPhase('offline');
+    return false;
+  })().finally(() => { connecting = null; });
+  return connecting;
 }
 
 // A new page starts with nothing old on it.
@@ -180,17 +225,8 @@ function servedFromCopy(t) {
   emit();
 }
 
-// Is Supabase reachable? Any answer at all, even a refusal, means yes.
-export async function probe() {
-  try {
-    await fetch(URL_BASE + '/auth/v1/health', { headers: { apikey: ANON }, cache: 'no-store' });
-    setOnline(true);
-  } catch { setOnline(false); }
-}
-
-addEventListener('offline', () => setOnline(false));
-addEventListener('online', probe);
-if (!net.online) probeTimer = setInterval(probe, 15_000);
+addEventListener('offline', () => reconnect());
+addEventListener('online', () => reconnect());
 
 export const OFFLINE_WRITE = 'Offline — the console is read only. This needs a connection.';
 
@@ -206,8 +242,9 @@ export async function api(path, opts = {}) {
   } catch (e) {
     // The server answered: that is a real answer, online or not.
     if (e instanceof ApiError) { if (e.status) setOnline(true); throw e; }
-    // fetch itself failed: no network, or Supabase unreachable.
-    setOnline(false);
+    // fetch itself failed: no network, or Supabase unreachable. Find out which
+    // in the background; the copy is shown at once rather than after the tries.
+    if (net.phase === 'online') setOnline(false);
     if (!read) throw new ApiError(OFFLINE_WRITE, 0);
     const copy = await recall(keyOf(path, opts));
     if (!copy) {

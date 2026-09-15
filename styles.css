@@ -236,8 +236,21 @@ th.right, td.right { text-align: right; }
 .pill.info { background: var(--info-bg); color: var(--info); }
 
 /* connected / offline, top right (app.js) */
+.pill.net { border: 0; font-family: inherit; cursor: pointer; }
+.pill.net:disabled { cursor: default; opacity: 1; }
 .pill.net svg { width: 14px; height: 14px; flex: none; }
 .pill.net.is-online svg { color: var(--success); }
+.pill.net.is-connecting svg { color: var(--accent); animation: netPulse 1s ease-in-out infinite alternate; }
+/* the fill runs for CONNECT_GAP (api.js, 1500 ms) per attempt */
+.net-bar { width: 56px; height: 5px; border-radius: var(--radius-full);
+  background: var(--track); overflow: hidden; }
+.net-bar i { display: block; width: 0; height: 100%; border-radius: inherit;
+  background: var(--accent); transition: width 1500ms linear; }
+@keyframes netPulse { from { opacity: 1; } to { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .pill.net.is-connecting svg { animation: none; }
+  .net-bar i { transition: none; }
+}
 .offline-bar {
   padding: var(--space-2) var(--space-8);
   background: var(--warning-bg); color: var(--warning);

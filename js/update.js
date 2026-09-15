@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.8.1';
+export const VERSION = '0.8.2';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -135,8 +135,8 @@ export function updateProgress(done, total) {
 export function finishUpdate() {
   if (!justUpdated) return;
   justUpdated = false;
-  progress(100, `Up to date · ${VERSION}`);
-  hideTimer = setTimeout(() => { const s = slot(); s.hidden = true; s.textContent = ''; }, 2500);
+  progress(100, `Updated to ${VERSION}`);
+  hideTimer = setTimeout(() => { const s = slot(); s.hidden = true; s.textContent = ''; }, 4000);
 }
 
 async function update(latest) {
@@ -169,19 +169,24 @@ function afterUpdate() {
     history.replaceState(history.state, '',
       location.pathname + (q ? '?' + q : '') + location.hash);
   }
-  if (get(sessionStorage, TARGET) === VERSION) {
+  const pressed = get(sessionStorage, TARGET) === VERSION;
+  if (pressed) {
     try { sessionStorage.removeItem(TARGET); } catch { /* ignore */ }
-    // the bar picks up where the old version left it
-    justUpdated = true;
-    progress(85, `Opening ${VERSION}`);
-    // app.js finishes it; if it never can (signed out, offline), do not leave it up
-    setTimeout(finishUpdate, 30_000);
   }
 
   const last = get(localStorage, LAST);
   set(localStorage, LAST, VERSION);
-  if (!last || last === VERSION) return;    // first run, or nothing changed
+  if (!pressed && (!last || last === VERSION)) return;    // first run, or nothing changed
 
+  // A new version arrived — by Update now, or just by reloading, which on a
+  // network-first worker is the usual way and used to show only a note in the
+  // corner for four seconds. The bar picks up here either way.
+  justUpdated = true;
+  progress(85, `Opening ${VERSION}`);
+  // app.js finishes it; if it never can (signed out, offline), do not leave it up
+  setTimeout(finishUpdate, 30_000);
+
+  if (get(localStorage, 'fbc_session')) return;   // signed in: the top bar says it
   const note = el('div', 'update-done', `Updated to ${VERSION}`);
   note.setAttribute('role', 'status');
   document.body.append(note);

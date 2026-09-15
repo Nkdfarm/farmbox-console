@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.8.1",
   "released": "2026-09-15",
-  "note": "Works offline, read only: a Connected / Offline sign top right, and every page shows what this device last saved."
+  "note": "An Update button and a progress bar at the top, beside Connected; the console now looks for a new version every minute."
 }

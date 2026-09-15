@@ -12,17 +12,22 @@
 // plain reload can be answered from the browser's own HTTP cache (GitHub
 // Pages sends max-age=600) and the card would come straight back.
 // ═══════════════════════════════════════════════════════════════════════════
-import { el } from './ui.js';
+import { el, icon } from './ui.js';
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.8.1';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
 const LAST      = 'fbc_last_version';
-const EVERY_MS  = 5 * 60 * 1000;
+// Every minute: version.json is a few bytes, and at five minutes a person who
+// had just been told "it is published" sat looking at a console that said nothing.
+const EVERY_MS  = 60 * 1000;
 
 const get = (store, k) => { try { return store.getItem(k); } catch { return null; } };
 const set = (store, k, v) => { try { store.setItem(k, v); } catch { /* private window */ } };
+
+let updating = false;      // Update now was pressed: the top bar shows progress
+let justUpdated = false;   // this page load is the end of an update
 
 export function watchForUpdates() {
   afterUpdate();
@@ -32,10 +37,14 @@ export function watchForUpdates() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();
   });
+  addEventListener('focus', check);
 }
 
 async function check() {
+  if (updating) return;
   const latest = (await checkForUpdate())?.version;
+  if (updating) return;
+  offer(latest && latest !== VERSION ? latest : null);
   if (!latest || latest === VERSION) return;
   if (get(sessionStorage, DISMISSED) === latest) return;
 
@@ -68,14 +77,82 @@ function show(latest, stuck) {
   document.body.append(card);
 }
 
+// ── the top bar: an Update button, then a progress bar ─────────────────────
+// Between Connected and the gear. The card above explains; this is the part a
+// person cannot miss, and where the update shows it is actually happening.
+const slot = () => document.getElementById('upd');
+let hideTimer;
+
+function offer(latest) {
+  const s = slot();
+  if (!s || updating || justUpdated) return;
+  s.textContent = '';
+  s.hidden = !latest;
+  if (!latest) return;
+  const b = el('button', 'btn btn-sm btn-primary upd-btn');
+  b.type = 'button';
+  b.append(icon('download'), el('span', null, `Update to ${latest}`));
+  b.title = `Version ${latest} is ready — you are on ${VERSION}`;
+  b.onclick = () => update(latest);
+  s.append(b);
+}
+
+function progress(pct, label) {
+  const s = slot();
+  if (!s) return;
+  clearTimeout(hideTimer);
+  let bar = s.querySelector('.upd-bar');
+  if (!bar) {
+    s.textContent = '';
+    bar = el('div', 'upd-bar');
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    bar.append(el('i'));
+    s.append(bar, el('small'));
+  }
+  bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  bar.setAttribute('aria-label', label);
+  bar.firstChild.style.width = pct + '%';
+  s.querySelector('small').textContent = label;
+  s.title = label;
+  s.hidden = false;
+}
+
+// Each step stays on screen long enough to be read; the real work is quicker
+// than that, and a bar that jumps from nothing to a reload says nothing.
+const step = (pct, label) => {
+  progress(pct, label);
+  return new Promise(r => setTimeout(r, 300));
+};
+
+// The new version reports the last part: app.js saves every page for offline
+// after loading, and that is most of the wait.
+export function updateProgress(done, total) {
+  if (justUpdated) progress(85 + 15 * done / total, `Saving pages for offline ${done}/${total}`);
+}
+
+export function finishUpdate() {
+  if (!justUpdated) return;
+  justUpdated = false;
+  progress(100, `Up to date · ${VERSION}`);
+  hideTimer = setTimeout(() => { const s = slot(); s.hidden = true; s.textContent = ''; }, 2500);
+}
+
 async function update(latest) {
+  updating = true;
+  document.getElementById('updateCard')?.remove();
+  await step(10, 'Preparing the update');
   try {
+    await step(30, 'Stopping the old version');
     const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
     await Promise.all(regs.map(r => r.unregister()));
+    await step(55, 'Clearing the old copy');
     // the shell only: fbc-data is the farm's data kept for reading offline
     const keys = await caches?.keys() ?? [];
     await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
   } catch { /* whatever is left, the new URL still wins */ }
+  await step(75, `Downloading ${latest}`);
 
   set(sessionStorage, TARGET, latest);
   const params = new URLSearchParams(location.search);
@@ -94,6 +171,11 @@ function afterUpdate() {
   }
   if (get(sessionStorage, TARGET) === VERSION) {
     try { sessionStorage.removeItem(TARGET); } catch { /* ignore */ }
+    // the bar picks up where the old version left it
+    justUpdated = true;
+    progress(85, `Opening ${VERSION}`);
+    // app.js finishes it; if it never can (signed out, offline), do not leave it up
+    setTimeout(finishUpdate, 30_000);
   }
 
   const last = get(localStorage, LAST);

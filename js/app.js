@@ -16,7 +16,7 @@ import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderHarvest } from './harvest.js';
-import { watchForUpdates, VERSION } from './update.js';
+import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { openSettings, applyTheme, startPage } from './settings.js';
 
 const $ = id => document.getElementById(id);
@@ -241,7 +241,7 @@ onConnection(state => {
 // Drawers (a crop's or a procedure's detail) are read only when opened.
 const warmed = new Set();
 async function warm() {
-  if (!farm || !connection().online || warmed.has(farm.id)) return;
+  if (!farm || !connection().online || warmed.has(farm.id)) { finishUpdate(); return; }
   const id = farm.id;
   warmed.add(id);
   await new Promise(r => setTimeout(r, 2500));      // after the page itself
@@ -255,10 +255,13 @@ async function warm() {
     ['people', p], ['family_tree', p], ['farm_market', p],
   ];
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
+  let done = 0;
   for (const [name, args] of calls) {
-    if (!connection().online) { warmed.delete(id); return; }
+    if (!connection().online) { warmed.delete(id); finishUpdate(); return; }
     try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
+    updateProgress(++done, calls.length);
   }
+  finishUpdate();
 }
 
 // ── routing ────────────────────────────────────────────────────────────────

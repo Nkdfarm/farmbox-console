@@ -244,7 +244,20 @@ th.right, td.right { text-align: right; }
   font-size: var(--text-sm); font-weight: 600;
   border-bottom: 1px solid var(--border);
 }
+/* update: a button, then a progress bar, between Connected and the gear (update.js) */
+.upd { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.upd-btn { background: var(--accent); color: #fff; border-color: transparent; gap: 6px; }
+.upd-btn:hover { background: var(--primary-hover); }
+.upd-btn svg { width: 14px; height: 14px; }
+.upd-bar { width: 120px; height: 6px; flex: none; border-radius: var(--radius-full);
+  background: var(--chip); overflow: hidden; }
+.upd-bar i { display: block; width: 0; height: 100%; border-radius: inherit;
+  background: var(--accent); transition: width 280ms ease-out; }
+.upd small { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .upd-bar i { transition: none; } }
+@media (max-width: 900px) { .upd small { display: none; } .upd-bar { width: 72px; } }
 @media (max-width: 600px) {
+  .upd-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .pill.net span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .offline-bar { padding-inline: var(--space-4); }
 }

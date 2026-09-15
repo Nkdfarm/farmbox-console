@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, field, input, selectBox, toast, busy } from './ui.js';
+import { locationPicker, forecastLinks, readFarm } from './weather.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
 const CHANNELS = [['direct','Direct to the consumer'], ['retail','To a retailer']];
@@ -49,6 +50,7 @@ function paint() {
   }
 
   mount.append(marketCard(may));
+  mount.append(locationCard(may));
   mount.append(weekCard(may));
   mount.append(zonesCard());
 }
@@ -119,6 +121,47 @@ function marketCard(may) {
     card.append(row);
   }
   setHint();
+  return card;
+}
+
+// ── where it is ────────────────────────────────────────────────────────────
+// The dashboard's weather is read for this place. The same town search as the
+// weather tile, so there is one way to set it wherever somebody looks for it.
+function locationCard(may) {
+  const card = el('div', 'card card-pad');
+  card.style.marginBottom = 'var(--space-4)';
+  card.append(el('div', 'sec-title', 'Location'));
+  const body = el('div');
+  card.append(body);
+
+  const show = async () => {
+    body.textContent = '';
+    body.append(el('div', 'hint', 'Reading the location…'));
+    let row;
+    try { row = await readFarm(farm.id); }
+    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); return; }
+    body.textContent = '';
+
+    const now = el('div', 'row');
+    now.style.marginTop = 'var(--space-2)';
+    if (row.lat == null || row.lng == null) {
+      now.append(el('span', 'pill warn', 'Not set — the dashboard shows no weather yet'));
+    } else {
+      now.append(el('span', 'pill ok', row.town || 'Set'));
+      now.append(el('span', 'mono', `${Number(row.lat).toFixed(4)}, ${Number(row.lng).toFixed(4)}`));
+      now.append(forecastLinks(row));
+    }
+    body.append(now);
+    body.append(el('div', 'hint',
+      'The weather on the dashboard — sky, rain and wind — is read for this place. ' +
+      'Type the nearest town and pick it from the list; the province is shown so two places with one name cannot be confused.'));
+    if (may) {
+      const picker = locationPicker(row, { onSaved: () => show() });
+      picker.style.marginTop = 'var(--space-3)';
+      body.append(picker);
+    }
+  };
+  show();
   return card;
 }
 

@@ -1,5 +1,5 @@
 {
-  "version": "0.8.5",
+  "version": "0.8.6",
   "released": "2026-09-15",
-  "note": "Wind on the weather card: average speed, gusts and direction, now and for each day."
+  "note": "Weather is now a tile two wide after the others, today and tomorrow with wind; the location is on Farm setup too."
 }

@@ -1,25 +1,30 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Weather — one card at the top of the dashboard
+// Weather — a tile, two wide, at the end of the dashboard's tiles
 //
-// Today in a sentence, the next three days, and a link to a full forecast.
+// The sky and the wind now, today and tomorrow, and links to a full forecast.
+// Wind is given in full — average, gusts and where it comes from — because on
+// a farm with tunnels and shade nets it matters as much as rain.
+//
 // The forecast comes from Open-Meteo: free, no key, no account, and it answers
-// a browser directly, so nothing of ours sits in between. "More" goes to yr.no
+// a browser directly, so nothing of ours sits in between. The links go to yr.no
 // (a day-by-day table any farmer can read) and Windy (wind and rain on a map).
 //
-// The farm's place is farm.lat / farm.lng. A FarmBox without one gets a town
-// search on the card itself — Open-Meteo's geocoder again — and the choice is
-// saved on the farm row, which the database lets an organisation admin or the
-// farm manager write. Nothing is guessed: a wrong town is a wrong forecast.
+// The farm's place is farm.lat / farm.lng. It is set with locationPicker(),
+// which is on the tile when nothing is set yet and on Farm setup always. The
+// town search is Open-Meteo's geocoder, and the choice is saved on the farm row,
+// which the database lets an organisation admin or the farm manager write.
+// Nothing is guessed: a wrong town is a wrong forecast.
 //
-// The last forecast is kept on this device, so the card still says something
+// The last forecast is kept on this device, so the tile still says something
 // when the console is offline, and says how old it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { select, patch } from './api.js';
-import { el, icon, toast, busy, parseYmd } from './ui.js';
+import { el, icon, toast, busy, field, parseYmd } from './ui.js';
 
 const FORECAST = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search';
 const KEEP = id => 'fbc_wx_' + id;
+const FARM_FIELDS = 'select=id,name,town,country,country_code,lat,lng,timezone';
 
 // WMO weather codes, as Open-Meteo reports them
 const WMO = {
@@ -41,6 +46,7 @@ const wmo = (code, day = 1) => {
 };
 
 const round = (v, dp = 0) => (v == null ? '—' : Number(v).toFixed(dp));
+const clock = t => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
 // ── wind: average, gust, direction ─────────────────────────────────────────
 // Direction is where the wind comes FROM, as weather reports say it ("a south-
@@ -58,16 +64,14 @@ function arrow(deg) {
   return a;
 }
 
-// The day's mean of the hourly speeds; null when the forecast has no hourly
-// part (a copy saved on this device by the version before wind was added).
+// The day's mean of the hourly speeds (Open-Meteo's daily figure is the
+// maximum); null when a forecast saved by an older version has no hourly part.
 function dayAverage(wx, day) {
   const h = wx.hourly;
   if (!h?.time) return null;
   const v = h.time.map((t, i) => (t.startsWith(day) ? h.wind_speed_10m[i] : null)).filter(x => x != null);
   return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
 }
-const clock = t => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-const weekday = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'short' });
 
 // Fetch with a time limit: a Wi-Fi with no internet behind it can hang a minute.
 async function getJson(url, ms = 8000) {
@@ -80,34 +84,32 @@ async function getJson(url, ms = 8000) {
   } finally { clearTimeout(t); }
 }
 
-export function weatherCard(farm) {
-  const card = el('section', 'card weather');
-  card.setAttribute('aria-label', 'Weather');
-  card.append(el('div', 'wx-loading', 'Reading the weather…'));
-  load(card, farm);
-  return card;
+const readFarm = async id => (await select('farm', `${FARM_FIELDS}&id=eq.${id}`))[0];
+
+// ── the tile ───────────────────────────────────────────────────────────────
+export function weatherTile(farm) {
+  const tile = el('div', 'tile wx-tile');
+  tile.setAttribute('aria-label', 'Weather');
+  tile.append(el('div', 'tile-sub', 'Reading the weather…'));
+  load(tile, farm);
+  return tile;
 }
 
-async function load(card, farm) {
+async function load(tile, farm) {
   let row;
-  try {
-    [row] = await select('farm',
-      `select=id,name,town,country,country_code,lat,lng,timezone&id=eq.${farm.id}`);
-  } catch (e) {
-    return say(card, e.message);
-  }
-  if (!row) return say(card, 'This FarmBox could not be read.');
-  if (row.lat == null || row.lng == null) return ask(card, farm, row);
+  try { row = await readFarm(farm.id); }
+  catch (e) { return note(tile, e.message); }
+  if (!row) return note(tile, 'This FarmBox could not be read.');
+  if (row.lat == null || row.lng == null) return noPlace(tile, farm, row);
 
   const lat = Number(row.lat), lng = Number(row.lng);
   const url = `${FORECAST}?latitude=${lat}&longitude=${lng}` +
-    '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,is_day,' +
+    '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,' +
     'wind_speed_10m,wind_gusts_10m,wind_direction_10m' +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,' +
-    'wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant' +
-    // hourly speed only to average it: the daily figure Open-Meteo gives is the maximum
+    'wind_gusts_10m_max,wind_direction_10m_dominant' +
     '&hourly=wind_speed_10m' +
-    `&timezone=${encodeURIComponent(row.timezone || 'auto')}&forecast_days=4&wind_speed_unit=kmh`;
+    `&timezone=${encodeURIComponent(row.timezone || 'auto')}&forecast_days=2&wind_speed_unit=kmh`;
 
   let wx, savedAt = null;
   try {
@@ -118,96 +120,115 @@ async function load(card, farm) {
     let kept = null;
     try { kept = JSON.parse(localStorage.getItem(KEEP(farm.id)) || 'null'); } catch { kept = null; }
     if (!kept || kept.lat !== lat || kept.lng !== lng) {
-      return say(card, 'No weather: the forecast needs a connection, and none was saved on this device yet.', row, farm);
+      return note(tile, 'The forecast needs a connection, and none was saved on this device yet.', row);
     }
     wx = kept.wx;
     savedAt = kept.at;
   }
-  paint(card, farm, row, wx, savedAt);
+  paint(tile, farm, row, wx, savedAt);
 }
 
-function say(card, message, row, farm) {
-  card.textContent = '';
-  card.className = 'card weather is-note';
-  const wrap = el('div', 'wx-note');
-  const badge = el('div', 'wx-icon');
-  badge.append(icon('cloud'));
-  wrap.append(badge, el('p', null, message));
-  if (row && farm) wrap.append(links(row));
-  card.append(wrap);
+function badge(glyph) {
+  const b = el('div', 'tile-icon');
+  b.append(icon(glyph));
+  return b;
 }
 
-function paint(card, farm, row, wx, savedAt) {
-  card.textContent = '';
-  card.className = 'card weather';
+function note(tile, message, row) {
+  tile.textContent = '';
+  tile.className = 'tile wx-tile is-note';
+  const body = el('div', 'tile-body');
+  body.append(el('div', 'tile-label', 'Weather'), el('div', 'tile-sub', message));
+  if (row) body.append(forecastLinks(row));
+  tile.append(badge('cloud'), body);
+}
+
+function noPlace(tile, farm, row) {
+  tile.textContent = '';
+  tile.className = 'tile wx-tile is-note';
+  const body = el('div', 'tile-body');
+  body.append(el('div', 'tile-label', `Weather — where is ${row.name}?`));
+  body.append(el('div', 'tile-sub', 'The forecast is read for the farm’s location, and none is set yet.'));
+  const actions = el('div', 'wx-actions');
+  const set = el('button', 'btn btn-sm btn-primary', 'Set the location');
+  set.type = 'button';
+  set.onclick = () => pick(tile, farm, row, () => noPlace(tile, farm, row));
+  const setup = el('a', 'btn btn-sm btn-ghost', 'Farm setup');
+  setup.href = '#/farm';
+  actions.append(set, setup);
+  body.append(actions);
+  tile.append(badge('pin'), body);
+}
+
+function pick(tile, farm, row, back) {
+  tile.textContent = '';
+  tile.className = 'tile wx-tile is-note';
+  const body = el('div', 'tile-body');
+  body.append(el('div', 'tile-label', row.lat == null ? `Where is ${row.name}?` : `Move ${row.name}`));
+  body.append(locationPicker(row, { onSaved: () => load(tile, farm), onCancel: back }));
+  tile.append(badge('pin'), body);
+}
+
+function paint(tile, farm, row, wx, savedAt) {
+  tile.textContent = '';
+  tile.className = 'tile wx-tile';
   const c = wx.current, d = wx.daily;
   const [words, glyph] = wmo(c.weather_code, c.is_day);
 
-  // now
+  // now: the sky, then the wind in full
   const now = el('div', 'wx-now');
-  const badge = el('div', 'wx-icon');
-  badge.append(icon(glyph));
-  const big = el('div');
-  big.append(el('div', 'wx-temp', `${round(c.temperature_2m)}°`));
-  big.append(el('div', 'wx-cond', words));
+  const body = el('div', 'tile-body');
+  body.append(el('div', 'tile-value', `${round(c.temperature_2m)}°`));
+  body.append(el('div', 'tile-label', words));
   const wind = el('div', 'wx-wind');
+  wind.title = 'Wind now: average speed, gusts, and the direction it comes from';
   wind.append(arrow(c.wind_direction_10m),
     el('span', null, `${round(c.wind_speed_10m)} km/h · gusts ${round(c.wind_gusts_10m)} · from ${compass(c.wind_direction_10m)}`));
-  wind.title = 'Wind now: average speed, gusts, and the direction it comes from';
-  big.append(wind);
-  now.append(badge, big);
+  body.append(wind);
+  body.append(el('div', 'tile-sub',
+    `Feels ${round(c.apparent_temperature)}° · humidity ${round(c.relative_humidity_2m)} %`));
+  now.append(badge(glyph), body);
 
-  // today in one sentence, then the next days
-  const mid = el('div', 'wx-mid');
-  const rainMm = Number(d.precipitation_sum[0] || 0), rainPct = d.precipitation_probability_max[0];
-  const [todayWords] = wmo(d.weather_code[0]);
-  mid.append(el('p', 'wx-sum',
-    `Today: ${todayWords.toLowerCase()}, ${round(d.temperature_2m_min[0])}–${round(d.temperature_2m_max[0])} °C, ` +
-    (rainMm >= 0.1 ? `${round(rainMm, 1)} mm of rain` + (rainPct != null ? ` (${rainPct} %)` : '')
-                   : 'no rain expected') +
-    `, wind from ${compass(d.wind_direction_10m_dominant?.[0])} averaging ${round(dayAverage(wx, d.time[0]) ?? d.wind_speed_10m_max[0])} km/h` +
-    ` with gusts up to ${round(d.wind_gusts_10m_max?.[0])} km/h. ` +
-    `Feels like ${round(c.apparent_temperature)}°, humidity ${round(c.relative_humidity_2m)} %.`));
-
+  // today and tomorrow
   const days = el('div', 'wx-days');
-  d.time.forEach((t, i) => {
+  d.time.slice(0, 2).forEach((t, i) => {
     const [w, g] = wmo(d.weather_code[i]);
-    const day = el('div', 'wx-day');
     const avg = dayAverage(wx, t), gust = d.wind_gusts_10m_max?.[i], dir = d.wind_direction_10m_dominant?.[i];
-    day.title = `${w} · ${round(d.precipitation_sum[i], 1)} mm · wind from ${compass(dir)}, ` +
-      `average ${round(avg)} km/h, gusts ${round(gust)} km/h`;
-    day.append(el('span', null, i === 0 ? 'Today' : weekday(t)), icon(g));
-    const temps = el('span');
-    temps.append(el('b', null, `${round(d.temperature_2m_max[i])}°`), document.createTextNode(` ${round(d.temperature_2m_min[i])}°`));
+    const mm = Number(d.precipitation_sum[i] || 0), pct = d.precipitation_probability_max?.[i];
+    const day = el('div', 'wx-day');
+    day.title = `${w} · ${round(mm, 1)} mm` + (pct != null ? ` (${pct} %)` : '') +
+      ` · wind from ${compass(dir)}, average ${round(avg)} km/h, gusts ${round(gust)} km/h`;
+    const top = el('div', 'wx-day-top');
+    top.append(el('span', null, i === 0 ? 'Today' : 'Tomorrow'), icon(g));
+    day.append(top);
+    const temps = el('div');
+    temps.append(el('b', null, `${round(d.temperature_2m_max[i])}°`),
+                 document.createTextNode(` ${round(d.temperature_2m_min[i])}°`));
     day.append(temps);
-    const mm = Number(d.precipitation_sum[i] || 0);
-    day.append(el('span', 'wx-rain', mm >= 0.1 ? `${round(mm, 1)} mm` : '—'));
-    // average / gust, km/h, and where from
-    const dw = el('span', 'wx-dw');
+    day.append(el('div', 'wx-rain', mm >= 0.1 ? `${round(mm, 1)} mm` + (pct != null ? ` · ${pct} %` : '') : 'no rain'));
+    const dw = el('div', 'wx-dw');
     dw.append(arrow(dir), el('span', null, `${round(avg)}/${round(gust)}`), el('small', null, compass(dir)));
     day.append(dw);
     days.append(day);
   });
-  mid.append(days);
 
   // where, when, and more
-  const side = el('div', 'wx-side');
+  const foot = el('div', 'wx-foot');
   const place = el('button', 'wx-place');
   place.type = 'button';
   place.title = 'Change the farm’s location';
   place.append(icon('pin'), el('span', null, row.town || `${round(row.lat, 2)}, ${round(row.lng, 2)}`));
-  place.onclick = () => ask(card, farm, row, () => paint(card, farm, row, wx, savedAt));
-  side.append(place);
-  side.append(el('div', 'wx-when' + (savedAt ? ' is-old' : ''),
-    savedAt ? `Offline — forecast saved at ${clock(savedAt)}` : `Updated ${clock(Date.now())} · Open-Meteo`));
-  side.append(links(row));
+  place.onclick = () => pick(tile, farm, row, () => paint(tile, farm, row, wx, savedAt));
+  const when = el('span', 'wx-when' + (savedAt ? ' is-old' : ''),
+    savedAt ? `Offline — saved ${clock(savedAt)}` : `Updated ${clock(Date.now())}`);
+  foot.append(place, when, forecastLinks(row));
 
-  card.append(now, mid, side);
+  tile.append(now, days, foot);
 }
 
-function links(row) {
+export function forecastLinks(row) {
   const lat = Number(row.lat), lng = Number(row.lng);
-  const wrap = el('div', 'wx-links');
+  const wrap = el('span', 'wx-links');
   const link = (href, text, title) => {
     const a = el('a');
     a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = title;
@@ -215,38 +236,31 @@ function links(row) {
     wrap.append(a);
   };
   link(`https://www.yr.no/en/forecast/daily-table/${lat.toFixed(4)},${lng.toFixed(4)}`,
-    'Full forecast · yr.no', 'Day-by-day forecast for the farm on yr.no');
+    'yr.no', 'Full day-by-day forecast for the farm on yr.no');
   link(`https://www.windy.com/?${lat.toFixed(3)},${lng.toFixed(3)},10`,
-    'Wind & rain map · Windy', 'Wind, rain and clouds around the farm on Windy');
+    'Windy', 'Wind, gusts and rain around the farm on a map (Windy)');
   return wrap;
 }
 
 // ── setting the farm's place ───────────────────────────────────────────────
-function ask(card, farm, row, cancel) {
-  card.textContent = '';
-  card.className = 'card weather is-ask';
-
-  const head = el('div', 'wx-now');
-  const badge = el('div', 'wx-icon');
-  badge.append(icon('pin'));
-  const text = el('div');
-  text.append(el('div', 'wx-cond', row.lat == null ? `Where is ${row.name}?` : `Move ${row.name}`));
-  text.append(el('p', 'wx-sum', 'The weather is read for the farm’s location. Type the nearest town and pick it from the list.'));
-  head.append(badge, text);
-
+// A town search that saves town, lat and lng on the farm. On the tile and on
+// Farm setup; onSaved gets the updated farm row.
+export function locationPicker(row, { onSaved, onCancel } = {}) {
+  const wrap = el('div', 'wx-picker');
   const form = el('form', 'wx-form');
   const box = el('input');
   box.type = 'search';
+  box.id = 'wx-town-' + row.id + (onCancel ? '-tile' : '');
   box.placeholder = 'Town, e.g. Stellenbosch';
-  box.setAttribute('aria-label', 'Nearest town');
   box.value = row.town || '';
+  box.autocomplete = 'off';
   const go = el('button', 'btn btn-sm btn-primary', 'Search');
   go.type = 'submit';
-  form.append(box, go);
-  if (cancel) {
+  form.append(field('Nearest town', box), go);
+  if (onCancel) {
     const no = el('button', 'btn btn-sm btn-ghost', 'Cancel');
     no.type = 'button';
-    no.onclick = cancel;
+    no.onclick = onCancel;
     form.append(no);
   }
 
@@ -261,27 +275,28 @@ function ask(card, farm, row, cancel) {
       const base = `${GEOCODE}?name=${encodeURIComponent(q)}&count=6&language=en&format=json`;
       let found = row.country_code ? (await getJson(`${base}&countryCode=${row.country_code}`)).results : null;
       if (!found?.length) found = (await getJson(base)).results;   // the farm's country first, then anywhere
-      if (!found?.length) { results.append(el('p', 'wx-sum', `No place called “${q}”.`)); return; }
+      if (!found?.length) { results.append(el('span', 'tile-sub', `No place called “${q}”.`)); return; }
       found.forEach(p => {
         const b = el('button', 'btn btn-sm');
         b.type = 'button';
         b.append(document.createTextNode(p.name),
           el('small', null, [p.admin1, p.country].filter(Boolean).join(', ')));
-        b.onclick = () => save(card, farm, row, p, b);
+        b.onclick = () => save(row, p, b, onSaved);
         results.append(b);
       });
-    } catch (err) {
-      results.append(el('p', 'wx-sum', 'The town search needs a connection.'));
+    } catch {
+      results.append(el('span', 'tile-sub', 'The town search needs a connection.'));
     } finally {
       busy(go, false, 'Search');
     }
   };
 
-  card.append(head, form, results);
-  box.focus();
+  wrap.append(form, results);
+  if (onCancel) setTimeout(() => box.focus(), 0);   // opened on purpose, so start typing
+  return wrap;
 }
 
-async function save(card, farm, row, place, button) {
+async function save(row, place, button, onSaved) {
   busy(button, true, 'Saving…');
   try {
     const lat = Math.round(place.latitude * 1e6) / 1e6, lng = Math.round(place.longitude * 1e6) / 1e6;
@@ -293,9 +308,12 @@ async function save(card, farm, row, place, button) {
       return;
     }
     toast(`${row.name} is at ${place.name}`, 'ok');
-    load(card, farm);
+    onSaved?.(updated[0]);
   } catch (e) {
     toast(e.message, 'bad');
     busy(button, false, place.name);
   }
 }
+
+// Farm setup reads the same row the tile does.
+export { readFarm };

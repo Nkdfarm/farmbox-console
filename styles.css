@@ -432,6 +432,15 @@ th.right, td.right { text-align: right; }
 .wx-day b { color: var(--text); font-weight: 600; }
 .wx-day svg { width: 20px; height: 20px; color: var(--info); }
 .wx-rain { color: var(--info); }
+/* wind: the arrow points where the wind blows to; the words say where it comes from */
+.wx-wind { display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wx-arrow { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none;
+  color: var(--accent); transition: transform var(--transition); }
+.wx-arrow svg { width: 14px; height: 14px; stroke-width: 2.4; }
+.wx-day .wx-arrow svg { width: 12px; height: 12px; color: var(--accent); }
+.wx-dw { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
+.wx-dw small { color: var(--text-faint); font-size: 10px; }
 .wx-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); text-align: right; }
 .wx-place { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none;
   font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--text); cursor: pointer; }

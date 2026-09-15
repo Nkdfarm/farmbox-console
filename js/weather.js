@@ -41,6 +41,31 @@ const wmo = (code, day = 1) => {
 };
 
 const round = (v, dp = 0) => (v == null ? '—' : Number(v).toFixed(dp));
+
+// ── wind: average, gust, direction ─────────────────────────────────────────
+// Direction is where the wind comes FROM, as weather reports say it ("a south-
+// easter"). The arrow points where it blows TO, which is what a shade net or a
+// tunnel door feels — the words and the arrow together leave no doubt.
+const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const compass = deg => (deg == null ? '—' : POINTS[Math.round(Number(deg) / 22.5) % 16]);
+
+function arrow(deg) {
+  const a = el('span', 'wx-arrow');
+  if (deg == null) return a;
+  a.append(icon('arrowUp'));
+  a.style.transform = `rotate(${(Number(deg) + 180) % 360}deg)`;
+  a.title = `From ${compass(deg)} (${Math.round(deg)}°)`;
+  return a;
+}
+
+// The day's mean of the hourly speeds; null when the forecast has no hourly
+// part (a copy saved on this device by the version before wind was added).
+function dayAverage(wx, day) {
+  const h = wx.hourly;
+  if (!h?.time) return null;
+  const v = h.time.map((t, i) => (t.startsWith(day) ? h.wind_speed_10m[i] : null)).filter(x => x != null);
+  return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+}
 const clock = t => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 const weekday = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'short' });
 
@@ -76,8 +101,12 @@ async function load(card, farm) {
 
   const lat = Number(row.lat), lng = Number(row.lng);
   const url = `${FORECAST}?latitude=${lat}&longitude=${lng}` +
-    '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day' +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max' +
+    '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,is_day,' +
+    'wind_speed_10m,wind_gusts_10m,wind_direction_10m' +
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,' +
+    'wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant' +
+    // hourly speed only to average it: the daily figure Open-Meteo gives is the maximum
+    '&hourly=wind_speed_10m' +
     `&timezone=${encodeURIComponent(row.timezone || 'auto')}&forecast_days=4&wind_speed_unit=kmh`;
 
   let wx, savedAt = null;
@@ -121,6 +150,11 @@ function paint(card, farm, row, wx, savedAt) {
   const big = el('div');
   big.append(el('div', 'wx-temp', `${round(c.temperature_2m)}°`));
   big.append(el('div', 'wx-cond', words));
+  const wind = el('div', 'wx-wind');
+  wind.append(arrow(c.wind_direction_10m),
+    el('span', null, `${round(c.wind_speed_10m)} km/h · gusts ${round(c.wind_gusts_10m)} · from ${compass(c.wind_direction_10m)}`));
+  wind.title = 'Wind now: average speed, gusts, and the direction it comes from';
+  big.append(wind);
   now.append(badge, big);
 
   // today in one sentence, then the next days
@@ -131,20 +165,27 @@ function paint(card, farm, row, wx, savedAt) {
     `Today: ${todayWords.toLowerCase()}, ${round(d.temperature_2m_min[0])}–${round(d.temperature_2m_max[0])} °C, ` +
     (rainMm >= 0.1 ? `${round(rainMm, 1)} mm of rain` + (rainPct != null ? ` (${rainPct} %)` : '')
                    : 'no rain expected') +
-    `, wind up to ${round(d.wind_speed_10m_max[0])} km/h. ` +
+    `, wind from ${compass(d.wind_direction_10m_dominant?.[0])} averaging ${round(dayAverage(wx, d.time[0]) ?? d.wind_speed_10m_max[0])} km/h` +
+    ` with gusts up to ${round(d.wind_gusts_10m_max?.[0])} km/h. ` +
     `Feels like ${round(c.apparent_temperature)}°, humidity ${round(c.relative_humidity_2m)} %.`));
 
   const days = el('div', 'wx-days');
   d.time.forEach((t, i) => {
     const [w, g] = wmo(d.weather_code[i]);
     const day = el('div', 'wx-day');
-    day.title = `${w} · ${round(d.precipitation_sum[i], 1)} mm · wind up to ${round(d.wind_speed_10m_max[i])} km/h`;
+    const avg = dayAverage(wx, t), gust = d.wind_gusts_10m_max?.[i], dir = d.wind_direction_10m_dominant?.[i];
+    day.title = `${w} · ${round(d.precipitation_sum[i], 1)} mm · wind from ${compass(dir)}, ` +
+      `average ${round(avg)} km/h, gusts ${round(gust)} km/h`;
     day.append(el('span', null, i === 0 ? 'Today' : weekday(t)), icon(g));
     const temps = el('span');
     temps.append(el('b', null, `${round(d.temperature_2m_max[i])}°`), document.createTextNode(` ${round(d.temperature_2m_min[i])}°`));
     day.append(temps);
     const mm = Number(d.precipitation_sum[i] || 0);
     day.append(el('span', 'wx-rain', mm >= 0.1 ? `${round(mm, 1)} mm` : '—'));
+    // average / gust, km/h, and where from
+    const dw = el('span', 'wx-dw');
+    dw.append(arrow(dir), el('span', null, `${round(avg)}/${round(gust)}`), el('small', null, compass(dir)));
+    day.append(dw);
     days.append(day);
   });
   mid.append(days);

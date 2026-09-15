@@ -1,5 +1,5 @@
 {
-  "version": "0.8.7",
+  "version": "0.9.0",
   "released": "2026-09-15",
-  "note": "The weather tile opens the dashboard's tiles."
+  "note": "Collect Cape Town prices: today's wholesale market price per kg for the crops the market trades, in its own column on Prices & market."
 }

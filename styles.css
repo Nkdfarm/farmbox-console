@@ -411,6 +411,14 @@ th.right, td.right { text-align: right; }
 .row > .spacer { flex: 1; }
 .row > .hint, .card-pad > .hint { font-size: var(--text-xs); color: var(--text-faint); }
 
+/* Cape Town Market, week by week (prices.js) */
+.mk-intro { padding: 0 var(--space-5) var(--space-3); margin-top: calc(-1 * var(--space-2)); max-width: 95ch; }
+.mk-up { color: var(--success); font-variant-numeric: tabular-nums; }
+.mk-down { color: var(--error); font-variant-numeric: tabular-nums; }
+.mk-spark { display: block; overflow: visible; }
+.mk-spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.mk-spark circle { fill: var(--accent); }
+
 /* the weather tile, two tiles wide at the end of the tiles (weather.js): now and its wind ·
    today and tomorrow · where, when and the links. One wide when the grid has one column. */
 .tile.wx-tile { grid-column: span 2; display: grid; align-items: start;

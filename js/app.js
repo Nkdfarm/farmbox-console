@@ -273,7 +273,7 @@ async function warm() {
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['crop_map', p],
     ['harvests', { ...p, p_days: 30 }], ['crop_library', p], ['procedures', p],
-    ['maintenance', p], ['purchasing', p], ['price_table', p],
+    ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['reports', { ...p, ...reportRange() }],
     ['people', p], ['family_tree', p], ['farm_market', p],
   ];

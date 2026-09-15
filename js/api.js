@@ -109,7 +109,7 @@ async function live(path, opts) {
 const READ_RPCS = new Set([
   'crop_calendar', 'crop_detail', 'crop_library', 'crop_map', 'dashboard',
   'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvests',
-  'issues', 'labour_week', 'maintenance', 'people', 'price_table', 'procedure',
+  'issues', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
   'procedures', 'purchasing', 'reports',
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone

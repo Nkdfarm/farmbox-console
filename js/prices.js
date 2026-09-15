@@ -1,19 +1,29 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Prices & market — what a kilo is worth here (spec §7.9, §10.4)
 //
-// Two columns matter and they are next to each other: what the book says,
-// and what this farm actually sold for. The book is derived — a base price
-// in USD, a country index, a season factor, a channel factor — so it is
-// never wrong so much as generic. An observation from a real invoice beats
-// it everywhere, including inside the crop planner.
+// Three things, next to each other: what the book says, what this farm
+// actually sold for, and what Cape Town Market paid this week. The book is
+// derived — a base price in USD, a country index, a season factor, a channel
+// factor — so it is never wrong so much as generic. An observation from a real
+// invoice beats it everywhere, including inside the crop planner.
+//
+// The market is collected by itself every Monday (and with the Scan button):
+// one price per kg per species per week, so this page can show the week against
+// the previous one, twelve weeks of trend, and the season's variation — from
+// Cape Town's own history once there is a year of it, and labelled an estimate
+// until then. A wholesale price is shown for comparison and never replaces the
+// book or the farm's own prices in the planner.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, fn } from './api.js';
 import { el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num, shortDate } from './ui.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-let farm = null, data = null, mount = null;
+let farm = null, data = null, trends = null, mount = null;
 
 export async function renderPrices(container, currentFarm) {
   farm = currentFarm; mount = container;
@@ -23,8 +33,13 @@ export async function renderPrices(container, currentFarm) {
 async function load() {
   mount.textContent = '';
   mount.append(el('div', 'empty', 'Reading the price book…'));
-  try { data = await rpc('price_table', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
+  try {
+    [data, trends] = await Promise.all([
+      rpc('price_table', { p_farm: farm.id }),
+      // the market card is extra: a database without it still shows the book
+      rpc('market_trends', { p_farm: farm.id }).catch(() => null),
+    ]);
+  } catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();
 }
 
@@ -33,12 +48,17 @@ function paint() {
   const ci = data.country_index || {};
   const rec = el('button', 'btn btn-primary', 'Record a price');
   rec.onclick = () => record();
+  const scan = el('button', 'btn', 'Scan Cape Town now');
+  scan.title = 'Collect this week’s Cape Town Market prices now. It also runs by itself every Monday at 13:30.';
+  scan.onclick = () => scanMarket(scan);
 
   mount.append(pageHead('Prices & market',
     `${data.currency} per kg in ${ci.name || data.country}, sold ` +
     `${data.channel === 'direct' ? 'direct to the consumer' : 'to a retailer'}. ` +
     `It is ${data.season_now} here now.`,
-    data.may_edit ? rec : null));
+    data.may_edit ? scan : null, data.may_edit ? rec : null));
+
+  if (trends) mount.append(marketCard());
 
   mount.append(el('div', 'note',
     `The book is derived, not quoted: a base price in USD × a country index of ` +
@@ -49,11 +69,7 @@ function paint() {
 
   const seasonCol = s => ({
     key: s, label: s, align: 'right',
-    fmt: (v, r) => {
-      const cell = el('span', s === data.season_now ? 'now' : null,
-                      v == null ? '—' : num(v, 2));
-      return cell;
-    },
+    fmt: v => el('span', s === data.season_now ? 'now' : null, v == null ? '—' : num(v, 2)),
   });
 
   mount.append(card('The book, by season',
@@ -66,6 +82,14 @@ function paint() {
       ...SEASONS.map(seasonCol),
       { key: 'today', label: 'Today', align: 'right',
         fmt: v => el('b', null, v == null ? '—' : num(v, 2)) },
+      { key: 'market', label: 'Cape Town', align: 'right',
+        fmt: m => {
+          if (!m) return '—';
+          const w = el('div');
+          const s = el('span', null, num(m.price, 2));
+          s.title = `${m.species} at Cape Town Market, week of ${shortDate(m.week_start)} · ${m.source}`;
+          w.append(s, el('div', 'hint', `wk ${shortDate(m.week_start)}`));
+          return w; } },
       { key: 'own', label: 'Your own', align: 'right',
         fmt: (v, r) => {
           if (v == null) return '—';
@@ -88,6 +112,116 @@ function paint() {
     empty: 'Nothing recorded yet. Every real invoice you enter makes the planner less generic.',
   }));
   mount.append(obs);
+}
+
+// ── Cape Town Market, week by week ─────────────────────────────────────────
+function marketCard() {
+  const c = card('Cape Town Market — week by week');
+  const last = trends.last_collected;
+  c._head.append(el('span', 'pill' + (last ? '' : ' warn'),
+    last ? `Collected ${shortDate(String(last).slice(0, 10))}` : 'Not collected yet'));
+
+  const intro = el('div', 'hint mk-intro',
+    'Wholesale rand per kg at Cape Town Market, one average per species, collected by itself every ' +
+    'Monday at 13:30 — or now, with Scan. Weighted by the kilos sold where the market reports them. ' +
+    'Buyers’ prices before the agent’s commission, so for comparison: the planner keeps using the book and your own prices.');
+  c.append(intro);
+
+  const rows = (trends.species || []).map(s => ({ ...s }));
+  c.append(table([
+    { key: 'label', label: 'Species', fmt: (v, r) => {
+        const b = el('div');
+        b.append(el('b', null, v));
+        const n = (r.crops || []).length;
+        const h = el('div', 'hint', n ? `${n} crop${n === 1 ? '' : 's'}: ${r.crops.slice(0, 2).join(', ')}${n > 2 ? '…' : ''}`
+                                      : 'no crop of yours matches');
+        h.title = (r.crops || []).join('\n');
+        b.append(h);
+        return b; } },
+    { key: 'this_week', label: 'This week', align: 'right', fmt: w => {
+        if (!w) return el('span', 'hint', 'not collected');
+        const b = el('div');
+        const v = el('b', null, num(w.price_kg, 2));
+        v.title = `${w.source}\n${w.days} trading day${w.days === 1 ? '' : 's'}` +
+          (w.kg_sold ? ` · ${num(w.kg_sold)} kg sold` : '') +
+          (w.low_kg != null ? ` · R${num(w.low_kg, 2)}–${num(w.high_kg, 2)}/kg` : '');
+        b.append(v, el('div', 'hint', `wk ${shortDate(w.week_start)}${w.weighted ? '' : ' · unweighted'}`));
+        return b; } },
+    { key: 'previous_week', label: 'Previous week', align: 'right',
+      fmt: w => (w ? num(w.price_kg, 2) : '—') },
+    { key: 'key', label: 'Change', align: 'right', fmt: (_, r) => {
+        const a = r.this_week?.price_kg, b = r.previous_week?.price_kg;
+        if (a == null || !b) return '—';
+        const pct = Math.round(100 * (Number(a) / Number(b) - 1));
+        return el('span', pct > 0 ? 'mk-up' : pct < 0 ? 'mk-down' : null,
+                  `${pct > 0 ? '▲ +' : pct < 0 ? '▼ ' : ''}${pct}%`); } },
+    { key: 'weeks', label: '12 weeks', fmt: w => sparkline(w || []) },
+    { key: 'season', label: 'Season now', align: 'right', fmt: s => seasonCell(s) },
+  ], rows, { empty: 'No species set up — apply the market migration.' }));
+  return c;
+}
+
+function seasonCell(s) {
+  if (!s || s.basis === 'none' || s.pct == null) {
+    const x = el('span', 'hint', '—');
+    if (s) x.title = `${s.weeks || 0} of ${s.weeks_needed || 40} weeks of Cape Town history so far`;
+    return x;
+  }
+  const w = el('div');
+  const pct = Number(s.pct);
+  const v = el('b', pct > 0 ? 'mk-up' : pct < 0 ? 'mk-down' : null, `${pct > 0 ? '+' : ''}${pct}%`);
+  if (s.basis === 'history') {
+    v.title = `${MONTHS[(s.month || 1) - 1]} against the yearly average, from ${s.weeks} weeks of Cape Town Market`;
+    w.append(v, el('div', 'hint', `${MONTHS[(s.month || 1) - 1]} · Cape Town history`));
+  } else {
+    v.title = `Estimated from the price book’s ${s.season} factor. It becomes Cape Town’s own pattern ` +
+      `once there is a year of weeks: ${s.weeks} of ${s.weeks_needed} so far.`;
+    w.append(v, el('div', 'hint', `${s.season} · estimate, ${s.weeks}/${s.weeks_needed} wk`));
+  }
+  return w;
+}
+
+// Twelve weeks as a line: lowest to highest fills the height, the last week is a dot.
+function sparkline(points) {
+  if (points.length < 2) return el('span', 'hint', points.length ? 'one week so far' : '—');
+  const w = 96, h = 26, pad = 3;
+  const ys = points.map(p => Number(p.price));
+  const min = Math.min(...ys), max = Math.max(...ys), span = max - min || 1;
+  const xy = ys.map((y, i) => [pad + i * (w - 2 * pad) / (ys.length - 1),
+                               h - pad - (y - min) * (h - 2 * pad) / span]);
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  svg.setAttribute('class', 'mk-spark');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label',
+    `From ${num(ys[0], 2)} to ${num(ys[ys.length - 1], 2)} per kg over ${ys.length} weeks`);
+  const title = document.createElementNS(SVG_NS, 'title');
+  title.textContent = points.map(p => `${shortDate(p.week)}: ${num(p.price, 2)}`).join('\n');
+  const line = document.createElementNS(SVG_NS, 'polyline');
+  line.setAttribute('points', xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '));
+  const dot = document.createElementNS(SVG_NS, 'circle');
+  const [lx, ly] = xy[xy.length - 1];
+  dot.setAttribute('cx', lx.toFixed(1)); dot.setAttribute('cy', ly.toFixed(1)); dot.setAttribute('r', '2.4');
+  svg.append(title, line, dot);
+  return svg;
+}
+
+async function scanMarket(button) {
+  busy(button, true, 'Scanning…');
+  try {
+    const r = await fn('market-prices', { farm_id: farm.id });
+    const n = (r.collected || []).length;
+    toast(n
+      ? `Cape Town Market: ${n} species this week` +
+        (r.backfilled_weeks ? `, and ${r.backfilled_weeks} earlier weeks from the 30-day trend` : '')
+      : 'The market had no prices for these species today', n ? 'ok' : '');
+    if (r.problems?.length) setTimeout(() => toast(`Partly: ${r.problems.join(' · ')}`, 'bad'), 3400);
+    await load();
+  } catch (e) {
+    busy(button, false, 'Scan Cape Town now');
+    toast(e.message, 'bad');
+  }
 }
 
 function record() {

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.1",
+  "version": "0.7.2",
   "released": "2026-09-15",
-  "note": "Fixes from the review: the calendar opens on today, settings apply however the panel closes, one face per person."
+  "note": "Farm setup moves to the bottom of the menu, after People."
 }

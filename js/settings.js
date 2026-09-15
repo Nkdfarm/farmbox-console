@@ -7,18 +7,14 @@
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { api, fn } from './api.js';
-import { el, toast, drawer, busy, icon, avatar, input } from './ui.js';
+import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
-import { setCalendarView } from './dashboard.js';
+import { setCalendarView, calendarView } from './dashboard.js';
 
 const THEME_KEY = 'fbc_theme';
 const START_KEY = 'fbc_start';
 
-const get = k => { try { return localStorage.getItem(k); } catch { return null; } };
-const put = (k, v) => {
-  try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); }
-  catch { /* private window: the choice lasts for this visit */ }
-};
+const { get, set: put } = pref;
 
 // ── theme ──────────────────────────────────────────────────────────────────
 // 'dark' | 'light' | 'system'. index.html applies the saved one before the
@@ -44,19 +40,26 @@ export const startPage = () => get(START_KEY) || 'dashboard';
 // ── the panel ──────────────────────────────────────────────────────────────
 // ctx comes from app.js: { user, name, roleText, roleTone, isFranchisor,
 // railFolded(), setRailFolded(bool), signOut(), refresh() }
+//
+// The theme and the menu apply as they are changed. The calendar's view is the
+// one setting the page on screen has to be redrawn for, so the page is
+// refreshed only when that changed — and however the panel was closed:
+// the button, the scrim, the cross or Escape all go through onClose.
 export function openSettings(ctx) {
-  const d = drawer('Settings', 'This console, on this device');
+  const touched = { page: false };
+  const d = drawer('Settings', 'This console, on this device',
+    { onClose: () => { if (touched.page) ctx.refresh?.(); } });
   d.box.classList.add('settings');
   d.body.append(
     section('Appearance', appearance()),
-    section('Layout', layout(ctx)),
+    section('Layout', layout(ctx, touched)),
     section('Notion', notion(ctx)),
     section('Account', account(ctx, d)),
     section('Version', version()),
     section('This device', device()),
   );
   const close = el('button', 'btn', 'Close');
-  close.onclick = () => { d.close(); ctx.refresh?.(); };
+  close.onclick = d.close;
   d.footer.append(close);
 }
 
@@ -119,14 +122,14 @@ function appearance() {
 }
 
 // ── layout ─────────────────────────────────────────────────────────────────
-function layout(ctx) {
+function layout(ctx, touched) {
   const list = el('div', 'set-list');
   list.append(row('Fold the menu to icons', 'The same as the arrow beside the logo.',
     switchBox(ctx.railFolded(), v => ctx.setRailFolded(v), 'Fold the menu to icons')));
 
   list.append(row('Crop calendar opens on', 'The view the dashboard calendar starts with.',
     segmented([['week', 'Week'], ['month', 'Month'], ['year', 'Year']],
-      get('fbc_cal_view') || 'week', v => setCalendarView(v), 'Calendar view')));
+      calendarView(), v => { setCalendarView(v); touched.page = true; }, 'Calendar view')));
 
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
@@ -268,7 +271,7 @@ function account(ctx, d) {
 
   const me = el('div', 'set-row');
   const who = el('div', 'who');
-  who.append(avatar({ id: ctx.user.id, name: ctx.name }, 'lg'));
+  who.append(avatar({ worker_id: ctx.workerId, id: ctx.user.id, name: ctx.name }, 'lg'));
   const names = el('div');
   names.append(el('b', null, ctx.name), el('small', null, ctx.user.email || ''));
   who.append(names);

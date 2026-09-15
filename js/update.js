@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el } from './ui.js';
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.7.1';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -35,13 +35,7 @@ export function watchForUpdates() {
 }
 
 async function check() {
-  let latest;
-  try {
-    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;
-    latest = (await res.json()).version;
-  } catch { return; }                       // offline: not worth a word
-
+  const latest = (await checkForUpdate())?.version;
   if (!latest || latest === VERSION) return;
   if (get(sessionStorage, DISMISSED) === latest) return;
 
@@ -111,12 +105,13 @@ function afterUpdate() {
   setTimeout(() => note.remove(), 4500);
 }
 
-// For Settings: what the server says is current, without showing the card.
+// What the server says is current — for the card above and for Settings.
+// null when offline: not worth a word.
 export async function checkForUpdate() {
   try {
     const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return res.ok ? await res.json() : null;
-  } catch { return null; }                  // offline
+  } catch { return null; }
 }
 
 export const updateNow = latest => update(latest);

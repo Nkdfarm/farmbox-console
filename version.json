@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.7.1",
   "released": "2026-09-15",
-  "note": "Settings behind the gear: light or dark, the Notion syncs both ways, version and account."
+  "note": "Fixes from the review: the calendar opens on today, settings apply however the panel closes, one face per person."
 }

@@ -1,6 +1,6 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select } from './api.js';
-import { el, toast, icon, avatar } from './ui.js';
+import { el, toast, icon, avatar, pref } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek } from './week.js';
 import { renderFarm } from './farm.js';
@@ -33,8 +33,7 @@ document.querySelectorAll('.rail a').forEach(a => { a.title = a.textContent.trim
 // localStorage) still toggles.
 const RAIL_KEY = 'fbc_rail';
 const narrow = matchMedia('(max-width: 900px)');
-let railChoice = null;
-try { railChoice = localStorage.getItem(RAIL_KEY); } catch { /* private window */ }
+let railChoice = pref.get(RAIL_KEY);
 
 function paintRail() {
   const folded = railChoice ? railChoice === 'folded' : narrow.matches;
@@ -47,7 +46,7 @@ function paintRail() {
 }
 $('railToggle').addEventListener('click', () => {
   railChoice = $('shell').classList.contains('collapsed') ? 'open' : 'folded';
-  try { localStorage.setItem(RAIL_KEY, railChoice); } catch { /* private window */ }
+  pref.set(RAIL_KEY, railChoice);
   paintRail();
 });
 narrow.addEventListener('change', paintRail);
@@ -58,6 +57,7 @@ let farm = null;
 let myUserId = null;
 let myUser = null;
 let myRoles = [];
+let myWorkerId = null;   // the signed-in person's own worker row, when they have one
 
 applyTheme();
 
@@ -116,6 +116,7 @@ $('settingsBtn').addEventListener('click', () => {
   const pill = $('envPill');
   openSettings({
     user: myUser || { id: myUserId, email: '' },
+    workerId: myWorkerId,
     name: $('whoName').textContent,
     roleText: pill.textContent,
     roleTone: pill.classList.contains('ok') ? 'ok' : pill.classList.contains('warn') ? 'warn' : '',
@@ -123,7 +124,7 @@ $('settingsBtn').addEventListener('click', () => {
     railFolded: () => $('shell').classList.contains('collapsed'),
     setRailFolded: folded => {
       railChoice = folded ? 'folded' : 'open';
-      try { localStorage.setItem(RAIL_KEY, railChoice); } catch { /* private window */ }
+      pref.set(RAIL_KEY, railChoice);
       paintRail();
     },
     signOut: doSignOut,
@@ -148,7 +149,7 @@ async function loadFarms() {
     o.value = f.id;
     pick.append(o);
   });
-  const wanted = localStorage.getItem(FARM_KEY);
+  const wanted = pref.get(FARM_KEY);
   farm = farms.find(f => f.id === wanted) || farms[0] || null;
   if (farm) pick.value = farm.id;
   pick.disabled = farms.length < 2;
@@ -177,7 +178,7 @@ function switchFarm(id) {
   if (!next) return;
   farm = next;
   $('farmPick').value = farm.id;
-  try { localStorage.setItem(FARM_KEY, farm.id); } catch { /* private window */ }
+  pref.set(FARM_KEY, farm.id);
   paintMyRole();
   location.hash = '#/dashboard';
   route();
@@ -185,7 +186,7 @@ function switchFarm(id) {
 
 $('farmPick').addEventListener('change', e => {
   farm = farms.find(f => f.id === e.target.value) || farm;
-  try { localStorage.setItem(FARM_KEY, farm.id); } catch { /* private window */ }
+  pref.set(FARM_KEY, farm.id);
   paintMyRole();
   route();
 });
@@ -240,8 +241,15 @@ async function start() {
       (user.email || '').split('@')[0].replace(/^./, c => c.toUpperCase());
     $('whoName').textContent = name;
     $('who').textContent = user.email || '';
+    // The same face here as on People and the plan: those key on the worker
+    // row, so find the signed-in person's. A franchisor admin has none and
+    // keeps a face of their own.
+    try {
+      const mine = await select('worker', `select=id&user_id=eq.${user.id}&active=is.true&limit=1`);
+      myWorkerId = mine[0]?.id ?? null;
+    } catch { myWorkerId = null; }
     $('meAvatar').textContent = '';
-    $('meAvatar').append(avatar({ id: user.id, name }));
+    $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
     const v = document.getElementById('version');
     if (v) v.textContent = 'v' + VERSION;
     await loadFarms();

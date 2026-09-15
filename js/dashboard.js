@@ -11,7 +11,7 @@
 // because it is the one thing that has not happened yet.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast, icon, num } from './ui.js';
+import { el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -20,6 +20,7 @@ let farm = null, data = null, mount = null;
 
 export async function renderDashboard(container, currentFarm) {
   farm = currentFarm; mount = container;
+  cal.anchor = new Date();          // the view is remembered, the period is not
   await load();
 }
 
@@ -34,7 +35,7 @@ async function load() {
 // Dates are parsed from their local parts. Never through Date(string) alone
 // and never back out through toISOString: that converts to UTC, and in
 // Johannesburg it lands the whole page on the day before.
-const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const parse = parseYmd;
 const dayLabel = s => { const d = parse(s); return `${DAY_NAME[d.getDay() === 0 ? 7 : d.getDay()]} ${d.getDate()}`; };
 
 function paint() {
@@ -196,17 +197,12 @@ const CAL_KEY = 'fbc_cal_view';
 const VIEWS = [['week', 'Week'], ['month', 'Month'], ['year', 'Year']];
 const KIND_ORDER = { harvest: 0, transplant: 1, sow: 2 };
 const cal = { view: 'week', anchor: new Date() };
-try {
-  const v = localStorage.getItem(CAL_KEY);
+{
+  const v = pref.get(CAL_KEY);
   if (VIEWS.some(x => x[0] === v)) cal.view = v;
-} catch { /* private window */ }
+}
 let calSeq = 0;
 
-const pad = n => String(n).padStart(2, '0');
-const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const isoDow = d => ((d.getDay() + 6) % 7) + 1;
-const mondayOf = d => addDays(d, 1 - isoDow(d));
 // ISO week: the week holding the year's first Thursday is week 1
 const isoWeek = d => {
   const thu = addDays(d, 4 - isoDow(d));
@@ -300,7 +296,7 @@ function calendarCard() {
 function goCalendar(parts, view, anchor) {
   cal.view = view;
   cal.anchor = anchor;
-  try { localStorage.setItem(CAL_KEY, view); } catch { /* private window */ }
+  pref.set(CAL_KEY, view);
   loadCalendar(parts);
 }
 
@@ -583,5 +579,6 @@ function bays() {
 export function setCalendarView(v) {
   if (!VIEWS.some(x => x[0] === v)) return;
   cal.view = v;
-  try { localStorage.setItem(CAL_KEY, v); } catch { /* private window */ }
+  pref.set(CAL_KEY, v);
 }
+export const calendarView = () => cal.view;

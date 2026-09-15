@@ -53,7 +53,7 @@ export function toast(message, kind = '') {
 
 // A right-hand drawer. Returns { body, footer, close } — the caller fills the
 // body, adds buttons to the footer, and closes when it is done.
-export function drawer(title, subtitle) {
+export function drawer(title, subtitle, opts = {}) {
   const scrim = el('div', 'scrim');
   const box = el('aside', 'drawer');
   box.setAttribute('role', 'dialog');
@@ -75,6 +75,7 @@ export function drawer(title, subtitle) {
 
   const close = () => {
     scrim.remove(); box.remove();
+    opts.onClose?.();
     document.removeEventListener('keydown', onKey);
   };
   const onKey = e => { if (e.key === 'Escape') close(); };
@@ -189,6 +190,27 @@ export function card(title, ...kids) {
   return c;
 }
 
+// ── dates, in local parts ───────────────────────────────────────────────
+// Never through Date(string) alone and never back out through toISOString:
+// that converts to UTC, and in Johannesburg it lands a page on the day before.
+export const ymd = d =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const parseYmd = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+export const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+export const isoDow = d => ((d.getDay() + 6) % 7) + 1;           // Mon = 1 … Sun = 7
+export const mondayOf = d => addDays(d, 1 - isoDow(d));
+
+// ── this device's preferences ───────────────────────────────────────────
+// localStorage can be absent or throw (a private window, blocked site data);
+// a preference then lasts for the visit and nothing breaks.
+export const pref = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => {
+    try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); }
+    catch { /* private window */ }
+  },
+};
+
 export const num = (v, dp = 0) =>
   v == null ? '—' : Number(v).toLocaleString(undefined,
     { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -268,7 +290,9 @@ export const demoFace = key => {
 };
 
 // p is anything with a name and an id: { worker_id | id, name, role?, photo_url? }.
-// size is '', 'sm' or 'lg'.
+// The worker id is the key wherever there is one, so a person has the same
+// face on People, on the plan and in the rail; app.js looks the signed-in
+// person's worker row up for that reason. size is '', 'sm' or 'lg'.
 export function avatar(p, size = '') {
   const cls = ['avatar', size, p.role && 'r-' + p.role].filter(Boolean).join(' ');
   const box = el('div', cls, initials(p.name));

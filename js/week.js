@@ -7,7 +7,8 @@
 // them, least of all the work the planner could not place.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast, drawer, confirmDrawer, avatar, busy } from './ui.js';
+import { el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
+         mondayOf as mondayOfDate } from './ui.js';
 import { roleLabel } from './people.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -18,21 +19,11 @@ let week = null;      // Monday, ISO
 let data = null;
 let mount = null;
 
-// Local calendar date, not UTC: toISOString() on a local midnight in a
-// positive offset hands back the day before, which quietly shifted the whole
-// page a week.
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                 + `-${String(d.getDate()).padStart(2, '0')}`;
-const mondayOf = (d) => {
-  const x = new Date(d + 'T00:00:00');
-  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
-  return iso(x);
-};
-const shift = (isoDate, days) => {
-  const x = new Date(isoDate + 'T00:00:00');
-  x.setDate(x.getDate() + days);
-  return iso(x);
-};
+// This page works in ISO strings (the week is a Monday, 'YYYY-MM-DD'); the
+// date arithmetic itself is ui.js's, in local parts.
+const iso = ymd;
+const mondayOf = s => ymd(mondayOfDate(parseYmd(s)));
+const shift = (s, days) => ymd(addDays(parseYmd(s), days));
 const hrs = m => (Math.round((Number(m) / 60) * 10) / 10).toFixed(1);
 const hhmm = t => (t || '').slice(0, 5);
 

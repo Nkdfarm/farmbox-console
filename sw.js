@@ -7,14 +7,14 @@
 // office and the container where the signal drops.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'farmbox-console-20260915h';
+const CACHE = 'farmbox-console-20260915i';
 
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260915h',
+  './styles.css?v=20260915i',
   './manifest.json',
-  './js/app.js?v=20260915h',
+  './js/app.js?v=20260915i',
   './js/api.js',
   './js/ui.js',
   './js/people.js',
@@ -36,6 +36,8 @@ const SHELL = [
   './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', e => {

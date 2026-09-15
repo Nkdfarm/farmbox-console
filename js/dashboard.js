@@ -578,3 +578,10 @@ function bays() {
   card.append(list);
   return card;
 }
+
+// Settings chooses the view the calendar opens on.
+export function setCalendarView(v) {
+  if (!VIEWS.some(x => x[0] === v)) return;
+  cal.view = v;
+  try { localStorage.setItem(CAL_KEY, v); } catch { /* private window */ }
+}

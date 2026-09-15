@@ -6,11 +6,20 @@
   <title>FarmBox Console</title>
   <meta name="description" content="Run a FarmBox: people, plans, procedures, crops.">
   <meta name="theme-color" content="#0b0b0d">
+  <script>
+    // The saved theme before the first paint, so a light console never flashes dark.
+    (function () {
+      var t = 'dark';
+      try { t = localStorage.getItem('fbc_theme') || 'dark'; } catch (e) {}
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20260915b">
+  <link rel="stylesheet" href="styles.css?v=20260915c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -86,12 +95,14 @@
       </div>
       <div class="grow"></div>
       <span class="pill" id="envPill">Supabase</span>
+      <button class="btn btn-ghost btn-icon topbar-gear" id="settingsBtn" type="button"
+              data-icon="settings" aria-label="Settings" title="Settings"></button>
     </header>
     <main class="page" id="page"></main>
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20260915b"></script>
+<script type="module" src="js/app.js?v=20260915c"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

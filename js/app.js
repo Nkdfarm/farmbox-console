@@ -16,6 +16,7 @@ import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderHarvest } from './harvest.js';
 import { watchForUpdates, VERSION } from './update.js';
+import { openSettings, applyTheme, startPage } from './settings.js';
 
 const $ = id => document.getElementById(id);
 const FARM_KEY = 'fbc_farm';
@@ -55,6 +56,10 @@ paintRail();
 let farms = [];
 let farm = null;
 let myUserId = null;
+let myUser = null;
+let myRoles = [];
+
+applyTheme();
 
 const ROUTES = {
   dashboard: { title: 'Dashboard', render: renderDashboard },
@@ -99,10 +104,31 @@ $('signinForm').addEventListener('submit', async e => {
   }
 });
 
-$('signout').addEventListener('click', () => {
+function doSignOut() {
   signOut();
   location.hash = '';
   showSignin();
+}
+$('signout').addEventListener('click', doSignOut);
+
+// ── the gear ───────────────────────────────────────────────────────────────
+$('settingsBtn').addEventListener('click', () => {
+  const pill = $('envPill');
+  openSettings({
+    user: myUser || { id: myUserId, email: '' },
+    name: $('whoName').textContent,
+    roleText: pill.textContent,
+    roleTone: pill.classList.contains('ok') ? 'ok' : pill.classList.contains('warn') ? 'warn' : '',
+    isFranchisor: myRoles.some(r => r.role === 'franchisor_admin'),
+    railFolded: () => $('shell').classList.contains('collapsed'),
+    setRailFolded: folded => {
+      railChoice = folded ? 'folded' : 'open';
+      try { localStorage.setItem(RAIL_KEY, railChoice); } catch { /* private window */ }
+      paintRail();
+    },
+    signOut: doSignOut,
+    refresh: () => { if (farm) route(); },
+  });
 });
 
 // ── the farm switcher ──────────────────────────────────────────────────────
@@ -135,6 +161,7 @@ async function paintMyRole() {
   try {
     const rows = await select('membership',
       `select=role,farm_id&user_id=eq.${myUserId}&active=is.true`);
+    myRoles = rows;
     const franchisor = rows.some(r => r.role === 'franchisor_admin');
     const here = rows.find(r => r.farm_id === farm?.id);
     pill.textContent = franchisor ? 'Franchisor admin'
@@ -208,6 +235,7 @@ async function start() {
   try {
     const user = await me();
     myUserId = user.id;
+    myUser = user;
     const name = user.user_metadata?.name || user.user_metadata?.full_name ||
       (user.email || '').split('@')[0].replace(/^./, c => c.toUpperCase());
     $('whoName').textContent = name;
@@ -218,7 +246,7 @@ async function start() {
     if (v) v.textContent = 'v' + VERSION;
     await loadFarms();
     await paintMyRole();
-    if (!location.hash) location.hash = '#/dashboard';
+    if (!location.hash) location.hash = '#/' + startPage();
     await route();
   } catch (err) {
     // The server answering "no" about who you are is a dead session: expired or

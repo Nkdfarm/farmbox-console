@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "released": "2026-09-15",
-  "note": "The crop calendar on the dashboard: week, month or year, and any period from the menu."
+  "note": "Settings behind the gear: light or dark, the Notion syncs both ways, version and account."
 }

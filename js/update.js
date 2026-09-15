@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el } from './ui.js';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -110,3 +110,13 @@ function afterUpdate() {
   document.body.append(note);
   setTimeout(() => note.remove(), 4500);
 }
+
+// For Settings: what the server says is current, without showing the card.
+export async function checkForUpdate() {
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    return res.ok ? await res.json() : null;
+  } catch { return null; }                  // offline
+}
+
+export const updateNow = latest => update(latest);

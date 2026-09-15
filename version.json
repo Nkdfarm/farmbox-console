@@ -1,5 +1,5 @@
 {
-  "version": "0.8.3",
+  "version": "0.8.4",
   "released": "2026-09-15",
-  "note": "The app icon is now the orange sprout from the top left of the console."
+  "note": "A weather card on the dashboard: today, the next three days, and links to yr.no and Windy."
 }

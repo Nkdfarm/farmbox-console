@@ -11,6 +11,7 @@
 // because it is the one thing that has not happened yet.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
+import { weatherCard } from './weather.js';
 import { el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -49,6 +50,7 @@ function paint() {
   head.append(el('span', 'pill', data.farm.code));
   mount.append(head);
 
+  mount.append(weatherCard(data.farm));
   mount.append(tiles());
   mount.append(calendarCard());
   mount.append(bays());

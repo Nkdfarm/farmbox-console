@@ -7,14 +7,14 @@
 // office and the container where the signal drops.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'farmbox-console-20260915e';
+const CACHE = 'farmbox-console-20260915f';
 
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260915e',
+  './styles.css?v=20260915f',
   './manifest.json',
-  './js/app.js?v=20260915e',
+  './js/app.js?v=20260915f',
   './js/api.js',
   './js/ui.js',
   './js/people.js',
@@ -53,7 +53,11 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    // only this worker's own old shells: fbc-data is what the page kept for
+    // reading offline (api.js) and outlives a new version of the console
+    .then(keys => Promise.all(keys
+      .filter(k => k.startsWith('farmbox-console-') && k !== CACHE)
+      .map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

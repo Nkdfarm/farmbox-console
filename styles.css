@@ -234,6 +234,20 @@ th.right, td.right { text-align: right; }
 .pill.warn { background: var(--warning-bg); color: var(--warning); }
 .pill.bad { background: var(--error-bg); color: var(--error); }
 .pill.info { background: var(--info-bg); color: var(--info); }
+
+/* connected / offline, top right (app.js) */
+.pill.net svg { width: 14px; height: 14px; flex: none; }
+.pill.net.is-online svg { color: var(--success); }
+.offline-bar {
+  padding: var(--space-2) var(--space-8);
+  background: var(--warning-bg); color: var(--warning);
+  font-size: var(--text-sm); font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .pill.net span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .offline-bar { padding-inline: var(--space-4); }
+}
 .chip.fam-Agriculture { background: var(--fam-ag-bg); color: var(--fam-ag-fg); border-color: transparent; }
 .chip.fam-Maintenance { background: var(--fam-mt-bg); color: var(--fam-mt-fg); border-color: transparent; }
 .chip.fam-Office { background: var(--fam-of-bg); color: var(--fam-of-fg); border-color: transparent; }

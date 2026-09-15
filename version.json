@@ -1,5 +1,5 @@
 {
-  "version": "0.7.2",
+  "version": "0.8.0",
   "released": "2026-09-15",
-  "note": "Farm setup moves to the bottom of the menu, after People."
+  "note": "Works offline, read only: a Connected / Offline sign top right, and every page shows what this device last saved."
 }

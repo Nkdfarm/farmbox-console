@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el } from './ui.js';
 
-export const VERSION = '0.7.2';
+export const VERSION = '0.8.0';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -72,8 +72,9 @@ async function update(latest) {
   try {
     const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
     await Promise.all(regs.map(r => r.unregister()));
+    // the shell only: fbc-data is the farm's data kept for reading offline
     const keys = await caches?.keys() ?? [];
-    await Promise.all(keys.map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
   } catch { /* whatever is left, the new URL still wins */ }
 
   set(sessionStorage, TARGET, latest);

@@ -53,7 +53,12 @@ export async function signIn(email, password) {
   return session;
 }
 
-export function signOut() { save(null); }
+export function signOut() {
+  save(null);
+  // What this device kept for offline reading belongs to the person who read
+  // it; the next person at the office computer must not open the console on it.
+  forgetAll();
+}
 
 async function refresh() {
   if (!session?.refresh_token) throw new ApiError('signed out', 401);
@@ -63,6 +68,10 @@ async function refresh() {
       method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }),
     });
   } catch (e) {
+    // No signal is not a dead session. A refresh that never reached the server
+    // used to land here too and throw a good session away, so an hour offline
+    // meant signing in again — which cannot be done offline.
+    if (!(e instanceof ApiError)) throw e;
     // A refused refresh is a dead session however it is worded: the token
     // expired, somebody revoked it, or the account itself is gone. Auth answers
     // 400 for that, and a 400 used to leave the console sitting in an empty
@@ -74,10 +83,9 @@ async function refresh() {
   return session;
 }
 
-// Every call goes through here: it refreshes a minute before expiry, and once
-// more if the server disagrees about the clock.
-export async function api(path, opts = {}) {
-  if (!session) throw new ApiError('sign in first', 401);
+// It refreshes a minute before expiry, and once more if the server disagrees
+// about the clock.
+async function live(path, opts) {
   if (Date.now() > (session.expires_at ?? 0) - 60_000) await refresh();
   try {
     return await raw(path, opts, session.access_token);
@@ -85,6 +93,129 @@ export async function api(path, opts = {}) {
     if (e.status !== 401) throw e;
     await refresh();
     return raw(path, opts, session.access_token);
+  }
+}
+
+// ── offline: read only ─────────────────────────────────────────────────────
+// Every read that succeeds is kept on this device; when the network is gone
+// the same read is answered from that copy, and anything that would change the
+// farm is refused. Nothing is queued: the phone app is the offline-first
+// client, and a plan validated against a copy from this morning is not a
+// decision anybody should find waiting on the server afterwards.
+//
+// A read is a GET or one of the RPCs below. An RPC not on the list is treated
+// as a write, which is the safe mistake: a new read page that nobody added here
+// says "needs a connection" offline, rather than a write replaying an old "ok".
+const READ_RPCS = new Set([
+  'crop_calendar', 'crop_detail', 'crop_library', 'crop_map', 'dashboard',
+  'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvests',
+  'issues', 'labour_week', 'maintenance', 'people', 'price_table', 'procedure',
+  'procedures', 'purchasing', 'reports',
+]);
+const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
+
+const isRead = (path, opts) => {
+  if ((opts.method || 'GET') === 'GET') return true;
+  const m = path.match(/^\/rest\/v1\/rpc\/([a-z_]+)$/);
+  return !!m && READ_RPCS.has(m[1]);
+};
+
+// One entry per person, per request and per argument list, under a URL the
+// Cache API accepts. The person is part of the key: a franchisor and a farm
+// manager at the same desk see different farms.
+const keyOf = (path, opts) =>
+  'https://offline.farmbox/' + encodeURIComponent(session?.user?.id || 'me') + path +
+  (opts.body ? (path.includes('?') ? '&' : '?') + 'body=' + encodeURIComponent(opts.body) : '');
+
+async function remember(key, body) {
+  try {
+    const c = await caches.open(DATA_CACHE);
+    await c.put(key, new Response(JSON.stringify({ saved_at: Date.now(), body }),
+      { headers: { 'Content-Type': 'application/json' } }));
+  } catch { /* no Cache API (private window): offline simply has nothing to show */ }
+}
+
+async function recall(key) {
+  try {
+    const hit = await (await caches.open(DATA_CACHE)).match(key);
+    return hit ? await hit.json() : null;
+  } catch { return null; }
+}
+
+function forgetAll() {
+  try { caches.delete(DATA_CACHE); } catch { /* nothing kept */ }
+}
+
+// ── connected / offline ────────────────────────────────────────────────────
+// `online` is what the last request found, not only what the browser guesses:
+// navigator.onLine says true on a Wi-Fi with no internet behind it.
+// `savedAt` is the oldest copy shown since the page was opened, so the banner
+// can say how old what is on screen is.
+const net = { online: navigator.onLine !== false, savedAt: null };
+const listeners = new Set();
+let probeTimer = null;
+
+export const connection = () => ({ ...net });
+export function onConnection(cb) { listeners.add(cb); return () => listeners.delete(cb); }
+const emit = () => listeners.forEach(cb => { try { cb({ ...net }); } catch { /* a listener's problem */ } });
+
+function setOnline(on) {
+  if (on === net.online) return;
+  net.online = on;
+  clearInterval(probeTimer);
+  probeTimer = on ? null : setInterval(probe, 15_000);
+  emit();
+}
+
+// A new page starts with nothing old on it.
+export function newPage() {
+  if (net.savedAt === null) return;
+  net.savedAt = null;
+  emit();
+}
+
+function servedFromCopy(t) {
+  if (net.savedAt !== null && net.savedAt <= t) return;
+  net.savedAt = t;
+  emit();
+}
+
+// Is Supabase reachable? Any answer at all, even a refusal, means yes.
+export async function probe() {
+  try {
+    await fetch(URL_BASE + '/auth/v1/health', { headers: { apikey: ANON }, cache: 'no-store' });
+    setOnline(true);
+  } catch { setOnline(false); }
+}
+
+addEventListener('offline', () => setOnline(false));
+addEventListener('online', probe);
+if (!net.online) probeTimer = setInterval(probe, 15_000);
+
+export const OFFLINE_WRITE = 'Offline — the console is read only. This needs a connection.';
+
+// Every call goes through here.
+export async function api(path, opts = {}) {
+  if (!session) throw new ApiError('sign in first', 401);
+  const read = isRead(path, opts);
+  try {
+    const body = await live(path, opts);
+    setOnline(true);
+    if (read) remember(keyOf(path, opts), body);
+    return body;
+  } catch (e) {
+    // The server answered: that is a real answer, online or not.
+    if (e instanceof ApiError) { if (e.status) setOnline(true); throw e; }
+    // fetch itself failed: no network, or Supabase unreachable.
+    setOnline(false);
+    if (!read) throw new ApiError(OFFLINE_WRITE, 0);
+    const copy = await recall(keyOf(path, opts));
+    if (!copy) {
+      throw new ApiError('Offline — this was never opened on this device while connected, ' +
+        'so there is no copy of it to show.', 0);
+    }
+    servedFromCopy(copy.saved_at);
+    return copy.body;
   }
 }
 

@@ -1,17 +1,18 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
-import { getSession, signIn, signOut, me, select } from './api.js';
+import { getSession, signIn, signOut, me, select, rpc,
+         connection, onConnection, newPage } from './api.js';
 import { el, toast, icon, avatar, pref } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
-import { renderWeek } from './week.js';
+import { renderWeek, defaultWeek } from './week.js';
 import { renderFarm } from './farm.js';
 import { renderCrops } from './crops.js';
-import { renderDashboard } from './dashboard.js';
+import { renderDashboard, calendarRange } from './dashboard.js';
 import { renderProcedures } from './procedures.js';
 import { renderCropDb } from './cropdb.js';
 import { renderMaintenance } from './maintenance.js';
 import { renderPurchasing } from './purchasing.js';
 import { renderPrices } from './prices.js';
-import { renderReports } from './reports.js';
+import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderHarvest } from './harvest.js';
@@ -182,6 +183,7 @@ function switchFarm(id) {
   paintMyRole();
   location.hash = '#/dashboard';
   route();
+  warm();
 }
 
 $('farmPick').addEventListener('change', e => {
@@ -189,7 +191,75 @@ $('farmPick').addEventListener('change', e => {
   pref.set(FARM_KEY, farm.id);
   paintMyRole();
   route();
+  warm();
 });
+
+// ── connected / offline ────────────────────────────────────────────────────
+// Top right, always: a person has to know whether what is on screen is live
+// before acting on it. Offline, a bar under the top says how old it is.
+const clock = t => {
+  const d = new Date(t);
+  const today = d.toDateString() === new Date().toDateString();
+  return (today ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ', ') +
+    d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+};
+
+function paintConnection({ online, savedAt }) {
+  const n = $('net');
+  n.textContent = '';
+  n.className = 'pill net ' + (online ? 'is-online' : 'warn');
+  n.append(icon(online ? 'wifi' : 'wifiOff'), el('span', null, online ? 'Connected' : 'Offline'));
+  n.title = online ? 'Connected — everything on screen is live'
+                   : 'Offline — read only until the connection is back';
+
+  const bar = $('offlineBar');
+  bar.hidden = online;
+  bar.textContent = online ? '' :
+    'Offline — read only. ' + (savedAt
+      ? `Showing what this device saved at ${clock(savedAt)}. `
+      : 'Pages opened while connected can still be read. ') +
+    'Changes need a connection.';
+}
+paintConnection(connection());
+
+let wasOnline = connection().online;
+onConnection(state => {
+  paintConnection(state);
+  if (state.online && !wasOnline) {
+    // Back: replace the copy on screen with the real thing, or finish a start
+    // that the lost signal interrupted.
+    toast('Connected again', 'ok');
+    if (!booted) { if (getSession()) start(); }
+    else route();
+  }
+  wasOnline = state.online;
+});
+
+// Read every page's data ahead, once per farm per visit, so a page never
+// opened today still opens when the signal drops. The same calls with the same
+// arguments as the pages make, or the copy would sit under a different key.
+// Drawers (a crop's or a procedure's detail) are read only when opened.
+const warmed = new Set();
+async function warm() {
+  if (!farm || !connection().online || warmed.has(farm.id)) return;
+  const id = farm.id;
+  warmed.add(id);
+  await new Promise(r => setTimeout(r, 2500));      // after the page itself
+  const p = { p_farm: id };
+  const calls = [
+    ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
+    ['labour_week', { ...p, p_week: defaultWeek() }], ['crop_map', p],
+    ['harvests', { ...p, p_days: 30 }], ['crop_library', p], ['procedures', p],
+    ['maintenance', p], ['purchasing', p], ['price_table', p],
+    ['issues', { ...p, p_include_closed: false }], ['reports', { ...p, ...reportRange() }],
+    ['people', p], ['family_tree', p], ['farm_market', p],
+  ];
+  if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
+  for (const [name, args] of calls) {
+    if (!connection().online) { warmed.delete(id); return; }
+    try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
+  }
+}
 
 // ── routing ────────────────────────────────────────────────────────────────
 function currentRoute() {
@@ -204,6 +274,7 @@ async function route() {
                              : a.removeAttribute('aria-current'));
   document.title = `${ROUTES[name].title} · FarmBox Console`;
 
+  newPage();
   const page = $('page');
   if (!farm) {
     page.textContent = '';
@@ -230,6 +301,7 @@ window.addEventListener('hashchange', route);
 watchForUpdates();
 
 // ── boot ───────────────────────────────────────────────────────────────────
+let booted = false;
 async function start() {
   $('signin').hidden = true;
   $('shell').hidden = false;
@@ -255,7 +327,9 @@ async function start() {
     await loadFarms();
     await paintMyRole();
     if (!location.hash) location.hash = '#/' + startPage();
+    booted = true;
     await route();
+    warm();
   } catch (err) {
     // The server answering "no" about who you are is a dead session: expired or
     // revoked (401), or the account itself deleted (403, "user from sub claim

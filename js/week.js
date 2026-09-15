@@ -30,12 +30,12 @@ const hhmm = t => (t || '').slice(0, 5);
 export async function renderWeek(container, currentFarm) {
   farm = currentFarm;
   mount = container;
-  if (!week) {
-    const today = iso(new Date());
-    week = shift(mondayOf(today), 7);      // next week is what Friday is for
-  }
+  if (!week) week = defaultWeek();
   await load();
 }
+
+// next week is what Friday is for
+export const defaultWeek = () => shift(mondayOf(iso(new Date())), 7);
 
 async function load() {
   mount.textContent = '';

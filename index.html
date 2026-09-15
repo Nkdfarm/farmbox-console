@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20260915e">
+  <link rel="stylesheet" href="styles.css?v=20260915f">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -95,14 +95,16 @@
       </div>
       <div class="grow"></div>
       <span class="pill" id="envPill">Supabase</span>
+      <span class="pill net" id="net" role="status" aria-live="polite"></span>
       <button class="btn btn-ghost btn-icon topbar-gear" id="settingsBtn" type="button"
               data-icon="settings" aria-label="Settings" title="Settings"></button>
     </header>
+    <div class="offline-bar" id="offlineBar" hidden></div>
     <main class="page" id="page"></main>
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20260915e"></script>
+<script type="module" src="js/app.js?v=20260915f"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

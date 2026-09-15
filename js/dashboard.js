@@ -582,3 +582,10 @@ export function setCalendarView(v) {
   pref.set(CAL_KEY, v);
 }
 export const calendarView = () => cal.view;
+
+// The window the calendar opens on today, as the arguments it fetches with —
+// app.js reads it ahead so the dashboard opens offline too.
+export function calendarRange() {
+  const w = windowOf(cal.view, new Date());
+  return { p_from: ymd(w.from), p_to: ymd(w.to) };
+}

@@ -26,13 +26,18 @@ function ymd(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// the period on screen, as the arguments it fetches with (app.js reads it ahead)
+export function reportRange() {
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  return { p_from: ymd(from), p_to: ymd(new Date()) };
+}
+
 async function load() {
   mount.textContent = '';
   mount.append(el('div', 'empty', 'Counting…'));
-  const from = new Date();
-  from.setDate(from.getDate() - days);
   try {
-    data = await rpc('reports', { p_farm: farm.id, p_from: ymd(from), p_to: ymd(new Date()) });
+    data = await rpc('reports', { p_farm: farm.id, ...reportRange() });
   } catch (e) {
     mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return;
   }

@@ -74,6 +74,9 @@ function tiles() {
   const t = data.tasks, o = data.occupancy, h = data.harvests,
         i = data.issues, p = data.purchasing, l = data.labour;
 
+  // the weather first, two tiles wide (weather.js) — the owner's choice
+  wrap.append(weatherTile(data.farm));
+
   wrap.append(tile({
     label: 'Overdue',
     icon: 'clock',
@@ -148,9 +151,6 @@ function tiles() {
                   : `next order by ${p.next_order_by ?? '—'}`,
     }));
   }
-
-  // two tiles wide, after the last one (weather.js)
-  wrap.append(weatherTile(data.farm));
 
   return wrap;
 }

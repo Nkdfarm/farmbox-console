@@ -1,5 +1,5 @@
 {
-  "version": "0.8.6",
+  "version": "0.8.7",
   "released": "2026-09-15",
-  "note": "Weather is now a tile two wide after the others, today and tomorrow with wind; the location is on Farm setup too."
+  "note": "The weather tile opens the dashboard's tiles."
 }

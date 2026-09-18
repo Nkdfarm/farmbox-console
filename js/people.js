@@ -174,7 +174,7 @@ function personRow(p) {
   const who = el('div', 'who');
   who.append(avatar(p));
   const names = el('div');
-  names.append(el('b', null, p.name));
+  names.append(el('b', null, fullName(p)));
   names.append(el('small', null, p.email || 'no e-mail'));
   who.append(names);
   tr.append(td(who));
@@ -209,6 +209,7 @@ function personRow(p) {
 }
 
 const td = child => { const c = el('td'); c.append(child); return c; };
+const fullName = p => [p.name, p.surname].filter(Boolean).join(' ');
 
 // ── add / edit ─────────────────────────────────────────────────────────────
 function openPerson(p) {
@@ -216,7 +217,12 @@ function openPerson(p) {
   const d = drawer(isNew ? 'Add a person' : p.name,
                    isNew ? farm.name : roleLabel(p.role) + ' at ' + farm.name);
 
-  const name = input({ id: 'p-name', value: p?.name ?? '', placeholder: 'Full name, or Worker 1' });
+  const name = input({ id: 'p-name', value: p?.name ?? '', placeholder: 'First name, or Worker 1' });
+  const surname = input({ id: 'p-surname', value: p?.surname ?? '', placeholder: 'Surname',
+                          autocomplete: 'off' });
+  const linkedin = input({ id: 'p-linkedin', type: 'url', value: p?.linkedin_url ?? '',
+                           placeholder: 'https://www.linkedin.com/in/…', autocomplete: 'off' });
+  const photo = photoPicker(p, name, linkedin);
   const role = selectBox(ROLES.map(r => [r[0], r[1]]), p?.role ?? 'worker');
   role.id = 'p-role';
   const roleHint = el('div', 'hint');
@@ -287,6 +293,9 @@ function openPerson(p) {
   d.body.append(
     el('div', 'sec-title', 'The person'),
     field('Name', name),
+    field('Surname', surname),
+    field('LinkedIn profile link', linkedin),
+    photo.node,
     slots,
     (() => { const f = field('Role', role); f.append(roleHint); return f; })(),
     (() => {
@@ -308,6 +317,7 @@ function openPerson(p) {
   );
   setRoleHint();
   paintSlots();
+  d.box.addEventListener('paste', photo.onPaste);
 
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
@@ -317,6 +327,9 @@ function openPerson(p) {
       farm_id: farm.id,
       worker_id: p?.worker_id ?? null,
       name: name.value.trim(),
+      surname: surname.value.trim(),
+      linkedin_url: linkedinUrl(linkedin.value),
+      photo_url: photo.value(),
       role: role.value,
       email: email.value.trim() || null,
       phone: phone.value.trim() || null,
@@ -326,6 +339,9 @@ function openPerson(p) {
     };
     if (!body.name) { toast('A name is needed', 'bad'); name.focus(); return; }
     if (!body.working_days.length) { toast('Pick at least one working day', 'bad'); return; }
+    if (linkedin.value.trim() && !body.linkedin_url) {
+      toast('That is not a LinkedIn link', 'bad'); linkedin.focus(); return;
+    }
 
     const wantsAccount = !!pw.value.trim();
     if (wantsAccount && !body.email) { toast('A password needs an e-mail', 'bad'); email.focus(); return; }
@@ -337,7 +353,10 @@ function openPerson(p) {
     try {
       if (wantsAccount && (isNew || !p.has_login)) {
         // account + access + person, in the edge function that holds the key
-        await fn('admin-user', { action: 'create', ...body, password: pw.value.trim() });
+        const made = await fn('admin-user', { action: 'create', ...body, password: pw.value.trim() });
+        // admin-user writes the account and the roster row; the profile
+        // (surname, LinkedIn, picture) goes through save_person like any edit.
+        await rpc('save_person', { p: { ...body, worker_id: made.worker_id } });
       } else {
         await rpc('save_person', { p: body });
         if (wantsAccount) {
@@ -354,6 +373,119 @@ function openPerson(p) {
     }
   };
   d.footer.append(cancel, save);
+}
+
+// ── the picture ────────────────────────────────────────────────────────────
+// Stored as a small square JPEG in the row itself (migration 0047): a LinkedIn
+// photo link is signed and stops working after a while, so the picture has to
+// be copied, not linked. LinkedIn lets no other site fetch it, so "from
+// LinkedIn" is: open the profile, right-click the photo › Copy image, then
+// paste it here (the button, or Ctrl+V anywhere in the form).
+const PHOTO_PX = 160;
+
+function linkedinUrl(v) {
+  v = v.trim();
+  if (!v) return '';
+  if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+  try {
+    const u = new URL(v);
+    return /(^|\.)linkedin\.com$/i.test(u.hostname) ? u.href : '';
+  } catch { return ''; }
+}
+
+function photoPicker(p, nameInput, linkedinInput) {
+  let value = p?.photo_url ?? '';
+  let waiting = false;
+  const node = el('div', 'field');
+  node.append(el('label', null, 'Picture'));
+
+  const row = el('div', 'row photo-row');
+  const preview = el('div', 'avatar lg photo-preview');
+  const file = input({ type: 'file', accept: 'image/*' });
+  file.hidden = true;
+  const add = el('button', 'btn btn-sm', 'Add picture');
+  add.type = 'button';
+  const fromLi = el('button', 'btn btn-sm', 'Take picture from LinkedIn');
+  fromLi.type = 'button';
+  const remove = el('button', 'btn btn-sm btn-ghost', 'Remove');
+  remove.type = 'button';
+  row.append(preview, add, fromLi, remove, file);
+  const hint = el('div', 'hint');
+  node.append(row, hint);
+
+  const paint = msg => {
+    preview.textContent = '';
+    if (value) {
+      const img = new Image();
+      img.alt = '';
+      img.src = value;
+      preview.append(img);
+      preview.classList.add('has-photo');
+    } else {
+      preview.classList.remove('has-photo');
+      preview.textContent = (nameInput.value.trim()[0] || '?').toUpperCase();
+    }
+    remove.hidden = !value;
+    hint.textContent = msg ?? (value ? '' : 'A photo from this computer, or from their LinkedIn profile.');
+  };
+  const done = () => { waiting = false; fromLi.textContent = 'Take picture from LinkedIn'; };
+  const take = async blob => {
+    try { value = await shrink(blob); done(); paint(); }
+    catch { paint('That file is not a picture this browser can read.'); }
+  };
+
+  add.onclick = () => file.click();
+  file.onchange = () => { if (file.files[0]) take(file.files[0]); file.value = ''; };
+  remove.onclick = () => { value = ''; paint(); };
+  nameInput.addEventListener('input', () => { if (!value) preview.textContent =
+    (nameInput.value.trim()[0] || '?').toUpperCase(); });
+
+  // First press opens the profile; the second pastes what was copied from it.
+  fromLi.onclick = async () => {
+    if (!waiting) {
+      const url = linkedinUrl(linkedinInput.value);
+      if (!url) { toast('Put their LinkedIn profile link in first', 'bad'); linkedinInput.focus(); return; }
+      window.open(url, '_blank', 'noopener');
+      waiting = true;
+      fromLi.textContent = 'Paste the copied picture';
+      paint('On LinkedIn, right-click their photo › Copy image, then come back and press ' +
+            '“Paste the copied picture” (or Ctrl+V).');
+      return;
+    }
+    try {
+      for (const it of await navigator.clipboard.read()) {
+        const type = it.types.find(t => t.startsWith('image/'));
+        if (type) { await take(await it.getType(type)); return; }
+      }
+      paint('No picture on the clipboard yet — on LinkedIn, right-click the photo › Copy image.');
+    } catch {
+      paint('The browser would not read the clipboard — press Ctrl+V instead.');
+    }
+  };
+
+  // Ctrl+V anywhere in the form; a paste of text into a field is left alone.
+  const onPaste = e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    take(item.getAsFile());
+  };
+
+  paint();
+  return { node, value: () => value, onPaste };
+}
+
+// Centre-crop to a square, scale to PHOTO_PX, JPEG.
+async function shrink(blob) {
+  const bmp = await createImageBitmap(blob);
+  const side = Math.min(bmp.width, bmp.height);
+  const c = document.createElement('canvas');
+  c.width = c.height = PHOTO_PX;
+  const g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, PHOTO_PX, PHOTO_PX);
+  bmp.close?.();
+  return c.toDataURL('image/jpeg', 0.85);
 }
 
 // ── the responsibility picker ──────────────────────────────────────────────

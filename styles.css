@@ -824,3 +824,6 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .pw-form { grid-template-columns: 1fr; }
   .set-row .field select { min-width: 0; }
 }
+
+/* People › the picture in the Add/Edit form (0.9.1) */
+.avatar.photo-preview { width: 64px; height: 64px; font-size: var(--text-base); margin-right: var(--space-2); }

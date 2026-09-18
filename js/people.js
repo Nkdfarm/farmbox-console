@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, select } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer,
-         avatar, suggestPassword, busy } from './ui.js';
+         avatar, suggestPassword, busy, setPhotos } from './ui.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -48,6 +48,7 @@ async function load() {
     mount.append(el('div', 'note bad', e.message));
     return;
   }
+  setPhotos(people);   // a picture saved here shows on every page at once
   paint();
 }
 

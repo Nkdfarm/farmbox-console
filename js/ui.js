@@ -300,6 +300,36 @@ export const demoFace = key => {
   return `https://randomuser.me/api/portraits/men/${FACES[h % FACES.length]}.jpg`;
 };
 
+// One list of everyone's own pictures, keyed by worker id. Every avatar on
+// every page reads it, and setPhotos() — called at sign-in and whenever People
+// loads or saves — repaints the avatars already on screen, so a picture
+// changed on People shows at once on the plan, the top bar and Settings.
+const PHOTOS = new Map();
+
+export function setPhotos(rows) {
+  for (const r of rows || []) {
+    const id = r.worker_id ?? r.id;
+    if (!id) continue;
+    if (r.photo_url) PHOTOS.set(id, r.photo_url); else PHOTOS.delete(id);
+  }
+  document.querySelectorAll('.avatar[data-wid]').forEach(paintPhoto);
+}
+
+function paintPhoto(box) {
+  const src = PHOTOS.get(box.dataset.wid) || box.dataset.own || demoFace(box.dataset.key);
+  if (box.dataset.src === src) return;
+  box.dataset.src = src;
+  const img = new Image();
+  img.alt = '';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.onload = () => {
+    if (box.dataset.src !== src) return;          // a newer picture won the race
+    box.textContent = ''; box.append(img); box.classList.add('has-photo');
+  };
+  img.src = src;
+}
+
 // p is anything with a name and an id: { worker_id | id, name, role?, photo_url? }.
 // The worker id is the key wherever there is one, so a person has the same
 // face on People, on the plan and in the rail; app.js looks the signed-in
@@ -307,11 +337,9 @@ export const demoFace = key => {
 export function avatar(p, size = '') {
   const cls = ['avatar', size, p.role && 'r-' + p.role].filter(Boolean).join(' ');
   const box = el('div', cls, initials(p.name));
-  const img = new Image();
-  img.alt = '';
-  img.decoding = 'async';
-  img.referrerPolicy = 'no-referrer';
-  img.onload = () => { box.textContent = ''; box.append(img); box.classList.add('has-photo'); };
-  img.src = p.photo_url || demoFace(p.worker_id ?? p.id ?? p.name);
+  box.dataset.wid = p.worker_id ?? '';
+  box.dataset.key = p.worker_id ?? p.id ?? p.name;
+  if (p.photo_url) box.dataset.own = p.photo_url;
+  paintPhoto(box);
   return box;
 }

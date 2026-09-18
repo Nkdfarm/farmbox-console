@@ -1,7 +1,7 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select, rpc,
          connection, onConnection, newPage, reconnect } from './api.js';
-import { el, toast, icon, avatar, pref } from './ui.js';
+import { el, toast, icon, avatar, pref, setPhotos } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek } from './week.js';
 import { renderFarm } from './farm.js';
@@ -346,10 +346,14 @@ async function start() {
       const mine = await select('worker', `select=id&user_id=eq.${user.id}&active=is.true&limit=1`);
       myWorkerId = mine[0]?.id ?? null;
     } catch { myWorkerId = null; }
+    // everyone's own picture, for every avatar on every page (ui.js setPhotos)
+    try { setPhotos(await select('worker', 'select=id,photo_url&photo_url=not.is.null')); } catch { /* demo faces */ }
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
     const v = document.getElementById('version');
     if (v) v.textContent = 'v' + VERSION;
+    const tv = document.getElementById('topVersion');
+    if (tv) tv.textContent = 'v' + VERSION;
     await loadFarms();
     await paintMyRole();
     if (!location.hash) location.hash = '#/' + startPage();

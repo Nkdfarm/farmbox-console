@@ -1,5 +1,5 @@
 {
-  "version": "0.9.4",
+  "version": "0.9.5",
   "released": "2026-09-18",
-  "note": "People: the list shows the surname again; the person form explains the LinkedIn picture in three steps."
+  "note": "The console follows the computer (light or dark) unless you pick a theme in Settings."
 }

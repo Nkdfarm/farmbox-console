@@ -24,7 +24,7 @@ const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
 export function currentTheme() {
   const t = get(THEME_KEY);
-  return t === 'light' || t === 'system' ? t : 'dark';
+  return t === 'light' || t === 'dark' ? t : 'system';   // nothing chosen yet: follow the computer
 }
 
 export function applyTheme(choice = currentTheme()) {
@@ -366,7 +366,7 @@ function device() {
   reset.type = 'button';
   reset.onclick = () => {
     ['fbc_theme', 'fbc_rail', 'fbc_cal_view', 'fbc_start', 'fbc_farm'].forEach(k => put(k, null));
-    applyTheme('dark');
+    applyTheme('system');
     toast('Preferences reset on this device', 'ok');
     setTimeout(() => location.reload(), 700);
   };

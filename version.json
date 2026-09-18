@@ -1,5 +1,5 @@
 {
-  "version": "0.9.2",
+  "version": "0.9.3",
   "released": "2026-09-18",
-  "note": "People: Take picture from LinkedIn is automatic — open the profile, click the FarmBox photo bookmark, and the picture arrives by itself."
+  "note": "People: simpler LinkedIn picture (open the profile, copy the photo, Ctrl+V); the surname is kept in the form only."
 }

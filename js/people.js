@@ -174,7 +174,7 @@ function personRow(p) {
   const who = el('div', 'who');
   who.append(avatar(p));
   const names = el('div');
-  names.append(el('b', null, fullName(p)));
+  names.append(el('b', null, p.name));
   names.append(el('small', null, p.email || 'no e-mail'));
   who.append(names);
   tr.append(td(who));
@@ -209,7 +209,6 @@ function personRow(p) {
 }
 
 const td = child => { const c = el('td'); c.append(child); return c; };
-const fullName = p => [p.name, p.surname].filter(Boolean).join(' ');
 
 // ── add / edit ─────────────────────────────────────────────────────────────
 function openPerson(p) {
@@ -377,65 +376,11 @@ function openPerson(p) {
 
 // ── the picture ────────────────────────────────────────────────────────────
 // Stored as a small square JPEG in the row itself (migration 0047), not as a
-// link: a person's LinkedIn photo link changes whenever they change the photo.
-//
-// "Take picture from LinkedIn" is automatic up to one click. LinkedIn answers
-// 999 to every request from a cloud server (tried from Supabase on 18 Sept
-// 2026, with browser and link-preview identities alike), and a browser page
-// cannot read linkedin.com itself — but LinkedIn's photo server allows any
-// site to download a photo once its address is known. So the console opens
-// the profile, and the "FarmBox photo" bookmark, clicked on that tab, finds
-// the photo's address and posts it back here; the console downloads it,
-// crops it and shows it. Opened any other way, the bookmark puts the photo on
-// the clipboard instead, for Ctrl+V in the form.
+// link. LinkedIn lets no other site or server fetch a profile (it answers 999
+// to cloud servers), so "from LinkedIn" is: open the profile, right-click the
+// photo › Copy image, and paste it here (Ctrl+V, or the button). The owner
+// found a one-click bookmark too complex (18 Sept 2026).
 const PHOTO_PX = 160;
-const LI_MESSAGE = 'fbc-linkedin-photo';
-
-// Runs on linkedin.com, not here: it is turned into the bookmark's
-// javascript: address, so it must not use anything outside itself.
-function linkedinBookmark() {
-  const TYPE = 'fbc-linkedin-photo';
-  const isPhoto = s => /profile-displayphoto|profile-framedphoto/.test(s || '');
-  if (!/(^|\.)linkedin\.com$/.test(location.hostname) || !/^\/in\//.test(location.pathname)) {
-    alert('FarmBox: open the person’s LinkedIn profile first, then click this bookmark.');
-    return;
-  }
-  // the preview tag when LinkedIn shows one, else the biggest photo on the page (their own)
-  let url = document.querySelector('meta[property="og:image"]')?.content || '';
-  if (!isPhoto(url)) {
-    const imgs = [...document.images].filter(i => isPhoto(i.currentSrc || i.src))
-      .sort((a, b) => (b.naturalWidth || b.width) - (a.naturalWidth || a.width));
-    url = imgs[0] ? imgs[0].currentSrc || imgs[0].src : '';
-  }
-  if (!url) { alert('FarmBox: this profile shows no photo.'); return; }
-  if (window.opener) {
-    window.opener.postMessage({ type: TYPE, url, profile: location.href }, '*');
-    window.close();
-    return;
-  }
-  (async () => {
-    try {
-      const bmp = await createImageBitmap(await (await fetch(url)).blob());
-      const c = document.createElement('canvas');
-      c.width = bmp.width; c.height = bmp.height;
-      c.getContext('2d').drawImage(bmp, 0, 0);
-      const png = await new Promise(r => c.toBlob(r, 'image/png'));
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-      alert('FarmBox: photo copied. Go back to the console and press Ctrl+V in the person form.');
-    } catch (e) {
-      alert('FarmBox: could not copy the photo — right-click it › Copy image instead.');
-    }
-  })();
-}
-const BOOKMARK_HREF = 'javascript:' + encodeURIComponent('(' + linkedinBookmark.toString() + ')()');
-
-function bookmarkLink() {
-  const a = el('a', 'bookmarklet', '📌 FarmBox photo');
-  a.href = BOOKMARK_HREF;
-  a.title = 'Drag me to the bookmarks bar';
-  a.onclick = e => { e.preventDefault(); toast('Drag it to the bookmarks bar, then click it on the LinkedIn tab'); };
-  return a;
-}
 
 function linkedinUrl(v) {
   v = v.trim();
@@ -494,29 +439,15 @@ function photoPicker(p, nameInput, linkedinInput) {
   nameInput.addEventListener('input', () => { if (!value) preview.textContent =
     (nameInput.value.trim()[0] || '?').toUpperCase(); });
 
-  // First press opens the profile (keeping the tab's handle, so the bookmark
-  // can answer); if the photo came by clipboard, the second press pastes it.
-  let liTab = null;
-  const steps = () => {
-    hint.textContent = '';
-    hint.append(
-      'On the LinkedIn tab, click the ', bookmarkLink(), ' bookmark — the photo arrives here by itself. ',
-      el('br'),
-      'First time: drag that button to your bookmarks bar (Ctrl+Shift+B shows the bar). ' +
-      'No bookmark? Right-click their photo › Copy image, and press Ctrl+V here.');
-  };
+  // First press opens the profile; the second pastes the copied photo.
   fromLi.onclick = async () => {
     if (!waiting) {
       const url = linkedinUrl(linkedinInput.value);
-      if (!url || !/\/in\//.test(url)) {
-        toast('Put their LinkedIn profile link (linkedin.com/in/…) in first', 'bad');
-        linkedinInput.focus(); return;
-      }
-      liTab = window.open(url, 'fbc-linkedin');
+      if (!url) { toast('Put their LinkedIn profile link in first', 'bad'); linkedinInput.focus(); return; }
+      window.open(url, '_blank', 'noopener');
       waiting = true;
-      fromLi.textContent = 'Paste the copied picture';
-      paint();
-      steps();
+      fromLi.textContent = 'Paste picture';
+      paint('On LinkedIn, right-click their photo › Copy image. Then come back and press Ctrl+V.');
       return;
     }
     try {
@@ -537,26 +468,6 @@ function photoPicker(p, nameInput, linkedinInput) {
     e.preventDefault();
     take(item.getAsFile());
   };
-
-  // The bookmark's answer: the address of the photo on LinkedIn's photo server,
-  // which lets any site download it. Only from the tab this form opened.
-  const onMessage = async e => {
-    if (!node.isConnected) { window.removeEventListener('message', onMessage); return; }
-    if (e.data?.type !== LI_MESSAGE || !liTab || e.source !== liTab) return;
-    let src;
-    try { src = new URL(e.data.url); } catch { return; }
-    if (src.protocol !== 'https:' || !/(^|\.)licdn\.com$/i.test(src.hostname)) return;
-    paint('Downloading the photo from LinkedIn…');
-    try {
-      const res = await fetch(src.href, { mode: 'cors', credentials: 'omit' });
-      if (!res.ok) throw new Error(res.status);
-      await take(await res.blob());
-      toast('Picture taken from LinkedIn', 'ok');
-    } catch {
-      paint('LinkedIn would not hand over the photo — right-click it › Copy image, and press Ctrl+V here.');
-    }
-  };
-  window.addEventListener('message', onMessage);
 
   paint();
   return { node, value: () => value, onPaste };

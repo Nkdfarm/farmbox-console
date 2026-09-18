@@ -1,5 +1,5 @@
 {
-  "version": "0.9.5",
+  "version": "0.9.6",
   "released": "2026-09-18",
-  "note": "The console follows the computer (light or dark) unless you pick a theme in Settings."
+  "note": "Update now no longer loops: it downloads every file of the new version fresh before reloading."
 }

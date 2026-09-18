@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.9.5';
+export const VERSION = '0.9.6';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -153,11 +153,34 @@ async function update(latest) {
     await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
   } catch { /* whatever is left, the new URL still wins */ }
   await step(75, `Downloading ${latest}`);
+  await refreshShell();
 
   set(sessionStorage, TARGET, latest);
   const params = new URLSearchParams(location.search);
   params.set('updated', Date.now());
   location.replace(location.pathname + '?' + params + location.hash);
+}
+
+// The update loop (18 Sept 2026): only index.html, app.js and styles.css carry
+// a ?v=. Every other module — this one included — is asked for by its bare
+// name, and GitHub Pages lets the browser keep those for ten minutes
+// (max-age=600). With the worker unregistered, the fresh page imported a
+// stale update.js, still said the old VERSION, offered the update again, and
+// round it went until the copies expired or the app was closed. So before the
+// reload, every shell file is fetched with cache: 'reload', which replaces the
+// browser's copy. The list is the new sw.js's own SHELL (so a module added in
+// this release is included) plus whatever this page has loaded.
+async function refreshShell() {
+  const urls = new Set();
+  try {
+    const sw = await (await fetch('sw.js', { cache: 'reload' })).text();
+    for (const m of sw.matchAll(/'(\.\/[^']*)'/g)) urls.add(new URL(m[1], location.href).href);
+  } catch { /* offline or moved: the loaded list below still helps */ }
+  for (const e of performance.getEntriesByType('resource')) {
+    if (e.name.startsWith(location.origin) && !/version\.json/.test(e.name)) urls.add(e.name.split('#')[0]);
+  }
+  await Promise.all([...urls].map(u =>
+    fetch(u, { cache: 'reload', credentials: 'same-origin' }).catch(() => null)));
 }
 
 // Tidy the address after an update, and confirm the new version once.

@@ -1,5 +1,5 @@
 {
-  "version": "0.9.1",
+  "version": "0.9.2",
   "released": "2026-09-18",
-  "note": "People: Surname, LinkedIn profile link and a picture (add one, or take it from LinkedIn) on the Add person form."
+  "note": "People: Take picture from LinkedIn is automatic — open the profile, click the FarmBox photo bookmark, and the picture arrives by itself."
 }

@@ -827,3 +827,5 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* People › the picture in the Add/Edit form (0.9.1) */
 .avatar.photo-preview { width: 64px; height: 64px; font-size: var(--text-base); margin-right: var(--space-2); }
+.photo-steps { margin: var(--space-2) 0 0; padding-left: 1.4em; }
+.photo-steps li { margin: 2px 0; }

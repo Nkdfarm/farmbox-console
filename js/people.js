@@ -174,7 +174,7 @@ function personRow(p) {
   const who = el('div', 'who');
   who.append(avatar(p));
   const names = el('div');
-  names.append(el('b', null, p.name));
+  names.append(el('b', null, fullName(p)));
   names.append(el('small', null, p.email || 'no e-mail'));
   who.append(names);
   tr.append(td(who));
@@ -209,6 +209,8 @@ function personRow(p) {
 }
 
 const td = child => { const c = el('td'); c.append(child); return c; };
+// The surname shows here and in the form only; every other page shows the name alone.
+const fullName = p => [p.name, p.surname].filter(Boolean).join(' ');
 
 // ── add / edit ─────────────────────────────────────────────────────────────
 function openPerson(p) {
@@ -409,8 +411,13 @@ function photoPicker(p, nameInput, linkedinInput) {
   const remove = el('button', 'btn btn-sm btn-ghost', 'Remove');
   remove.type = 'button';
   row.append(preview, add, fromLi, remove, file);
+  const steps = el('ol', 'hint photo-steps');
+  ['Click Take picture from LinkedIn and the profile opens.',
+   'Right-click their photo and choose Copy image.',
+   'Come back to the form and press Ctrl+V, or click Paste picture.']
+    .forEach(t => steps.append(el('li', null, t)));
   const hint = el('div', 'hint');
-  node.append(row, hint);
+  node.append(row, steps, hint);
 
   const paint = msg => {
     preview.textContent = '';
@@ -425,7 +432,7 @@ function photoPicker(p, nameInput, linkedinInput) {
       preview.textContent = (nameInput.value.trim()[0] || '?').toUpperCase();
     }
     remove.hidden = !value;
-    hint.textContent = msg ?? (value ? '' : 'A photo from this computer, or from their LinkedIn profile.');
+    hint.textContent = msg ?? '';
   };
   const done = () => { waiting = false; fromLi.textContent = 'Take picture from LinkedIn'; };
   const take = async blob => {
@@ -447,7 +454,7 @@ function photoPicker(p, nameInput, linkedinInput) {
       window.open(url, '_blank', 'noopener');
       waiting = true;
       fromLi.textContent = 'Paste picture';
-      paint('On LinkedIn, right-click their photo › Copy image. Then come back and press Ctrl+V.');
+      paint();
       return;
     }
     try {

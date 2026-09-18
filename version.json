@@ -1,5 +1,5 @@
 {
-  "version": "0.7.35",
+  "version": "0.7.36",
   "released": "2026-09-18",
-  "note": "The weather tile shows its saved forecast at once instead of blinking; the version number sits between Connected and the gear."
+  "note": "Prices & market shows the price of one unit (each, bunch or punnet) beside the price per kg."
 }

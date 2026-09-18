@@ -22,6 +22,7 @@ const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
                 'August', 'September', 'October', 'November', 'December'];
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const UNIT_WORD = { piece: 'each', bunch: 'per bunch', punnet: 'per punnet' };
 
 let farm = null, data = null, trends = null, mount = null;
 
@@ -82,6 +83,19 @@ function paint() {
       ...SEASONS.map(seasonCol),
       { key: 'today', label: 'Today', align: 'right',
         fmt: v => el('b', null, v == null ? '—' : num(v, 2)) },
+      // today's price for one unit as the crop is sold (crop.sell_unit, grams_per_unit)
+      { key: 'sell_unit', label: 'Per unit', align: 'right',
+        fmt: (u, r) => {
+          const w = el('div');
+          if (!u || u === 'kg' || !r.grams_per_unit) {
+            w.append(el('span', 'hint', 'sold per kg'));
+            return w;
+          }
+          const each = r.today == null ? null : r.today * r.grams_per_unit / 1000;
+          const b = el('b', null, each == null ? '—' : num(each, 2));
+          b.title = `${num(r.today, 2)} per kg × ${num(r.grams_per_unit, 0)} g`;
+          w.append(b, el('div', 'hint', `${UNIT_WORD[u] || u} · ${num(r.grams_per_unit, 0)} g`));
+          return w; } },
       { key: 'market', label: 'Cape Town', align: 'right',
         fmt: m => {
           if (!m) return '—';

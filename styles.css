@@ -829,3 +829,8 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .avatar.photo-preview { width: 64px; height: 64px; font-size: var(--text-base); margin-right: var(--space-2); }
 .photo-steps { margin: var(--space-2) 0 0; padding-left: 1.4em; }
 .photo-steps li { margin: 2px 0; }
+/* Settings › Version log (0.7.33) */
+.rel-row .set-text { gap: 3px; }
+.rel-v { display: inline-block; min-width: 3.6em; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.rel-v.current { color: var(--accent); }
+.rel-meta { font-size: 11px !important; }

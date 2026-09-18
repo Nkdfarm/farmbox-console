@@ -6,7 +6,7 @@
 // the two Notion syncs. A setting that belongs to a FarmBox lives on Farm setup,
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
-import { api, fn } from './api.js';
+import { api, fn, select } from './api.js';
 import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
@@ -56,6 +56,7 @@ export function openSettings(ctx) {
     section('Notion', notion(ctx)),
     section('Account', account(ctx, d)),
     section('Version', version()),
+    section('Version log', versionLog()),
     section('This device', device()),
   );
   const close = el('button', 'btn', 'Close');
@@ -356,6 +357,47 @@ function version() {
   btn.onclick = paint;
   paint();
   list.append(r);
+  return list;
+}
+
+// ── version log ────────────────────────────────────────────────────────────
+// Every release of the console, newest first (release_note, migration 0048;
+// mirrored in the Notion twin's Version Log). Numbers were pulled back to
+// 0.7.x on 18 Sept 2026; the number a release had before is shown beside it.
+function versionLog() {
+  const list = el('div', 'set-list');
+  const wait = el('div', 'set-row');
+  wait.append(el('small', 'hint', 'Loading the version log…'));
+  list.append(wait);
+  const SHOWN = 6;
+
+  select('release_note', 'select=version,released,title,summary,old_version&app=eq.console&order=seq.desc')
+    .then(rows => {
+      list.textContent = '';
+      if (!rows?.length) { list.append(el('div', 'note', 'No releases recorded yet.')); return; }
+      const items = rows.map(r => {
+        const it = el('div', 'set-row rel-row');
+        const t = el('div', 'set-text');
+        const head = el('b');
+        head.append(el('span', 'rel-v' + (r.version === VERSION ? ' current' : ''), r.version), ' ' + r.title);
+        const when = new Date(r.released + 'T12:00:00').toLocaleDateString('en-ZA',
+          { day: 'numeric', month: 'short', year: 'numeric' });
+        t.append(head, el('small', null, r.summary ?? ''),
+          el('small', 'rel-meta', when + (r.old_version ? ` · was ${r.old_version}` : '')));
+        it.append(t);
+        return it;
+      });
+      items.forEach((it, i) => { it.hidden = i >= SHOWN; list.append(it); });
+      if (items.length > SHOWN) {
+        const more = el('button', 'btn btn-sm btn-ghost', `Show all ${items.length} releases`);
+        more.type = 'button';
+        more.onclick = () => { items.forEach(it => { it.hidden = false; }); more.parentElement.remove(); };
+        const r = el('div', 'set-row');
+        r.append(more);
+        list.append(r);
+      }
+    })
+    .catch(e => { list.textContent = ''; list.append(el('div', 'note bad', e.message)); });
   return list;
 }
 

@@ -1,5 +1,5 @@
 {
-  "version": "0.9.6",
+  "version": "0.7.33",
   "released": "2026-09-18",
-  "note": "Update now no longer loops: it downloads every file of the new version fresh before reloading."
+  "note": "Version log in Settings. Versions renumbered 0.7.x, leaving room before 1.0."
 }

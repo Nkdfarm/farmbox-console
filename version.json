@@ -1,5 +1,5 @@
 {
-  "version": "0.7.34",
+  "version": "0.7.35",
   "released": "2026-09-18",
-  "note": "A picture saved on People shows on every page at once; the version number sits in the top right."
+  "note": "The weather tile shows its saved forecast at once instead of blinking; the version number sits between Connected and the gear."
 }

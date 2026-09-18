@@ -87,18 +87,35 @@ async function getJson(url, ms = 8000) {
 const readFarm = async id => (await select('farm', `${FARM_FIELDS}&id=eq.${id}`))[0];
 
 // ── the tile ───────────────────────────────────────────────────────────────
+// The saved forecast is drawn at once, so the tile does not blink every time
+// the dashboard is opened (owner, 18 Sept 2026); a new one is fetched in the
+// background only when the saved copy is older than FRESH_MS.
+const FRESH_MS = 15 * 60 * 1000;
+
+const readKept = id => {
+  try { return JSON.parse(localStorage.getItem(KEEP(id)) || 'null'); } catch { return null; }
+};
+
 export function weatherTile(farm) {
   const tile = el('div', 'tile wx-tile');
   tile.setAttribute('aria-label', 'Weather');
-  tile.append(el('div', 'tile-sub', 'Reading the weather…'));
-  load(tile, farm);
+  const kept = readKept(farm.id);
+  if (kept?.wx && kept?.row) {
+    paint(tile, farm, kept.row, kept.wx, kept.at, false);
+    if (Date.now() - kept.at > FRESH_MS) load(tile, farm, true);
+  } else {
+    tile.append(el('div', 'tile-sub', 'Reading the weather…'));
+    load(tile, farm, false);
+  }
   return tile;
 }
 
-async function load(tile, farm) {
+// quiet: a saved forecast is already on screen — replace it only with a new
+// one, and on any failure leave it where it is.
+async function load(tile, farm, quiet = false) {
   let row;
   try { row = await readFarm(farm.id); }
-  catch (e) { return note(tile, e.message); }
+  catch (e) { return quiet ? null : note(tile, e.message); }
   if (!row) return note(tile, 'This FarmBox could not be read.');
   if (row.lat == null || row.lng == null) return noPlace(tile, farm, row);
 
@@ -111,21 +128,21 @@ async function load(tile, farm) {
     '&hourly=wind_speed_10m' +
     `&timezone=${encodeURIComponent(row.timezone || 'auto')}&forecast_days=2&wind_speed_unit=kmh`;
 
-  let wx, savedAt = null;
+  const keep = { id: row.id, name: row.name, town: row.town, lat: row.lat, lng: row.lng };
+  let wx, at = Date.now(), offline = false;
   try {
     wx = await getJson(url);
-    try { localStorage.setItem(KEEP(farm.id), JSON.stringify({ at: Date.now(), lat, lng, wx })); }
+    try { localStorage.setItem(KEEP(farm.id), JSON.stringify({ at, lat, lng, row: keep, wx })); }
     catch { /* private window: no offline copy */ }
   } catch {
-    let kept = null;
-    try { kept = JSON.parse(localStorage.getItem(KEEP(farm.id)) || 'null'); } catch { kept = null; }
+    if (quiet) return;                        // the saved copy stays on screen
+    const kept = readKept(farm.id);
     if (!kept || kept.lat !== lat || kept.lng !== lng) {
       return note(tile, 'The forecast needs a connection, and none was saved on this device yet.', row);
     }
-    wx = kept.wx;
-    savedAt = kept.at;
+    wx = kept.wx; at = kept.at; offline = true;
   }
-  paint(tile, farm, row, wx, savedAt);
+  paint(tile, farm, row, wx, at, offline);
 }
 
 function badge(glyph) {
@@ -169,7 +186,7 @@ function pick(tile, farm, row, back) {
   tile.append(badge('pin'), body);
 }
 
-function paint(tile, farm, row, wx, savedAt) {
+function paint(tile, farm, row, wx, at, offline) {
   tile.textContent = '';
   tile.className = 'tile wx-tile';
   const c = wx.current, d = wx.daily;
@@ -218,9 +235,9 @@ function paint(tile, farm, row, wx, savedAt) {
   place.type = 'button';
   place.title = 'Change the farm’s location';
   place.append(icon('pin'), el('span', null, row.town || `${round(row.lat, 2)}, ${round(row.lng, 2)}`));
-  place.onclick = () => pick(tile, farm, row, () => paint(tile, farm, row, wx, savedAt));
-  const when = el('span', 'wx-when' + (savedAt ? ' is-old' : ''),
-    savedAt ? `Offline — saved ${clock(savedAt)}` : `Updated ${clock(Date.now())}`);
+  place.onclick = () => pick(tile, farm, row, () => paint(tile, farm, row, wx, at, offline));
+  const when = el('span', 'wx-when' + (offline ? ' is-old' : ''),
+    offline ? `Offline — saved ${clock(at)}` : `Updated ${clock(at)}`);
   foot.append(place, when, forecastLinks(row));
 
   tile.append(now, days, foot);
@@ -308,6 +325,7 @@ async function save(row, place, button, onSaved) {
       return;
     }
     toast(`${row.name} is at ${place.name}`, 'ok');
+    try { localStorage.removeItem(KEEP(row.id)); } catch { /* ignore */ }   // the saved forecast is for the old place
     onSaved?.(updated[0]);
   } catch (e) {
     toast(e.message, 'bad');

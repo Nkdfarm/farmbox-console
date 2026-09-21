@@ -169,13 +169,15 @@ function zoneCard(s, cur) {
   const head = el('div', 'row');
   head.style.padding = 'var(--space-3) var(--space-4)';
   head.style.borderBottom = '1px solid var(--border)';
-  // The medium is part of the zone's name, in the same type: it is what decides
-  // which crops fit. The system type stays as a tooltip.
-  const media = (s.media || []).map(m => (MEDIUM[m] || m)
-    .replace(/\b\w/g, c => c.toUpperCase())).join(' + ');
-  const title = el('b', null, media ? `${s.name} · ${media}` : s.name);
-  title.title = systemLabel(s.type);
-  head.append(title);
+  // The zone's name, then the system chosen for it on Farm setup (NFT, NGS, …)
+  // in the same size, lighter. The medium is a tooltip on the system.
+  head.append(el('b', null, s.name));
+  const sys = el('span', 'zone-sys', systemLabel(s.type));
+  const media = (s.media || []).map(m => MEDIUM[m] || m).join(', ');
+  if (media) sys.title = 'Growing medium: ' + media;
+  sys.style.color = 'var(--text-muted, #9a9aa3)';
+  sys.style.fontWeight = '500';
+  head.append(sys);
   if ((s.categories || []).length) {
     const c = el('span', 'pill warn', 'kept for ' + s.categories.join(', ').replace(/_/g, ' '));
     c.title = 'A choice this farm has made, not a limit of the system.';

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.44",
+  "version": "0.7.45",
   "released": "2026-09-21",
-  "note": "Farm setup: Remove works on every position; one with a crop on it shows the crop and asks before removing it with its batch."
+  "note": "Crops & plan: each zone shows its name and, beside it, the system chosen on Farm setup (NFT, NGS, ...)."
 }

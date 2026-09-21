@@ -1,5 +1,5 @@
 {
-  "version": "0.7.55",
+  "version": "0.7.56",
   "released": "2026-09-21",
-  "note": "Task families and sub-families are a list in Settings; People picks a family, then its sub-families."
+  "note": "Zoom in the top bar: minus, the current percentage, plus. Remembered for next time."
 }

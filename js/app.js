@@ -55,6 +55,40 @@ $('railToggle').addEventListener('click', () => {
 narrow.addEventListener('change', paintRail);
 paintRail();
 
+// ── zoom ───────────────────────────────────────────────────────────────────
+// − 100% + in the top bar scales the whole console (CSS zoom on <html>, see
+// styles.css). Remembered on this device as fbc_zoom and applied before the
+// first paint by index.html. Clicking the percentage goes back to 100%.
+const ZOOM_KEY = 'fbc_zoom';
+const ZOOM_MIN = 0.6, ZOOM_MAX = 1.6, ZOOM_STEP = 0.1;
+let zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat(pref.get(ZOOM_KEY)) || 1));
+
+function setZoom(z) {
+  zoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 10) / 10;
+  document.documentElement.style.setProperty('--zoom', zoom);
+  pref.set(ZOOM_KEY, zoom === 1 ? null : String(zoom));
+  paintZoom();
+}
+const zoomOut = el('button', null, '−');
+const zoomLevel = el('button', 'zoom-level');
+const zoomIn = el('button', null, '+');
+zoomOut.type = zoomLevel.type = zoomIn.type = 'button';
+zoomOut.setAttribute('aria-label', 'Zoom out');
+zoomIn.setAttribute('aria-label', 'Zoom in');
+zoomOut.title = 'Smaller';
+zoomIn.title = 'Bigger';
+zoomLevel.title = 'Back to 100%';
+zoomOut.onclick = () => setZoom(zoom - ZOOM_STEP);
+zoomIn.onclick = () => setZoom(zoom + ZOOM_STEP);
+zoomLevel.onclick = () => setZoom(1);
+function paintZoom() {
+  zoomLevel.textContent = Math.round(zoom * 100) + '%';
+  zoomOut.disabled = zoom <= ZOOM_MIN + 1e-9;
+  zoomIn.disabled = zoom >= ZOOM_MAX - 1e-9;
+}
+$('zoom').append(zoomOut, zoomLevel, zoomIn);
+setZoom(zoom);
+
 let farms = [];
 let farm = null;
 let myUserId = null;

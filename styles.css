@@ -52,7 +52,7 @@
 * { box-sizing: border-box; }
 html { -webkit-font-smoothing: antialiased; scrollbar-color: var(--scrollbar) transparent; }
 body {
-  margin: 0; min-height: 100dvh; font-family: var(--font-body);
+  margin: 0; min-height: calc(100dvh / var(--zoom, 1)); font-family: var(--font-body);
   font-size: var(--text-base); line-height: 1.55; color: var(--text);
   background: var(--bg); background-image: var(--bg-grad);
   background-attachment: fixed;
@@ -64,14 +64,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: rgba(255,91,31,0.35); }
 
 /* ── shell ───────────────────────────────────────────────────────────────── */
-.shell { display: grid; grid-template-columns: var(--rail) 1fr; min-height: 100dvh; }
+.shell { display: grid; grid-template-columns: var(--rail) 1fr; min-height: calc(100dvh / var(--zoom, 1)); }
 
 .rail {
   display: flex; flex-direction: column; gap: 2px;
   padding: var(--space-5) var(--space-3) var(--space-4);
   border-right: 1px solid var(--border);
   background: var(--rail-bg);
-  position: sticky; top: 0; height: 100dvh; overflow-y: auto;
+  position: sticky; top: 0; height: calc(100dvh / var(--zoom, 1)); overflow-y: auto;
 }
 .brand { display: flex; align-items: center; gap: var(--space-3);
   padding: 0 var(--space-2); margin-bottom: var(--space-5); }
@@ -331,7 +331,7 @@ th.right, td.right { text-align: right; }
   letter-spacing: 0.02em; color: var(--text-muted); }
 
 /* ── sign in ─────────────────────────────────────────────────────────────── */
-.signin { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-6); }
+.signin { min-height: calc(100dvh / var(--zoom, 1)); display: grid; place-items: center; padding: var(--space-6); }
 .signin .card { width: min(400px, 100%); box-shadow: var(--shadow-lg); }
 .signin .brand { justify-content: center; }
 
@@ -843,3 +843,17 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .top-version { font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums;
   white-space: nowrap; }
 @media (max-width: 600px) { .top-version { display: none; } }
+
+/* Zoom (top bar − 100% +): the whole console is scaled with CSS zoom, remembered
+   as fbc_zoom and applied before the first paint. Full-height areas divide by it
+   so they still fit the window. */
+html { zoom: var(--zoom, 1); }
+.zoom { display: inline-flex; align-items: center; border: 1px solid var(--border);
+  border-radius: var(--radius-full); overflow: hidden; }
+.zoom button { background: none; border: 0; color: var(--text-muted); cursor: pointer;
+  font: inherit; font-size: var(--text-sm); padding: 3px 9px; line-height: 1.2; }
+.zoom button:hover:not(:disabled) { background: var(--surface-offset); color: var(--text); }
+.zoom button:disabled { opacity: 0.35; cursor: default; }
+.zoom .zoom-level { min-width: 46px; font-variant-numeric: tabular-nums; font-size: var(--text-xs);
+  border-inline: 1px solid var(--border); }
+@media (max-width: 600px) { .zoom .zoom-level { display: none; } }

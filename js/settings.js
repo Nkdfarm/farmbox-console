@@ -510,13 +510,13 @@ function device() {
   const reset = el('button', 'btn btn-sm', 'Reset');
   reset.type = 'button';
   reset.onclick = () => {
-    ['fbc_theme', 'fbc_rail', 'fbc_cal_view', 'fbc_start', 'fbc_farm'].forEach(k => put(k, null));
+    ['fbc_theme', 'fbc_rail', 'fbc_cal_view', 'fbc_start', 'fbc_farm', 'fbc_zoom'].forEach(k => put(k, null));
     applyTheme('system');
     toast('Preferences reset on this device', 'ok');
     setTimeout(() => location.reload(), 700);
   };
   list.append(row('Reset preferences',
-    'Theme, menu, calendar view, start page and the last FarmBox chosen. Your account and the farm’s data are not touched.',
+    'Theme, menu, zoom, calendar view, start page and the last FarmBox chosen. Your account and the farm’s data are not touched.',
     reset));
 
   const fresh = el('button', 'btn btn-sm', 'Reload');

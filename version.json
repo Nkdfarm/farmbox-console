@@ -1,5 +1,5 @@
 {
-  "version": "0.7.56",
-  "released": "2026-09-21",
-  "note": "Zoom in the top bar: minus, the current percentage, plus. Remembered for next time."
+  "version": "0.7.57",
+  "released": "2026-09-22",
+  "note": "One task per crop, zone and day with its positions underneath; procedures on each phase of a crop; the 50-crop standard library; crops archived, never deleted; Fruiting vines / Fruiting bush."
 }

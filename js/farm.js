@@ -199,7 +199,7 @@ function weekCard() {
 
 // ── what it is made of ─────────────────────────────────────────────────────
 const CATS  = [['leafy','Leafy'],['mixed_leafy','Mixed leafy'],['herbs','Herbs'],['microgreens','Microgreens'],
-               ['vines','Vines'],['fruiting','Fruiting']];
+               ['fruiting_vines','Fruiting vines'],['fruiting_bush','Fruiting bush']];
 const STATUS = [['active','Active'],['maintenance','In maintenance'],['out_of_service','Out of service']];
 const label = (list, v) => (list.find(x => x[0] === v) || [v, v])[1];
 

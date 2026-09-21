@@ -9,7 +9,7 @@
 import { rpc } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel } from './ui.js';
 
-const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', vines:'mt', fruiting:'mt', microgreens:'of' };
+const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
 
 const fmt = d => d ? new Date(d + 'T00:00:00')

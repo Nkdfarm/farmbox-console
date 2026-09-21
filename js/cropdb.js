@@ -7,8 +7,13 @@
 // (§8.3), so it is on the list rather than buried in the detail.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, num, systemLabel, mediumLabel, systemsFor } from './ui.js';
+import { el, table, pageHead, drawer, num, systemLabel, mediumLabel, systemsFor, toast, input, field, busy } from './ui.js';
 import { editCrop } from './crop-edit.js';
+
+// the words on screen for a category code
+const CAT_LABEL = { leafy: 'Leafy', mixed_leafy: 'Mixed leafy', herbs: 'Herbs', microgreens: 'Microgreens',
+                    fruiting_vines: 'Fruiting vines', fruiting_bush: 'Fruiting bush' };
+const catLabel = c => CAT_LABEL[c] || String(c || '').replace('_', ' ');
 
 
 let farm = null, data = null, mount = null, filter = { cat: '', q: '' };
@@ -41,9 +46,15 @@ function paint() {
   search.oninput = () => { filter.q = search.value.trim().toLowerCase(); paint(); search.focus(); };
   search.style.minWidth = '200px';
 
+  // archived crops live in their own window, never deleted
+  const archived = data.archived || [];
+  const arch = el('button', 'btn', `Archive${archived.length ? ` (${archived.length})` : ''}`);
+  arch.title = 'Crops taken out of the library. They keep their history and can come back.';
+  arch.onclick = () => openArchive();
+
   mount.append(pageHead('Crop database',
     `${all.length} crops and varieties. What each one needs, how long it takes, ` +
-    'what it yields and what it is worth here.', search));
+    'what it yields and what it is worth here.', search, arch));
 
   const chips = el('div', 'chips');
   chips.style.marginBottom = 'var(--space-4)';
@@ -53,7 +64,7 @@ function paint() {
     chips.append(c);
   };
   add('Everything', '');
-  cats.forEach(c => add(c.replace('_', ' '), c));
+  cats.forEach(c => add(catLabel(c), c));
   mount.append(chips);
 
   mount.append(table([
@@ -62,11 +73,16 @@ function paint() {
         b.append(el('b', null, v));
         b.append(el('div', 'hint', r.code));
         return b; } },
-    { key: 'category', label: 'Category', fmt: v => String(v).replace('_', ' ') },
+    { key: 'category', label: 'Category', fmt: catLabel },
     // the medium and the systems from Farm setup › Available systems and media
     { key: 'media', label: 'Medium', fmt: v => (v || []).map(mediumLabel).join(', ') || '—' },
     { key: 'media', label: 'System', fmt: v => systemsFor(v).map(x => x.label).join(', ') || '—' },
     { key: 'cycle_days', label: 'Cycle', align: 'right', fmt: v => v ? v + ' d' : '—' },
+    { key: 'procedures', label: 'Procedures', align: 'right',
+      fmt: (v, r) => {
+        const s = el('span', r.phases && r.phases_linked < r.phases ? 'warn' : null, v || '—');
+        s.title = r.phases ? `${r.phases_linked} of ${r.phases} phases have a procedure` : '';
+        return s; } },
     { key: 'yield_per_position', label: 'kg/plant', align: 'right',
       fmt: v => v == null ? '—' : num(v, 3) },
     { key: 'price', label: `Price/kg`, align: 'right',
@@ -81,7 +97,7 @@ function paint() {
 }
 
 async function openCrop(row) {
-  const d = drawer(row.name, `${row.category.replace('_', ' ')} · ${row.code}`);
+  const d = drawer(row.name, `${catLabel(row.category)} · ${row.code}`);
   d.body.append(el('div', 'empty', 'Reading…'));
 
   let c;
@@ -99,16 +115,30 @@ async function openCrop(row) {
   fact('System', systemsFor(c.media).map(x => x.label).join(', ') || '—');
   fact('Cycle', c.phases.reduce((n, p) => n + (p.days || 0), 0) + ' days');
   fact('Sold by', c.sell_unit);
+  fact('Plugs per tray', c.plugs_per_tray);
   fact('Seedling lead', c.seedling_lead_days ? c.seedling_lead_days + ' days' : '—');
   fact('Rotation group', c.rotation_group);
   fact('Scope', c.scope);
   d.body.append(facts);
 
-  d.body.append(el('div', 'sec-title', 'Cycle'));
+  d.body.append(el('div', 'sec-title', 'Cycle, and what a batch does in each phase'));
   d.body.append(table([
     { key: 'seq', label: '#', align: 'right' },
     { key: 'name', label: 'Phase' },
     { key: 'days', label: 'Days', align: 'right' },
+    { key: 'procedures', label: 'Procedures', fmt: (v, r) => {
+        const w = el('div', 'phase-procs');
+        if (!v?.length) { w.append(el('span', 'hint warn', 'none')); return w; }
+        v.forEach(pr => {
+          const line = el('div');
+          const t = el('span', 'phase-proc', pr.title);
+          t.title = `${pr.estimated_minutes ?? 0} min + ${pr.minutes_per_unit ?? 0} per ${pr.unit || 'unit'}`;
+          line.append(t, el('span', 'hint',
+            ` day ${pr.day_offset >= 0 ? '+' : ''}${pr.day_offset}` +
+            (pr.repeat_days ? `, every ${pr.repeat_days} d` : '')));
+          w.append(line);
+        });
+        return w; } },
     { key: 'cues', label: 'What it looks like' },
   ], c.phases, { empty: 'No phases — the planner will not touch this crop.' }));
 
@@ -143,16 +173,6 @@ async function openCrop(row) {
     ], c.bom));
   }
 
-  if (c.tasks.length) {
-    d.body.append(el('div', 'sec-title', 'What a batch makes somebody do'));
-    d.body.append(table([
-      { key: 'name', label: 'Task' },
-      { key: 'anchor', label: 'From' },
-      { key: 'offset_days', label: 'Offset', align: 'right', fmt: v => (v > 0 ? '+' : '') + v + ' d' },
-      { key: 'procedure', label: 'Procedure' },
-    ], c.tasks));
-  }
-
   if (c.prices.length) {
     d.body.append(el('div', 'sec-title', 'Price by season'));
     d.body.append(table([
@@ -178,10 +198,68 @@ async function openCrop(row) {
   close.onclick = d.close;
   d.footer.append(close);
   if (c.may_edit) {
+    const archive = el('button', 'btn btn-danger', 'Archive');
+    archive.onclick = () => { d.close(); archiveCrop(c); };
     const edit = el('button', 'btn btn-primary', 'Edit');
-    edit.onclick = () => { d.close(); editCrop(c, load); };
-    d.footer.append(edit);
+    edit.onclick = () => { d.close(); editCrop(c, load, farm); };
+    d.footer.append(archive, edit);
   } else {
     d.footer.prepend(el('span', 'hint', 'Only the franchisor edits a standard crop.'));
   }
+}
+
+// ── the archive ────────────────────────────────────────────────────────────
+// A crop leaves the library with a reason and keeps everything that points at
+// it — batches, harvests, prices. Restore brings it back with the status it had.
+function archiveCrop(c) {
+  const d = drawer('Archive ' + c.name, 'It leaves the Crop database and the planner; nothing about it is deleted.');
+  const reason = input({ placeholder: 'Why (optional)' });
+  d.body.append(field('Reason', reason));
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-danger', 'Archive');
+  ok.onclick = async () => {
+    busy(ok, true, 'Archiving…');
+    try {
+      const r = await rpc('archive_crop', { p_crop: c.id, p_reason: reason.value.trim() || null });
+      d.close();
+      toast(`${c.name} archived` + (r.batches ? ` · ${r.batches} live batch${r.batches === 1 ? '' : 'es'} finish as planned` : ''), 'ok');
+      await load();
+    } catch (e) { busy(ok, false, 'Archive'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, ok);
+}
+
+function openArchive() {
+  const rows = data.archived || [];
+  const d = drawer('Archived crops', `${rows.length} crop${rows.length === 1 ? '' : 's'} out of the library, kept with their history`);
+  d.box.style.width = 'min(760px, 100vw)';
+  d.body.append(table([
+    { key: 'name', label: 'Crop', fmt: (v, r) => {
+        const b = el('div');
+        b.append(el('b', null, v));
+        b.append(el('div', 'hint', [r.code, r.variety].filter(Boolean).join(' · ')));
+        return b; } },
+    { key: 'category', label: 'Category', fmt: catLabel },
+    { key: 'archived_at', label: 'Since', fmt: v => v ? new Date(v).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' },
+    { key: 'reason', label: 'Why' },
+    { key: 'batches', label: 'Live batches', align: 'right', fmt: v => v || '—' },
+    { key: 'id', label: '', fmt: (v, r) => {
+        if (!data.may_edit) return '';
+        const b = el('button', 'btn btn-sm', 'Restore');
+        b.onclick = async e => {
+          e.stopPropagation();
+          busy(b, true, '…');
+          try {
+            const x = await rpc('restore_crop', { p_crop: v });
+            toast(`${r.name} is back (${x.status})`, 'ok');
+            d.close();
+            await load();
+          } catch (err) { busy(b, false, 'Restore'); toast(err.message, 'bad'); }
+        };
+        return b; } },
+  ], rows, { empty: 'Nothing archived.' }));
+  const close = el('button', 'btn', 'Close');
+  close.onclick = d.close;
+  d.footer.append(close);
 }

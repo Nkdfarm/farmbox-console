@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Crop database › Edit (migration 0058, console 0.7.50)
+// Crop database › Edit (migration 0058, console 0.7.50; procedures on phases
+// and plugs per tray since 0.7.57, migrations 0061–0062)
 //
 // A crop's details, its medium (from Farm setup › Available systems and media),
-// its growing cycle and its yield on each system, saved with one call to
-// save_crop. Batches already planned keep their dates; new plans read the new
+// its growing cycle — each phase with the procedures a batch runs in it, at a
+// day offset, once or every n days — and its yield on each system, saved with
+// one call to save_crop, which replans the live batches. Batches already planned keep their dates; new plans read the new
 // cycle. A yield typed here is the farm's own figure and the library seed never
 // overwrites it; leaving it empty goes back to the library figure.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -11,7 +13,7 @@ import { rpc } from './api.js';
 import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num } from './ui.js';
 
 const CATEGORIES = [['leafy', 'Leafy'], ['mixed_leafy', 'Mixed leafy'], ['herbs', 'Herbs'],
-                    ['microgreens', 'Microgreens'], ['vines', 'Vines'], ['fruiting', 'Fruiting']];
+                    ['microgreens', 'Microgreens'], ['fruiting_vines', 'Fruiting vines'], ['fruiting_bush', 'Fruiting bush']];
 const STATUS = [['approved', 'Approved'], ['draft', 'Draft'], ['archived', 'Archived']];
 const SELL = [['kg', 'By the kg'], ['piece', 'Each'], ['bunch', 'Bunch'], ['punnet', 'Punnet']];
 const PHASES = [['germination', 'Germination'], ['nursery', 'Nursery'], ['transplant', 'Transplant'],
@@ -39,7 +41,15 @@ function toggles(options, chosen, onChange) {
 
 const grid = (cls, ...fields) => { const g = el('div', cls); g.append(...fields); return g; };
 
-export function editCrop(c, onSaved) {
+export async function editCrop(c, onSaved, farm) {
+  // the procedures a phase can carry: approved, per-batch ones first
+  let sops = [];
+  try {
+    const d = await rpc('procedures', { p_farm: farm?.id ?? c.farm_id ?? null });
+    sops = (d.procedures || []).filter(x => x.status === 'approved')
+      .sort((a, b) => (a.trigger === 'crop_plan' ? 0 : 1) - (b.trigger === 'crop_plan' ? 0 : 1) || a.title.localeCompare(b.title));
+  } catch { /* the editor still works; the picker is just empty */ }
+
   const d = drawer('Edit ' + c.name, `${c.code} · planned batches keep their dates; new plans use what you save`);
   d.box.style.width = 'min(760px, 100vw)';
 
@@ -54,6 +64,7 @@ export function editCrop(c, onSaved) {
   const showGrams = () => { gramsF.style.display = sell.value === 'kg' ? 'none' : ''; };
   sell.onchange = showGrams;
   const lead = input({ type: 'number', min: 0, step: '1', value: c.seedling_lead_days ?? '' });
+  const plugs = input({ type: 'number', min: 1, step: '1', value: c.plugs_per_tray ?? 72 });
   const rotation = input({ value: c.rotation_group || '', placeholder: 'e.g. brassica' });
   const notes = el('textarea');
   notes.rows = 2;
@@ -72,14 +83,16 @@ export function editCrop(c, onSaved) {
     grid('grid3', field('Name', name), field('Variety', variety), field('Category', category)),
     field('Medium', media), sysHint,
     grid('grid3', field('Sold by', sell), gramsF, field('Status', status)),
-    grid('grid2', field('Seedling lead (days)', lead, 'How long before transplant the seedlings are needed.'),
+    grid('grid3', field('Seedling lead (days)', lead, 'How long before transplant the seedlings are needed.'),
+                  field('Plugs per tray', plugs, 'Turns plants into trays for a procedure counted per tray.'),
                   field('Rotation group', rotation)),
     field('Notes', notes),
   );
   showGrams();
 
   // ── the cycle ──
-  const phases = (c.phases || []).map(p => ({ ...p }));
+  const phases = (c.phases || []).map(p => ({ ...p, procedures: (p.procedures || []).map(x => ({ ...x })) }));
+  const sopTitle = id => sops.find(x => x.id === id)?.title || phases.flatMap(p => p.procedures).find(x => x.sop_id === id)?.title || '?';
   const phaseBox = el('div');
   const total = el('span', 'hint');
   const paintTotal = () => {
@@ -112,6 +125,41 @@ export function editCrop(c, onSaved) {
       rm.onclick = () => { phases.splice(i, 1); paintPhases(); };
       line.append(nm, ty, days, el('span', 'hint', 'd'), cues, up, rm);
       phaseBox.append(line);
+
+      // the procedures a batch runs in this phase
+      const links = el('div', 'phase-links');
+      const paintLinks = () => {
+        links.textContent = '';
+        p.procedures.forEach((pr, j) => {
+          const row = el('div', 'row phase-link');
+          row.append(el('span', 'phase-link-title', sopTitle(pr.sop_id)));
+          const off = input({ type: 'number', step: '1', value: pr.day_offset ?? 0 });
+          off.style.width = '64px';
+          off.title = 'Days after the phase starts';
+          off.oninput = () => { pr.day_offset = off.value; };
+          const rep_ = input({ type: 'number', min: 0, step: '1', value: pr.repeat_days ?? '', placeholder: 'once' });
+          rep_.style.width = '64px';
+          rep_.title = 'Repeat every n days while the phase lasts; empty = once';
+          rep_.oninput = () => { pr.repeat_days = rep_.value; };
+          const x = el('button', 'btn btn-sm btn-ghost', '✕');
+          x.title = 'Take this procedure off the phase';
+          x.onclick = () => { p.procedures.splice(j, 1); paintLinks(); };
+          row.append(el('span', 'hint', 'day'), off, el('span', 'hint', 'every'), rep_, el('span', 'hint', 'd'), x);
+          links.append(row);
+        });
+        const addRow = el('div', 'row phase-link add');
+        const pick = selectBox([['', '+ Add a procedure'], ...sops.map(x => [x.id, x.title])], '');
+        pick.onchange = () => {
+          if (!pick.value) return;
+          p.procedures.push({ sop_id: pick.value, day_offset: 0, repeat_days: '' });
+          paintLinks();
+        };
+        addRow.append(pick);
+        links.append(addRow);
+        if (!p.procedures.length) links.prepend(el('div', 'hint', 'No procedure — a batch does nothing in this phase.'));
+      };
+      paintLinks();
+      phaseBox.append(links);
     });
     if (!phases.length) phaseBox.append(el('div', 'hint', 'No phases — the planner will not place this crop.'));
     paintTotal();
@@ -170,14 +218,17 @@ export function editCrop(c, onSaved) {
         status: status.value, media: media.value(), sell_unit: sell.value,
         grams_per_unit: sell.value === 'kg' ? '' : grams.value,
         seedling_lead_days: lead.value, rotation_group: rotation.value, notes: notes.value,
+        plugs_per_tray: plugs.value,
         phases: phases.map(p => ({ name: String(p.name).trim(), type: p.type || 'vegetative',
-                                   days: p.days ?? 0, cues: p.cues || '' })),
+                                   days: p.days ?? 0, cues: p.cues || '',
+                                   procedures: p.procedures.map(x => ({ sop_id: x.sop_id,
+                                     day_offset: x.day_offset ?? 0, repeat_days: x.repeat_days ?? '' })) })),
         // only the systems somebody changed; an emptied figure goes back to the library
         yields: yields.filter(y => y.touched)
           .map(y => ({ system_type: y.system_type, yield_per_position: y.ypp ?? '',
                        yield_per_m2_cycle: y.ym2 ?? '' })),
       } });
-      toast(`${name.value.trim()} saved · ${r.cycle_days} day cycle`, 'ok');
+      toast(`${name.value.trim()} saved · ${r.cycle_days} day cycle` + (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
       d.close();
       await onSaved?.();
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }

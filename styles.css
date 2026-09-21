@@ -857,3 +857,12 @@ html { zoom: var(--zoom, 1); }
 .zoom .zoom-level { min-width: 46px; font-variant-numeric: tabular-nums; font-size: var(--text-xs);
   border-inline: 1px solid var(--border); }
 @media (max-width: 600px) { .zoom .zoom-level { display: none; } }
+
+/* Crop database: phases with their procedures, the archive (0.7.57) */
+.phase-procs { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-xs); }
+.phase-proc { color: var(--text); }
+.phase-links { margin: 0 0 var(--space-3) 28px; display: flex; flex-direction: column; gap: 4px; }
+.phase-link { flex-wrap: nowrap; font-size: var(--text-xs); }
+.phase-link-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-link.add select { font-size: var(--text-xs); padding-block: 4px; max-width: 320px; }
+.hint.warn, span.warn { color: var(--warning, #e0a020); }

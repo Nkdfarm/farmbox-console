@@ -1,5 +1,5 @@
 {
-  "version": "0.7.58",
+  "version": "0.7.59",
   "released": "2026-09-22",
-  "note": "Crop database: crops grouped by family, each opening to its cycle with the procedures per phase; Edit phases inline, Plan a crop, Archive."
+  "note": "Weekly plan lists the positions a grouped crop task covers, with each one's quantity and minutes."
 }

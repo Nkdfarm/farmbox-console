@@ -888,3 +888,6 @@ html { zoom: var(--zoom, 1); }
 .cropdb-positions { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .cropdb-pos { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); cursor: pointer; }
 @media (max-width: 700px) { .cropdb-phase { grid-template-columns: 1fr; } .cropdb-right .pill { display: none; } }
+
+/* Weekly plan: the positions under a grouped task (0.7.59) */
+.week-positions { font-size: 11px; color: var(--text-faint); margin-top: 2px; }

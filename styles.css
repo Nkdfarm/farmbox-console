@@ -866,3 +866,25 @@ html { zoom: var(--zoom, 1); }
 .phase-link-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phase-link.add select { font-size: var(--text-xs); padding-block: 4px; max-width: 320px; }
 .hint.warn, span.warn { color: var(--warning, #e0a020); }
+
+/* Crop database: families, rows that open to the cycle (0.7.58) */
+.cropdb { display: flex; flex-direction: column; gap: 6px; }
+.cropdb-fam { display: flex; align-items: center; gap: 8px; margin: var(--space-4) 0 var(--space-1); font-size: var(--text-sm); }
+.cropdb-fam i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.cropdb-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg, 12px); }
+.cropdb-row > summary { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); cursor: pointer; list-style: none; }
+.cropdb-row > summary::-webkit-details-marker { display: none; }
+.cropdb-row > summary > span:first-child { flex: 1; min-width: 0; }
+.cropdb-right { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-xs); white-space: nowrap; }
+.cropdb-row[open] > summary { border-bottom: 1px solid var(--divider); }
+.cropdb-body { padding: var(--space-3) var(--space-4) var(--space-4); }
+.cropdb-tools { margin-bottom: var(--space-3); }
+.cropdb-phase { display: grid; grid-template-columns: 180px 1fr; gap: var(--space-4); padding: var(--space-2) 0; border-top: 1px dashed var(--divider); font-size: var(--text-sm); }
+.cropdb-procs { display: flex; flex-direction: column; gap: 4px; }
+.cropdb-proc a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--text-faint); }
+.cropdb-proc a:hover { color: var(--accent); }
+.cropdb-proc-edit { flex-wrap: nowrap; font-size: var(--text-xs); }
+.cropdb-proc-edit select { flex: 1; min-width: 0; font-size: var(--text-xs); padding-block: 4px; }
+.cropdb-positions { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.cropdb-pos { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); cursor: pointer; }
+@media (max-width: 700px) { .cropdb-phase { grid-template-columns: 1fr; } .cropdb-right .pill { display: none; } }

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.57",
+  "version": "0.7.58",
   "released": "2026-09-22",
-  "note": "One task per crop, zone and day with its positions underneath; procedures on each phase of a crop; the 50-crop standard library; crops archived, never deleted; Fruiting vines / Fruiting bush."
+  "note": "Crop database: crops grouped by family, each opening to its cycle with the procedures per phase; Edit phases inline, Plan a crop, Archive."
 }

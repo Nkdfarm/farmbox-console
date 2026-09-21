@@ -1,22 +1,33 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Crop database — what the platform knows about each crop (spec §7.6)
 //
-// One row per crop and variety; open one for its cycle, the systems it fits,
-// yields, materials, the tasks a batch of it creates, and what it is worth in
-// each season. The medium column is the one that decides where it can go
-// (§8.3), so it is on the list rather than buried in the detail.
+// One page, crops and their procedures together (owner, 22 Sept 2026, after
+// the 0.7.57 package's demo): the crops grouped by family, each one a row
+// that opens to its cycle — every phase with the procedures a batch runs in
+// it, at a day offset, once or every n days. On the row: plugs per tray,
+// Edit phases (inline), Plan this crop, Archive…, and Details for everything
+// else (yields, targets, materials, prices, batches, the full editor).
+// Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, num, systemLabel, mediumLabel, systemsFor, toast, input, field, busy } from './ui.js';
+import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy,
+         systemLabel, mediumLabel, systemsFor } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
-// the words on screen for a category code
-const CAT_LABEL = { leafy: 'Leafy', mixed_leafy: 'Mixed leafy', herbs: 'Herbs', microgreens: 'Microgreens',
-                    fruiting_vines: 'Fruiting vines', fruiting_bush: 'Fruiting bush' };
-const catLabel = c => CAT_LABEL[c] || String(c || '').replace('_', ' ');
+// the words on screen, and a colour, for a category code
+const CATS = {
+  fruiting_vines: ['Fruiting vines', '#b5451b'], fruiting_bush: ['Fruiting bush', '#c2731f'],
+  leafy: ['Leafy', '#2e7d32'], mixed_leafy: ['Mixed leafy', '#4c8c2b'],
+  herbs: ['Herbs', '#1f7a5c'], microgreens: ['Microgreens', '#3b6fb6'],
+};
+const CAT_ORDER = Object.keys(CATS);
+const catLabel = c => CATS[c]?.[0] || String(c || '').replace('_', ' ');
+const catColour = c => CATS[c]?.[1] || '#888';
+const UNIT_WORD = { tray: 'tray', plant: 'plant', position: 'position', m2: 'm²', system: 'system', batch: 'batch' };
 
-
-let farm = null, data = null, mount = null, filter = { cat: '', q: '' };
+let farm = null, data = null, mount = null, filter = { q: '' };
+let procs = null;          // approved procedures, for the inline phase editor
+const open = new Set();    // crop ids left open across repaints
 
 export async function renderCropDb(container, currentFarm) {
   farm = currentFarm; mount = container;
@@ -31,71 +42,307 @@ async function load() {
   paint();
 }
 
+async function procedureList() {
+  if (procs) return procs;
+  try {
+    const d = await rpc('procedures', { p_farm: farm.id });
+    procs = (d.procedures || []).filter(x => x.status === 'approved')
+      .sort((a, b) => (a.trigger === 'crop_plan' ? 0 : 1) - (b.trigger === 'crop_plan' ? 0 : 1) || a.title.localeCompare(b.title));
+  } catch { procs = []; }
+  return procs;
+}
+
 function paint() {
   mount.textContent = '';
   const all = data.crops;
-  const cats = [...new Set(all.map(c => c.category))].sort();
-  const shown = all.filter(c =>
-    (!filter.cat || c.category === filter.cat) &&
-    (!filter.q || c.name.toLowerCase().includes(filter.q)));
+  const q = filter.q;
+  const shown = all.filter(c => !q || c.name.toLowerCase().includes(q) || catLabel(c.category).toLowerCase().includes(q));
 
   const search = el('input');
   search.type = 'search';
-  search.placeholder = 'Find a crop';
+  search.placeholder = 'Search crops';
   search.value = filter.q;
   search.oninput = () => { filter.q = search.value.trim().toLowerCase(); paint(); search.focus(); };
   search.style.minWidth = '200px';
 
-  // archived crops live in their own window, never deleted
+  const plan = data.may_plan ? el('button', 'btn btn-primary', 'Plan a crop') : null;
+  if (plan) plan.onclick = () => openPlan(null);
+
   const archived = data.archived || [];
   const arch = el('button', 'btn', `Archive${archived.length ? ` (${archived.length})` : ''}`);
   arch.title = 'Crops taken out of the library. They keep their history and can come back.';
   arch.onclick = () => openArchive();
 
   mount.append(pageHead('Crop database',
-    `${all.length} crops and varieties. What each one needs, how long it takes, ` +
-    'what it yields and what it is worth here.', search, arch));
+    `${all.length} crops in ${new Set(all.map(c => c.category)).size} families. Open one for its cycle ` +
+    'and the procedures a batch runs in each phase.', search, arch, plan));
 
-  const chips = el('div', 'chips');
-  chips.style.marginBottom = 'var(--space-4)';
-  const add = (label, value) => {
-    const c = el('button', 'chip' + (filter.cat === value ? ' on' : ''), label);
-    c.onclick = () => { filter.cat = value; paint(); };
-    chips.append(c);
-  };
-  add('Everything', '');
-  cats.forEach(c => add(catLabel(c), c));
-  mount.append(chips);
-
-  mount.append(table([
-    { key: 'name', label: 'Crop', fmt: (v, r) => {
-        const b = el('div');
-        b.append(el('b', null, v));
-        b.append(el('div', 'hint', r.code));
-        return b; } },
-    { key: 'category', label: 'Category', fmt: catLabel },
-    // the medium and the systems from Farm setup › Available systems and media
-    { key: 'media', label: 'Medium', fmt: v => (v || []).map(mediumLabel).join(', ') || '—' },
-    { key: 'media', label: 'System', fmt: v => systemsFor(v).map(x => x.label).join(', ') || '—' },
-    { key: 'cycle_days', label: 'Cycle', align: 'right', fmt: v => v ? v + ' d' : '—' },
-    { key: 'procedures', label: 'Procedures', align: 'right',
-      fmt: (v, r) => {
-        const s = el('span', r.phases && r.phases_linked < r.phases ? 'warn' : null, v || '—');
-        s.title = r.phases ? `${r.phases_linked} of ${r.phases} phases have a procedure` : '';
-        return s; } },
-    { key: 'yield_per_position', label: 'kg/plant', align: 'right',
-      fmt: v => v == null ? '—' : num(v, 3) },
-    { key: 'price', label: `Price/kg`, align: 'right',
-      fmt: v => v == null ? '—' : `${data.currency} ${num(v, 2)}` },
-    { key: 'batches', label: 'Growing', align: 'right', fmt: v => v || '—' },
-    { key: 'status', label: 'Status', fmt: v =>
-        el('span', 'pill' + (v === 'approved' ? ' ok' : ' warn'), v) },
-  ], shown, {
-    onRow: r => openCrop(r),
-    empty: 'No crop matches that.',
-  }));
+  const list = el('div', 'cropdb');
+  if (!shown.length) list.append(el('div', 'empty', 'No crop matches that.'));
+  const byCat = new Map();
+  shown.forEach(c => { if (!byCat.has(c.category)) byCat.set(c.category, []); byCat.get(c.category).push(c); });
+  [...byCat.keys()].sort((a, b) => CAT_ORDER.indexOf(a) - CAT_ORDER.indexOf(b)).forEach(cat => {
+    const crops = byCat.get(cat).sort((a, b) => a.name.localeCompare(b.name));
+    const fam = el('div', 'cropdb-fam');
+    const dot = el('i');
+    dot.style.background = catColour(cat);
+    fam.append(dot, el('b', null, catLabel(cat)), el('span', 'hint', ` · ${crops.length}`));
+    list.append(fam);
+    crops.forEach(c => list.append(cropRow(c)));
+  });
+  mount.append(list);
 }
 
+// ── one crop, opened to its cycle ──────────────────────────────────────────
+function cropRow(c) {
+  const d = el('details', 'cropdb-row');
+  d.open = open.has(c.id);
+  const sum = el('summary');
+  const left = el('span');
+  left.append(el('b', null, c.name));
+  const sys = systemsFor(c.media).map(x => x.label).join(', ');
+  left.append(el('div', 'hint',
+    [(c.media || []).map(mediumLabel).join(', '), sys, `${c.plugs_per_tray} plugs/tray`,
+     `${c.phases} phase${c.phases === 1 ? '' : 's'}`].filter(Boolean).join(' · ')));
+  const right = el('span', 'cropdb-right');
+  const pr = el('span', c.phases && c.phases_linked < c.phases ? 'warn' : 'hint',
+    c.procedures ? `${c.procedures} procedure${c.procedures === 1 ? '' : 's'}` : 'no procedures');
+  pr.title = c.phases ? `${c.phases_linked} of ${c.phases} phases have a procedure` : '';
+  right.append(pr, el('span', 'mono', c.cycle_days ? `${c.cycle_days} days` : '—'),
+               el('span', 'pill' + (c.status === 'approved' ? ' ok' : ' warn'), c.status));
+  if (c.batches) right.append(el('span', 'pill', `${c.batches} growing`));
+  sum.append(left, right);
+  d.append(sum);
+  const body = el('div', 'cropdb-body');
+  d.append(body);
+  d.addEventListener('toggle', () => {
+    if (d.open) { open.add(c.id); paintBody(); } else open.delete(c.id);
+  });
+  if (d.open) paintBody();
+
+  async function paintBody(editing = false) {
+    body.textContent = '';
+    body.append(el('div', 'hint', 'Reading…'));
+    let full;
+    try { full = await rpc('crop_detail', { p_crop: c.id, p_farm: farm.id }); }
+    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); return; }
+    body.textContent = '';
+
+    // ── the tools ──
+    const tools = el('div', 'row cropdb-tools');
+    if (full.may_edit) {
+      const plugs = input({ type: 'number', min: 1, step: '1', value: full.plugs_per_tray ?? 72 });
+      plugs.style.width = '70px';
+      plugs.title = 'Turns plants into trays for a procedure counted per tray';
+      plugs.onchange = async () => {
+        const v = parseInt(plugs.value, 10);
+        if (!(v > 0)) return;
+        try { await rpc('save_crop', { p_crop: c.id, p: { plugs_per_tray: v } }); toast('Plugs per tray saved', 'ok'); c.plugs_per_tray = v; }
+        catch (e) { toast(e.message, 'bad'); }
+      };
+      const lbl = el('label', 'hint', 'Plugs per tray ');
+      lbl.append(plugs);
+      tools.append(lbl);
+      const edit = el('button', 'btn btn-sm' + (editing ? '' : ' btn-primary'), editing ? 'Cancel' : 'Edit phases');
+      edit.onclick = () => paintBody(!editing);
+      tools.append(edit);
+      if (editing) {
+        const save = el('button', 'btn btn-sm btn-primary', 'Save phases');
+        save.onclick = () => savePhases(save);
+        tools.append(save);
+      }
+    }
+    if (data.may_plan && full.status === 'approved') {
+      const p = el('button', 'btn btn-sm', 'Plan this crop');
+      p.onclick = () => openPlan(full);
+      tools.append(p);
+    }
+    tools.append(el('div', 'spacer'));
+    const det = el('button', 'btn btn-sm btn-ghost', 'Details');
+    det.title = 'Yields, targets, materials, prices, batches — and the full editor';
+    det.onclick = () => openCrop(c);
+    tools.append(det);
+    if (full.may_edit) {
+      const a = el('button', 'btn btn-sm btn-ghost', 'Archive…');
+      a.onclick = () => archiveCrop(full);
+      tools.append(a);
+    }
+    body.append(tools);
+
+    // ── the phases ──
+    const phases = (full.phases || []).map(p => ({ ...p, procedures: (p.procedures || []).map(x => ({ ...x })) }));
+    const list = await procedureList();
+    let day = 0;
+    if (!phases.length) body.append(el('div', 'hint', 'No cycle yet — the planner will not place this crop.'));
+    phases.forEach(p => {
+      const row = el('div', 'cropdb-phase');
+      const head = el('div');
+      head.append(el('b', null, `${p.seq}. ${p.name}`));
+      head.append(el('div', 'mono hint', `day ${day} · ${Number(p.days)} d`));
+      const right = el('div', 'cropdb-procs');
+      if (!editing) {
+        p.procedures.forEach(pr => {
+          const line = el('div', 'cropdb-proc');
+          const a = el('a', null, pr.title);
+          a.href = '#';
+          a.onclick = e => { e.preventDefault(); openProcedure(pr); };
+          line.append(a, el('span', 'mono hint',
+            ` +${pr.day_offset}${pr.repeat_days ? ` every ${pr.repeat_days} d` : ''} · ${num(pr.estimated_minutes, 0)} + ${num(pr.minutes_per_unit, 1)}/${UNIT_WORD[pr.unit] || pr.unit || 'unit'}`));
+          right.append(line);
+        });
+        if (!p.procedures.length) right.append(el('span', 'hint warn', 'No procedure on this phase.'));
+      } else {
+        const paintEdit = () => {
+          right.textContent = '';
+          p.procedures.forEach((pr, j) => {
+            const line = el('div', 'row cropdb-proc-edit');
+            const pick = selectBox(list.map(x => [x.id, x.title]), pr.sop_id);
+            pick.onchange = () => { pr.sop_id = pick.value; };
+            const off = input({ type: 'number', step: '1', value: pr.day_offset ?? 0 });
+            off.style.width = '60px';
+            off.oninput = () => { pr.day_offset = off.value; };
+            const rep = input({ type: 'number', min: 1, step: '1', value: pr.repeat_days ?? '', placeholder: 'once' });
+            rep.style.width = '60px';
+            rep.oninput = () => { pr.repeat_days = rep.value; };
+            const x = el('button', 'btn btn-sm btn-ghost', '✕');
+            x.type = 'button';
+            x.onclick = () => { p.procedures.splice(j, 1); paintEdit(); };
+            line.append(pick, el('span', 'hint', 'day'), off, el('span', 'hint', 'every'), rep, el('span', 'hint', 'd'), x);
+            right.append(line);
+          });
+          const add = el('button', 'btn btn-sm', '+ procedure');
+          add.type = 'button';
+          add.onclick = () => { p.procedures.push({ sop_id: list[0]?.id, day_offset: 0, repeat_days: '' }); paintEdit(); };
+          right.append(add);
+        };
+        paintEdit();
+      }
+      row.append(head, right);
+      body.append(row);
+      day += Number(p.days) || 0;
+    });
+
+    async function savePhases(btn) {
+      busy(btn, true, 'Saving…');
+      try {
+        const r = await rpc('save_crop', { p_crop: c.id, p: {
+          phases: phases.map(p => ({ name: p.name, type: p.type || 'vegetative', days: p.days ?? 0, cues: p.cues || '',
+            procedures: p.procedures.filter(x => x.sop_id).map(x => ({ sop_id: x.sop_id, day_offset: x.day_offset ?? 0, repeat_days: x.repeat_days ?? '' })) })),
+        } });
+        toast(`Phases saved · ${r.procedures} procedure link${r.procedures === 1 ? '' : 's'}` +
+              (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
+        await load();
+      } catch (e) { busy(btn, false, 'Save phases'); toast(e.message, 'bad'); }
+    }
+  }
+  return d;
+}
+
+// ── a procedure, read only ─────────────────────────────────────────────────
+async function openProcedure(pr) {
+  const d = drawer(pr.title, 'Read only — edit it on Procedures');
+  d.body.append(el('div', 'empty', 'Reading…'));
+  let p;
+  try { p = await rpc('procedure', { p_sop: pr.sop_id, p_farm: farm.id }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+  d.body.textContent = '';
+  d.body.append(el('div', 'hint',
+    `Version ${p.version ?? '—'} · ${p.minutes} min` + (p.minutes_per_unit ? ` + ${p.minutes_per_unit} per ${p.unit || 'unit'}` : '') +
+    (p.purpose ? ` · ${p.purpose}` : '')));
+  d.body.append(table([
+    { key: 'seq', label: '#', align: 'right' },
+    { key: 'title', label: 'Step', fmt: (v, s) => {
+        const b = el('div');
+        b.append(el('b', null, v));
+        if (s.instruction) b.append(el('div', 'hint', s.instruction));
+        return b; } },
+    { key: 'type', label: 'Type', fmt: (v, s) => v === 'measure' && (s.min != null || s.max != null)
+        ? `${v} ${s.min ?? ''}–${s.max ?? ''} ${s.unit || ''}` : v },
+    { key: 'expected', label: 'Expected' },
+  ], p.steps || [], { empty: 'No checklist steps.' }));
+  const close = el('button', 'btn', 'Close');
+  close.onclick = d.close;
+  d.footer.append(close);
+}
+
+// ── plan a crop: pick a zone and its free positions ────────────────────────
+async function openPlan(full) {
+  const d = drawer(full ? `Plan ${full.name}` : 'Plan a crop', 'A batch on each position you tick; the tasks follow from the cycle.');
+  d.body.append(el('div', 'empty', 'Reading the farm…'));
+  let map;
+  try { map = await rpc('crop_map', { p_farm: farm.id }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+  d.body.textContent = '';
+
+  const crops = (map.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const crop = selectBox(crops.map(c => [c.id, c.name]), full?.id ?? crops[0]?.id);
+  const zone = selectBox([], '');
+  const when = input({ type: 'date', value: new Date().toISOString().slice(0, 10) });
+  const posBox = el('div', 'cropdb-positions');
+  const chosen = new Set();
+
+  const fitsZones = () => {
+    const c = crops.find(x => x.id === crop.value);
+    return (map.systems || []).filter(s =>
+      (c?.media || []).some(m => (s.media || []).includes(m))
+      && (!(s.categories || []).length || s.categories.includes(c?.category)));
+  };
+  const paintZones = () => {
+    const zs = fitsZones();
+    zone.textContent = '';
+    zs.forEach(s => { const o = el('option', null, `${s.name} · ${systemLabel(s.type)}`); o.value = s.id; zone.append(o); });
+    zone.disabled = !zs.length;
+    paintPositions();
+  };
+  const paintPositions = () => {
+    posBox.textContent = '';
+    chosen.clear();
+    const s = (map.systems || []).find(x => x.id === zone.value);
+    if (!s) { posBox.append(el('div', 'note warn', 'No zone grows this crop — give it that medium on the crop, or widen a zone.')); return; }
+    const free = (s.positions || []).filter(p => !(p.batches || []).some(b => b.status !== 'cancelled'));
+    if (!free.length) { posBox.append(el('div', 'hint', 'Every position in this zone has a batch on it.')); return; }
+    const all = el('button', 'btn btn-sm', 'All free');
+    all.type = 'button';
+    all.onclick = () => { posBox.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = true; chosen.add(cb.value); }); };
+    posBox.append(all);
+    free.forEach(p => {
+      const lbl = el('label', 'cropdb-pos');
+      const cb = el('input'); cb.type = 'checkbox'; cb.value = p.id;
+      cb.onchange = () => { cb.checked ? chosen.add(p.id) : chosen.delete(p.id); };
+      lbl.append(cb, el('span', null, ` ${p.code}`), el('span', 'hint', ` · ${Number(p.capacity).toLocaleString()} places`));
+      posBox.append(lbl);
+    });
+  };
+  crop.onchange = paintZones;
+  zone.onchange = paintPositions;
+  paintZones();
+
+  d.body.append(field('Crop', crop), field('Zone', zone),
+    field('Transplant on', when, 'The sowing date follows from the cycle; work before today is not created.'),
+    field('Positions', posBox));
+
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Create the batches');
+  go.onclick = async () => {
+    if (!chosen.size) { toast('Tick at least one position', 'bad'); return; }
+    busy(go, true, 'Planning…');
+    try {
+      const ids = [];
+      for (const pid of chosen) {
+        const r = await rpc('plan_position', { p_position: pid, p_crop: crop.value, p_transplant: when.value || null });
+        if (r?.id) ids.push(r.id);
+      }
+      const v = await rpc('validate_crop_plan', { p_ids: ids });
+      d.close();
+      toast(`${v.validated} batch${v.validated === 1 ? '' : 'es'} planned · ${v.tasks_created} task${v.tasks_created === 1 ? '' : 's'} created`, 'ok');
+      await load();
+    } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, go);
+}
+
+// ── everything else about a crop ───────────────────────────────────────────
 async function openCrop(row) {
   const d = drawer(row.name, `${catLabel(row.category)} · ${row.code}`);
   d.body.append(el('div', 'empty', 'Reading…'));
@@ -120,27 +367,6 @@ async function openCrop(row) {
   fact('Rotation group', c.rotation_group);
   fact('Scope', c.scope);
   d.body.append(facts);
-
-  d.body.append(el('div', 'sec-title', 'Cycle, and what a batch does in each phase'));
-  d.body.append(table([
-    { key: 'seq', label: '#', align: 'right' },
-    { key: 'name', label: 'Phase' },
-    { key: 'days', label: 'Days', align: 'right' },
-    { key: 'procedures', label: 'Procedures', fmt: (v, r) => {
-        const w = el('div', 'phase-procs');
-        if (!v?.length) { w.append(el('span', 'hint warn', 'none')); return w; }
-        v.forEach(pr => {
-          const line = el('div');
-          const t = el('span', 'phase-proc', pr.title);
-          t.title = `${pr.estimated_minutes ?? 0} min + ${pr.minutes_per_unit ?? 0} per ${pr.unit || 'unit'}`;
-          line.append(t, el('span', 'hint',
-            ` day ${pr.day_offset >= 0 ? '+' : ''}${pr.day_offset}` +
-            (pr.repeat_days ? `, every ${pr.repeat_days} d` : '')));
-          w.append(line);
-        });
-        return w; } },
-    { key: 'cues', label: 'What it looks like' },
-  ], c.phases, { empty: 'No phases — the planner will not touch this crop.' }));
 
   d.body.append(el('div', 'sec-title', 'Systems and yield'));
   d.body.append(table([
@@ -198,11 +424,9 @@ async function openCrop(row) {
   close.onclick = d.close;
   d.footer.append(close);
   if (c.may_edit) {
-    const archive = el('button', 'btn btn-danger', 'Archive');
-    archive.onclick = () => { d.close(); archiveCrop(c); };
     const edit = el('button', 'btn btn-primary', 'Edit');
     edit.onclick = () => { d.close(); editCrop(c, load, farm); };
-    d.footer.append(archive, edit);
+    d.footer.append(edit);
   } else {
     d.footer.prepend(el('span', 'hint', 'Only the franchisor edits a standard crop.'));
   }

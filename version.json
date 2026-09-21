@@ -1,5 +1,5 @@
 {
-  "version": "0.7.42",
+  "version": "0.7.43",
   "released": "2026-09-21",
-  "note": "The medium Slab / bucket is now two: Slab and Bucket. Zone 1 is Bucket."
+  "note": "Positions in different zones may share a name (A, B, C...); a duplicate inside one zone is explained instead of a database error."
 }

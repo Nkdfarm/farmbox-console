@@ -372,6 +372,11 @@ function editZone(z) {
     if (rows.some(r => !r.remove && !(Number(r.capacity) > 0))) {
       toast('Every position needs at least 1 place', 'bad'); return;
     }
+    // a code only has to be unique inside this zone (0054)
+    const seen = new Set();
+    const dup = rows.filter(r => !r.remove && r.code).map(r => r.code.trim().toLowerCase())
+      .find(c => seen.has(c) || !seen.add(c));
+    if (dup) { toast(`"${dup}" is used twice in this zone. Each position needs its own code.`, 'bad'); return; }
     const positions = [];
     rows.forEach(r => {
       if (!r.id) positions.push({ code: r.code || null, capacity: Number(r.capacity) });

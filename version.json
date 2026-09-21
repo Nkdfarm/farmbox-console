@@ -1,5 +1,5 @@
 {
-  "version": "0.7.50",
+  "version": "0.7.51",
   "released": "2026-09-21",
-  "note": "Crop database: Edit a crop - details, medium, growing cycle and yield by system."
+  "note": "Farm setup: Available systems and media is one line with an Open button; the lists open in their own window."
 }

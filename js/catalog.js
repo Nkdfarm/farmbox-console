@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Farm setup › Available systems and media (migration 0057, console 0.7.49)
 //
-// The list every picker in the console offers: the growing systems (NFT, NGS,
+// Opened from one line on Farm setup (0.7.51): the list every picker in the console offers: the growing systems (NFT, NGS,
 // Drip-irrigated substrate, …) with the media each takes by default, and the
 // growing media (Net cup, Pots, …, Bucket). The Crop database reads it to say
 // which systems a crop can grow on. Standard data: the franchisor edits it,
@@ -20,58 +20,71 @@ async function read() {
   return full;
 }
 
+// On Farm setup this is one line with an Open button: the list changes a few
+// times a year, so it lives in its own window rather than on the page.
 export function catalogCard(repaint) {
-  const card = el('div', 'card');
+  const card = el('div', 'card card-pad');
   card.style.marginTop = 'var(--space-4)';
-  const head = el('div', 'row');
-  head.style.padding = 'var(--space-3) var(--space-4)';
-  head.style.borderBottom = '1px solid var(--border)';
-  head.append(el('b', null, 'Available systems and media'));
-  head.append(el('span', 'hint', 'What every zone, crop and procedure picks from.'));
-  head.append(el('div', 'spacer'));
-  card.append(head);
-  const body = el('div');
-  body.style.padding = 'var(--space-3) var(--space-4)';
-  body.append(el('div', 'hint', 'Reading the list…'));
-  card.append(body);
+  const row = el('div', 'row');
+  const text = el('div');
+  text.append(el('b', null, 'Available systems and media'));
+  const sum = el('div', 'hint', 'What every zone, crop and procedure picks from.');
+  text.append(sum);
+  const open = el('button', 'btn btn-sm', 'Open');
+  open.onclick = () => openCatalog(repaint);
+  row.append(text, el('div', 'spacer'), open);
+  card.append(row);
+  read().then(c => {
+    const on = x => x.filter(y => y.active).length;
+    sum.textContent = `${on(c.systems)} systems · ${on(c.media)} media — what every zone, crop and procedure picks from.`;
+  }).catch(() => {});
+  return card;
+}
+
+function openCatalog(repaint) {
+  const d = drawer('Available systems and media', 'What every zone, crop and procedure picks from.');
+  d.box.style.width = 'min(760px, 100vw)';
+  d.body.append(el('div', 'hint', 'Reading the list…'));
 
   const paint = c => {
-    body.textContent = '';
+    d.body.textContent = '';
     const mediaName = code => c.media.find(m => m.code === code)?.label ?? code;
-
-    body.append(el('div', 'sec-title', 'Systems'));
-    body.append(table(['System', 'Code', 'Default media', 'Zones', ''], c.systems.map(s => [
+    d.body.append(el('div', 'sec-title', 'Systems'));
+    d.body.append(table(['System', 'Code', 'Default media', 'Zones', ''], c.systems.map(s => [
       el('b', null, s.label),
       el('span', 'mono', s.code),
       el('span', null, (s.default_media || []).map(mediaName).join(', ') || '—'),
       el('span', 'mono', String(s.in_use || 0)),
       s.active ? el('span', 'pill ok', 'on') : el('span', 'pill warn', 'off'),
     ]), c.systems.map(s => s.description)));
-
-    const t = el('div', 'sec-title', 'Media');
-    t.style.marginTop = 'var(--space-4)';
-    body.append(t);
-    body.append(table(['Medium', 'Code', 'Used by', ''], c.media.map(m => [
+    d.body.append(el('div', 'sec-title', 'Media'));
+    d.body.append(table(['Medium', 'Code', 'Used by', ''], c.media.map(m => [
       el('b', null, m.label),
       el('span', 'mono', m.code),
       el('span', 'mono', String(m.in_use || 0)),
       m.active ? el('span', 'pill ok', 'on') : el('span', 'pill warn', 'off'),
     ]), c.media.map(m => m.description)));
 
+    d.footer.textContent = '';
+    const close = el('button', 'btn', 'Close');
+    close.onclick = d.close;
+    d.footer.append(close);
     if (c.may_edit) {
-      const b = el('button', 'btn btn-sm', 'Edit');
-      b.onclick = () => edit(c, async () => { paint(await read()); repaint?.(); });
-      head.append(b);
+      const b = el('button', 'btn btn-primary', 'Edit');
+      b.onclick = () => {
+        d.close();
+        edit(c, async () => { await read(); repaint?.(); openCatalog(repaint); });
+      };
+      d.footer.append(b);
     } else {
-      body.append(el('div', 'hint', 'Only the franchisor edits this list.'));
+      d.footer.prepend(el('span', 'hint', 'Only the franchisor edits this list.'));
     }
   };
 
   read().then(paint).catch(e => {
-    body.textContent = '';
-    body.append(el('div', 'note bad', e.message));
+    d.body.textContent = '';
+    d.body.append(el('div', 'note bad', e.message));
   });
-  return card;
 }
 
 function table(headers, rows, titles = []) {

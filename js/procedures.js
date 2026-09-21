@@ -62,11 +62,12 @@ function paint() {
     { key: 'title', label: 'Procedure', fmt: (v, r) => {
         const b = el('div');
         b.append(el('b', null, v));
-        if (r.category) b.append(el('div', 'hint', r.category));
         return b; } },
     { key: 'family', label: 'Family', fmt: v => {
         const s = el('span', 'tag ' + (FAM[v] || ''), v);
         return s; } },
+    // the same sub-family People › Responsible for and the planner use
+    { key: 'category', label: 'Sub-family', fmt: v => v || '—' },
     { key: 'frequency', label: 'When', fmt: (v, r) =>
         [v, r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area' : null]
           .filter(Boolean).join(' · ') },

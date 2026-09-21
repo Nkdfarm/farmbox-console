@@ -313,7 +313,7 @@ function openPerson(p) {
     acct,
     el('div', 'sec-title', 'Responsible for'),
     el('div', 'hint',
-       'Tick a whole family, or only the categories they look after. Leave it empty and ' +
+       'Tick a whole family, or only the sub-families they look after. Leave it empty and ' +
        'the planner will treat them as available for anything.'),
     resp.node,
   );
@@ -531,7 +531,7 @@ function respPicker(current) {
       cats.append(b);
       return [c.name, b];
     });
-    if (!f.cats.length) cats.append(el('span', 'hint', 'No categories yet — the family covers it.'));
+    if (!f.cats.length) cats.append(el('span', 'hint', 'No sub-families yet — the family covers it.'));
     block.append(cats);
 
     all.onclick = () => { s.all = !s.all; if (s.all) s.cats.clear(); sync(); };

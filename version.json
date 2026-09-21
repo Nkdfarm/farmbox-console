@@ -1,5 +1,5 @@
 {
-  "version": "0.7.45",
+  "version": "0.7.46",
   "released": "2026-09-21",
-  "note": "Crops & plan: each zone shows its name and, beside it, the system chosen on Farm setup (NFT, NGS, ...)."
+  "note": "Procedures: a Sub-family column after Family, the same sub-families People and the planner use."
 }

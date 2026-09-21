@@ -10,7 +10,7 @@ import { rpc } from './api.js';
 import { el, table, pageHead, drawer, num, systemLabel } from './ui.js';
 
 const MEDIUM = {
-  net_cup: 'channel', pot: 'pot', tray: 'tray', rockwool: 'rockwool', slab: 'slab',
+  net_cup: 'channel', pot: 'pot', tray: 'tray', rockwool: 'rockwool', slab: 'slab', bucket: 'bucket',
 };
 
 let farm = null, data = null, mount = null, filter = { cat: '', q: '' };

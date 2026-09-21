@@ -11,7 +11,7 @@ import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, system
 
 const MEDIUM = {
   net_cup: 'net cup', pot: 'pots', tray: 'trays',
-  rockwool: 'rockwool', slab: 'slab / bucket',
+  rockwool: 'rockwool', slab: 'slab', bucket: 'bucket',
 };
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', vines:'mt', fruiting:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;

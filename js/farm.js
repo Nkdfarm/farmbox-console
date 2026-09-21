@@ -196,7 +196,7 @@ function weekCard() {
 
 // ── what it is made of ─────────────────────────────────────────────────────
 const TYPES = SYSTEM_TYPES;
-const MEDIA = [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],['slab','Slab / bucket']];
+const MEDIA = [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],['slab','Slab'],['bucket','Bucket']];
 const CATS  = [['leafy','Leafy'],['mixed_leafy','Mixed leafy'],['herbs','Herbs'],['microgreens','Microgreens'],
                ['vines','Vines'],['fruiting','Fruiting']];
 const STATUS = [['active','Active'],['maintenance','In maintenance'],['out_of_service','Out of service']];

@@ -27,7 +27,7 @@ const UNIT_WORD = { tray: 'tray', plant: 'plant', position: 'position', m2: 'm²
 
 let farm = null, data = null, mount = null, filter = { q: '', view: 'crops' };
 let procs = null;          // approved procedures, for the inline phase editor
-const closed = new Set();  // crop ids the person folded (everything is open by default)
+const opened = new Set();  // crop ids the person opened (everything is folded by default)
 
 export async function renderCropDb(container, currentFarm) {
   farm = currentFarm; mount = container;
@@ -74,7 +74,7 @@ function paint() {
   arch.onclick = () => openArchive();
 
   mount.append(pageHead('Crop database',
-    'Every crop with its cycle and the procedure a batch runs on every phase. ' +
+    'Open a crop to see its cycle and the procedure a batch runs on every phase. ' +
     'A procedure link opens its checklist.', search, arch, plan));
 
   // the counts, then Crops | Procedures
@@ -94,8 +94,8 @@ function paint() {
     tabs.append(b);
   });
   if (filter.view === 'crops') {
-    const fold = el('button', 'btn btn-sm btn-ghost', closed.size ? 'Open all' : 'Fold all');
-    fold.onclick = () => { if (closed.size) closed.clear(); else all.forEach(c => closed.add(c.id)); paint(); };
+    const fold = el('button', 'btn btn-sm btn-ghost', opened.size ? 'Fold all' : 'Open all');
+    fold.onclick = () => { if (opened.size) opened.clear(); else all.forEach(c => opened.add(c.id)); paint(); };
     tabs.append(el('div', 'spacer'), fold);
   }
   mount.append(tabs);
@@ -121,7 +121,7 @@ function paint() {
 // ── one crop, opened to its cycle ──────────────────────────────────────────
 function cropRow(c) {
   const d = el('details', 'cropdb-row');
-  d.open = !closed.has(c.id);
+  d.open = opened.has(c.id);
   const sum = el('summary');
   const left = el('span');
   left.append(el('b', null, c.name));
@@ -140,7 +140,7 @@ function cropRow(c) {
   d.append(sum);
   const body = el('div', 'cropdb-body');
   d.append(body);
-  d.addEventListener('toggle', () => { if (d.open) closed.delete(c.id); else closed.add(c.id); });
+  d.addEventListener('toggle', () => { if (d.open) opened.add(c.id); else opened.delete(c.id); });
   paintBody();
 
   // the cycle came with the list; may_edit is the library's (standard crops)

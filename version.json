@@ -1,5 +1,5 @@
 {
-  "version": "0.7.61",
+  "version": "0.7.62",
   "released": "2026-09-22",
-  "note": "Crop database: phases numbered 1, 2, 3; a procedure before its phase reads −28, and one with no per-unit time shows its minutes alone."
+  "note": "Crop database: crops are folded by default; click one to see its phases and procedures (Open all / Fold all at the top)."
 }

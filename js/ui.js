@@ -344,11 +344,32 @@ export function avatar(p, size = '') {
   return box;
 }
 
-// The words for a growing system's type, one list for every page (0051–0052:
-// dutch_bucket → slab_bucket → drip_substrate, raft → dwc, tray and soil_bed gone).
-export const SYSTEM_TYPES = [['nft','NFT'],['ngs','NGS'],['drip_substrate','Drip-irrigated substrate'],
-  ['ebb_flow','Ebb & flow'],['vertical_tower','Vertical tower'],['dwc','DWC']];
-export const systemLabel = t => (SYSTEM_TYPES.find(x => x[0] === t) || [t, String(t || '').replace(/_/g, ' ')])[1];
+// Available systems and media (migration 0057): one list for every page, read
+// from system_catalog at sign-in (setCatalog) and after an edit on Farm setup.
+// The built-in copy below is only what shows before the first read.
+let CATALOG = {
+  systems: [['nft','NFT'],['ngs','NGS'],['drip_substrate','Drip-irrigated substrate'],
+            ['ebb_flow','Ebb & flow'],['vertical_tower','Vertical tower'],['dwc','DWC']]
+    .map(([code, label]) => ({ code, label, active: true, default_media: [] })),
+  media: [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],
+          ['slab','Slab'],['bucket','Bucket']]
+    .map(([code, label]) => ({ code, label, active: true })),
+};
+export function setCatalog(c) {
+  if (c && Array.isArray(c.systems) && Array.isArray(c.media)) CATALOG = c;
+}
+export const catalog = () => CATALOG;
+// [code, label] pairs for pickers: active entries, plus any inactive one in `keep`
+export const systemTypes = (keep = []) => CATALOG.systems
+  .filter(x => x.active || keep.includes(x.code)).map(x => [x.code, x.label]);
+export const mediaList = (keep = []) => CATALOG.media
+  .filter(x => x.active || keep.includes(x.code)).map(x => [x.code, x.label]);
+const tidy = v => String(v || '').replace(/_/g, ' ');
+export const systemLabel = t => CATALOG.systems.find(x => x.code === t)?.label ?? tidy(t);
+export const mediumLabel = m => CATALOG.media.find(x => x.code === m)?.label ?? tidy(m);
+// the systems whose default media overlap a crop's media — where it can grow
+export const systemsFor = media => CATALOG.systems
+  .filter(x => x.active && (x.default_media || []).some(m => (media || []).includes(m)));
 
 // A sub-family's colour: the same hue wherever it appears (Procedures, People),
 // fixed for the ones FarmLab uses and derived from the name for any new one.

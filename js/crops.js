@@ -7,12 +7,8 @@
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel } from './ui.js';
 
-const MEDIUM = {
-  net_cup: 'net cup', pot: 'pots', tray: 'trays',
-  rockwool: 'rockwool', slab: 'slab', bucket: 'bucket',
-};
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', vines:'mt', fruiting:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
 
@@ -173,7 +169,7 @@ function zoneCard(s, cur) {
   // in the same size, lighter. The medium is a tooltip on the system.
   head.append(el('b', null, s.name));
   const sys = el('span', 'zone-sys', systemLabel(s.type));
-  const media = (s.media || []).map(m => MEDIUM[m] || m).join(', ');
+  const media = (s.media || []).map(m => mediumLabel(m)).join(', ');
   if (media) sys.title = 'Growing medium: ' + media;
   sys.style.color = 'var(--text-muted, #9a9aa3)';
   sys.style.fontWeight = '500';
@@ -249,7 +245,7 @@ function openPosition(p, s, cur) {
     if (b.yield) row('Expected', Math.round(b.yield) + ' kg · ' + money(b.revenue, cur));
   });
   if (!(p.batches || []).length) row('Free from', fmt(p.free_on));
-  row('Grows in', (s.media || []).map(m => MEDIUM[m] || m).join(', '));
+  row('Grows in', (s.media || []).map(m => mediumLabel(m)).join(', '));
   d.body.append(facts);
 
   if (map.may_plan) {
@@ -260,7 +256,7 @@ function openPosition(p, s, cur) {
       && (!(s.categories || []).length || s.categories.includes(c.category)));
     if (!fits.length) {
       d.body.append(el('div', 'note warn',
-        `Nothing approved grows in ${(s.media || []).map(m => MEDIUM[m] || m).join(' or ')}`
+        `Nothing approved grows in ${(s.media || []).map(m => mediumLabel(m)).join(' or ')}`
         + ((s.categories || []).length
             ? ` within ${s.categories.join(', ').replace(/_/g, ' ')}, which is what this zone is kept for.`
             : '.')

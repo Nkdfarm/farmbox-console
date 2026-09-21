@@ -7,7 +7,7 @@
 // onto it; if not, only the details are written.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, SYSTEM_TYPES } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, systemTypes } from './ui.js';
 
 const FAMILIES = [['Agriculture', 'Agriculture'], ['Maintenance', 'Maintenance'], ['Office', 'Office']];
 const FREQ = [['', '—'], ['Daily', 'Daily'], ['Weekly', 'Weekly'], ['Monthly', 'Monthly'],
@@ -89,7 +89,7 @@ export function editProcedure(p, subFamilies, onSaved) {
   const rule = input({ value: p.frequency_rule || '', placeholder: 'e.g. Mondays at 08:00' });
   const target = selectBox(TARGETS, p.target || 'farm');
   const areas = toggles(AREAS, p.area_kinds);
-  const systems = toggles(SYSTEM_TYPES, p.systems);
+  const systems = toggles(systemTypes(p.systems || []), p.systems);
   const areasF = field('Areas', areas);
   const systemsF = field('Systems', systems);
   const showTarget = () => {

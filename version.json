@@ -1,5 +1,5 @@
 {
-  "version": "0.7.48",
+  "version": "0.7.49",
   "released": "2026-09-21",
-  "note": "Sub-families are coloured labels like the families, one colour each, on Procedures and People."
+  "note": "Farm setup: an editable list of available systems and media. Crop database: Medium and System columns."
 }

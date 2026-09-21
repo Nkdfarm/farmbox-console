@@ -8,7 +8,9 @@
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer, SYSTEM_TYPES } from './ui.js';
+import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
+         systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
+import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
@@ -53,6 +55,7 @@ function paint() {
   mount.append(locationCard(may));
   mount.append(weekCard(may));
   mount.append(zonesCard(may));
+  mount.append(catalogCard(() => paint()));
 }
 
 // ── the market ─────────────────────────────────────────────────────────────
@@ -195,8 +198,6 @@ function weekCard() {
 }
 
 // ── what it is made of ─────────────────────────────────────────────────────
-const TYPES = SYSTEM_TYPES;
-const MEDIA = [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],['slab','Slab'],['bucket','Bucket']];
 const CATS  = [['leafy','Leafy'],['mixed_leafy','Mixed leafy'],['herbs','Herbs'],['microgreens','Microgreens'],
                ['vines','Vines'],['fruiting','Fruiting']];
 const STATUS = [['active','Active'],['maintenance','In maintenance'],['out_of_service','Out of service']];
@@ -226,8 +227,8 @@ function zonesCard(may) {
     const tr = el('tr');
     const c = x => { const d = el('td'); d.append(x); return d; };
     tr.append(c(el('b', null, z.name)));
-    tr.append(c(el('span', 'chip', label(TYPES, z.type))));
-    tr.append(c(el('span', null, (z.media || []).map(m => label(MEDIA, m)).join(', ') || '—')));
+    tr.append(c(el('span', 'chip', systemLabel(z.type))));
+    tr.append(c(el('span', null, (z.media || []).map(mediumLabel).join(', ') || '—')));
     tr.append(c(el('span', 'mono', String(z.positions))));
     tr.append(c(el('span', 'mono', Number(z.plants).toLocaleString())));
     tr.append(c(el('span', 'mono', z.area_m2 ? Number(z.area_m2) + ' m²' : '—')));
@@ -279,11 +280,11 @@ function editZone(z) {
   const d = drawer('Edit ' + z.name, z.code + (z.cycle ? ' · irrigation cycle ' + z.cycle : ''));
 
   const name = input({ id: 'z-name', value: z.name });
-  const type = selectBox(TYPES, z.type); type.id = 'z-type';
+  const type = selectBox(systemTypes([z.type]), z.type); type.id = 'z-type';
   const status = selectBox(STATUS, z.status || 'active'); status.id = 'z-status';
   const area = input({ id: 'z-area', type: 'number', min: 0, step: '0.1',
                        value: z.area_m2 == null ? '' : Number(z.area_m2) });
-  const media = toggles(MEDIA, z.media);
+  const media = toggles(mediaList(z.media || []), z.media);
   const cats = toggles(CATS, z.crop_categories);
 
   const g1 = el('div', 'grid3');

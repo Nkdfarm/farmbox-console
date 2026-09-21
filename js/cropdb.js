@@ -7,11 +7,8 @@
 // (§8.3), so it is on the list rather than buried in the detail.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, num, systemLabel } from './ui.js';
+import { el, table, pageHead, drawer, num, systemLabel, mediumLabel, systemsFor } from './ui.js';
 
-const MEDIUM = {
-  net_cup: 'channel', pot: 'pot', tray: 'tray', rockwool: 'rockwool', slab: 'slab', bucket: 'bucket',
-};
 
 let farm = null, data = null, mount = null, filter = { cat: '', q: '' };
 
@@ -65,7 +62,9 @@ function paint() {
         b.append(el('div', 'hint', r.code));
         return b; } },
     { key: 'category', label: 'Category', fmt: v => String(v).replace('_', ' ') },
-    { key: 'media', label: 'Grows in', fmt: v => (v || []).map(m => MEDIUM[m] || m).join(', ') },
+    // the medium and the systems from Farm setup › Available systems and media
+    { key: 'media', label: 'Medium', fmt: v => (v || []).map(mediumLabel).join(', ') || '—' },
+    { key: 'media', label: 'System', fmt: v => systemsFor(v).map(x => x.label).join(', ') || '—' },
     { key: 'cycle_days', label: 'Cycle', align: 'right', fmt: v => v ? v + ' d' : '—' },
     { key: 'yield_per_position', label: 'kg/plant', align: 'right',
       fmt: v => v == null ? '—' : num(v, 3) },
@@ -95,7 +94,8 @@ async function openCrop(row) {
     f.append(el('span', 'fact-k', k), el('span', 'fact-v', v ?? '—'));
     facts.append(f);
   };
-  fact('Grows in', (c.media || []).map(m => MEDIUM[m] || m).join(', '));
+  fact('Medium', (c.media || []).map(mediumLabel).join(', '));
+  fact('System', systemsFor(c.media).map(x => x.label).join(', ') || '—');
   fact('Cycle', c.phases.reduce((n, p) => n + (p.days || 0), 0) + ' days');
   fact('Sold by', c.sell_unit);
   fact('Seedling lead', c.seedling_lead_days ? c.seedling_lead_days + ' days' : '—');

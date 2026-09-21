@@ -6,7 +6,7 @@
 // the two Notion syncs. A setting that belongs to a FarmBox lives on Farm setup,
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
-import { api, fn, select } from './api.js';
+import { api, fn, select, rpc } from './api.js';
 import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
@@ -55,6 +55,7 @@ export function openSettings(ctx) {
     section('Appearance', appearance()),
     section('Layout', layout(ctx, touched)),
     section('Notion', notion(ctx)),
+    section('Integrations', integrations()),
     section('Account', account(ctx, d)),
     section('Version', version()),
     section('Version log', versionLog()),
@@ -145,6 +146,71 @@ function farmBox(ctx, d) {
   list.append(row('Farm', farms.length < 2
     ? 'This account has access to one FarmBox only.'
     : 'Every page shows this FarmBox. Remembered on this device.', f));
+  return list;
+}
+
+// ── integrations ───────────────────────────────────────────────────────────
+// API keys for outside services (migration 0059). The key is kept on the server
+// and never comes back here: the panel only learns whether one is set and its
+// last 4 characters. The franchisor sets it; everyone else sees the status.
+function integrations() {
+  const list = el('div', 'set-list');
+  const status = el('small', null, 'Reading…');
+  const text = el('div', 'set-text');
+  text.append(el('b', null, 'Farmazone API key'), status);
+  const r = el('div', 'set-row');
+  r.append(text);
+  list.append(r);
+
+  const help = el('div', 'hint');
+  help.style.padding = '0 var(--space-4) var(--space-3)';
+  help.append(document.createTextNode(
+    'Farmazone’s fresh-produce prices need it. Sign in at Farmazone › Developer Dashboard › generate a key ' +
+    '(free: 100 requests a day; one market scan uses 7). '));
+  const a = el('a', null, 'Farmazone API page');
+  a.href = 'https://farmazone.co.za/api/v1/docs/';
+  a.target = '_blank';
+  a.rel = 'noopener';
+  help.append(a);
+
+  const paint = st => {
+    const fz = st?.farmazone;
+    status.textContent = fz?.set
+      ? `Set${fz.last4 ? ` — ends in ${fz.last4}` : ''}. The market scan uses it.`
+      : 'Not set — the market scan reads only the Cape Town Market page.';
+    r.querySelectorAll('.fz-ctl').forEach(n => n.remove());
+    if (!st?.may_edit) return;
+    const k = input({ type: 'password', placeholder: fz?.set ? 'Paste a new key to replace it' : 'fz_live_…',
+                      autocomplete: 'off' });
+    k.className = 'fz-ctl';
+    k.spellcheck = false;
+    k.style.maxWidth = '220px';
+    const save = el('button', 'btn btn-sm btn-primary fz-ctl', 'Save');
+    save.onclick = async () => {
+      const v = k.value.trim();
+      if (!v) { toast('Paste the key first', 'bad'); return; }
+      busy(save, true, 'Saving…');
+      try {
+        const st2 = await rpc('set_integration_key', { p_name: 'farmazone', p_value: v });
+        k.value = '';
+        toast('Farmazone key saved — the next scan uses it', 'ok');
+        paint(st2);
+      } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
+    };
+    r.append(k, save);
+    if (fz?.set) {
+      const rm = el('button', 'btn btn-sm fz-ctl', 'Remove');
+      rm.onclick = async () => {
+        try {
+          paint(await rpc('set_integration_key', { p_name: 'farmazone', p_value: '' }));
+          toast('Farmazone key removed', 'ok');
+        } catch (e) { toast(e.message, 'bad'); }
+      };
+      r.append(rm);
+    }
+  };
+  rpc('integration_status', {}).then(paint).catch(e => { status.textContent = e.message; });
+  list.append(help);
   return list;
 }
 

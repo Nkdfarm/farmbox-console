@@ -1,5 +1,5 @@
 {
-  "version": "0.7.53",
+  "version": "0.7.54",
   "released": "2026-09-21",
-  "note": "Prices & market: paste the Farmazone API key in the console (Farmazone key button)."
+  "note": "The Farmazone API key moved to Settings > Integrations."
 }

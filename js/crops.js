@@ -7,7 +7,7 @@
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel } from './ui.js';
 
 const MEDIUM = {
   net_cup: 'net cup', pot: 'pots', tray: 'trays',
@@ -174,7 +174,7 @@ function zoneCard(s, cur) {
   const media = (s.media || []).map(m => (MEDIUM[m] || m)
     .replace(/\b\w/g, c => c.toUpperCase())).join(' + ');
   const title = el('b', null, media ? `${s.name} · ${media}` : s.name);
-  title.title = String(s.type || '').replace(/_/g, ' ');
+  title.title = systemLabel(s.type);
   head.append(title);
   if ((s.categories || []).length) {
     const c = el('span', 'pill warn', 'kept for ' + s.categories.join(', ').replace(/_/g, ' '));

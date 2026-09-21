@@ -7,7 +7,7 @@
 // (§8.3), so it is on the list rather than buried in the detail.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, num } from './ui.js';
+import { el, table, pageHead, drawer, num, systemLabel } from './ui.js';
 
 const MEDIUM = {
   net_cup: 'channel', pot: 'pot', tray: 'tray', rockwool: 'rockwool', slab: 'slab',
@@ -113,7 +113,7 @@ async function openCrop(row) {
 
   d.body.append(el('div', 'sec-title', 'Systems and yield'));
   d.body.append(table([
-    { key: 'system_type', label: 'System' },
+    { key: 'system_type', label: 'System', fmt: systemLabel },
     { key: 'yield_per_position', label: 'kg/plant', align: 'right',
       fmt: v => v == null ? '—' : num(v, 3) },
     { key: 'yield_per_m2_cycle', label: 'kg/m²/cycle', align: 'right',

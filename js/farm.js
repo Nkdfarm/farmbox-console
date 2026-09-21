@@ -8,7 +8,7 @@
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, busy, drawer } from './ui.js';
+import { el, field, input, selectBox, toast, busy, drawer, SYSTEM_TYPES } from './ui.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
@@ -195,8 +195,7 @@ function weekCard() {
 }
 
 // ── what it is made of ─────────────────────────────────────────────────────
-const TYPES = [['nft','NFT'],['ngs','NGS'],['dutch_bucket','Dutch bucket'],['ebb_flow','Ebb & flow'],
-               ['vertical_tower','Vertical tower'],['raft','Raft'],['tray','Tray'],['soil_bed','Soil bed']];
+const TYPES = SYSTEM_TYPES;
 const MEDIA = [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],['slab','Slab / bucket']];
 const CATS  = [['leafy','Leafy'],['mixed_leafy','Mixed leafy'],['herbs','Herbs'],['microgreens','Microgreens'],
                ['vines','Vines'],['fruiting','Fruiting']];

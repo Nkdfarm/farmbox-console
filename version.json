@@ -1,5 +1,5 @@
 {
-  "version": "0.7.39",
+  "version": "0.7.40",
   "released": "2026-09-21",
-  "note": "Farm setup: click a growing zone to change its name, system, medium, area and positions."
+  "note": "System types: Dutch bucket is now Slab / bucket everywhere, Raft is DWC, Tray and Soil bed are gone."
 }

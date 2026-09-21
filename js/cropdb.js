@@ -25,9 +25,9 @@ const catLabel = c => CATS[c]?.[0] || String(c || '').replace('_', ' ');
 const catColour = c => CATS[c]?.[1] || '#888';
 const UNIT_WORD = { tray: 'tray', plant: 'plant', position: 'position', m2: 'm²', system: 'system', batch: 'batch' };
 
-let farm = null, data = null, mount = null, filter = { q: '' };
+let farm = null, data = null, mount = null, filter = { q: '', view: 'crops' };
 let procs = null;          // approved procedures, for the inline phase editor
-const open = new Set();    // crop ids left open across repaints
+const closed = new Set();  // crop ids the person folded (everything is open by default)
 
 export async function renderCropDb(container, currentFarm) {
   farm = currentFarm; mount = container;
@@ -74,8 +74,33 @@ function paint() {
   arch.onclick = () => openArchive();
 
   mount.append(pageHead('Crop database',
-    `${all.length} crops in ${new Set(all.map(c => c.category)).size} families. Open one for its cycle ` +
-    'and the procedures a batch runs in each phase.', search, arch, plan));
+    'Every crop with its cycle and the procedure a batch runs on every phase. ' +
+    'A procedure link opens its checklist.', search, arch, plan));
+
+  // the counts, then Crops | Procedures
+  const nPh = all.reduce((n, c) => n + (Number(c.phases) || 0), 0);
+  const nLk = all.reduce((n, c) => n + (Number(c.links) || 0), 0);
+  const kpi = el('div', 'cropdb-kpi');
+  [[all.length, 'crops'], [new Set(all.map(c => c.category)).size, 'families'], [nPh, 'phases'],
+   [nLk, 'phase→procedure links'], [(data.procedures || []).length, 'procedures']]
+    .forEach(([n, w]) => { const k = el('span'); k.append(el('b', null, String(n)), ' ' + w); kpi.append(k); });
+  mount.append(kpi);
+
+  const tabs = el('div', 'row cropdb-tabs');
+  [['crops', 'Crops'], ['procedures', 'Procedures']].forEach(([v, label]) => {
+    const b = el('button', 'toggle', label);
+    b.setAttribute('aria-pressed', String(filter.view === v));
+    b.onclick = () => { filter.view = v; paint(); };
+    tabs.append(b);
+  });
+  if (filter.view === 'crops') {
+    const fold = el('button', 'btn btn-sm btn-ghost', closed.size ? 'Open all' : 'Fold all');
+    fold.onclick = () => { if (closed.size) closed.clear(); else all.forEach(c => closed.add(c.id)); paint(); };
+    tabs.append(el('div', 'spacer'), fold);
+  }
+  mount.append(tabs);
+
+  if (filter.view === 'procedures') { mount.append(procedureView()); return; }
 
   const list = el('div', 'cropdb');
   if (!shown.length) list.append(el('div', 'empty', 'No crop matches that.'));
@@ -96,7 +121,7 @@ function paint() {
 // ── one crop, opened to its cycle ──────────────────────────────────────────
 function cropRow(c) {
   const d = el('details', 'cropdb-row');
-  d.open = open.has(c.id);
+  d.open = !closed.has(c.id);
   const sum = el('summary');
   const left = el('span');
   left.append(el('b', null, c.name));
@@ -115,18 +140,13 @@ function cropRow(c) {
   d.append(sum);
   const body = el('div', 'cropdb-body');
   d.append(body);
-  d.addEventListener('toggle', () => {
-    if (d.open) { open.add(c.id); paintBody(); } else open.delete(c.id);
-  });
-  if (d.open) paintBody();
+  d.addEventListener('toggle', () => { if (d.open) closed.delete(c.id); else closed.add(c.id); });
+  paintBody();
 
+  // the cycle came with the list; may_edit is the library's (standard crops)
   async function paintBody(editing = false) {
     body.textContent = '';
-    body.append(el('div', 'hint', 'Reading…'));
-    let full;
-    try { full = await rpc('crop_detail', { p_crop: c.id, p_farm: farm.id }); }
-    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); return; }
-    body.textContent = '';
+    const full = { ...c, may_edit: data.may_edit || c.scope !== 'standard', phases: c.cycle || [] };
 
     // ── the tools ──
     const tools = el('div', 'row cropdb-tools');
@@ -171,7 +191,7 @@ function cropRow(c) {
 
     // ── the phases ──
     const phases = (full.phases || []).map(p => ({ ...p, procedures: (p.procedures || []).map(x => ({ ...x })) }));
-    const list = await procedureList();
+    const list = editing ? await procedureList() : [];
     let day = 0;
     if (!phases.length) body.append(el('div', 'hint', 'No cycle yet — the planner will not place this crop.'));
     phases.forEach(p => {
@@ -236,6 +256,58 @@ function cropRow(c) {
     }
   }
   return d;
+}
+
+// ── the procedures a batch runs, with their checklists ─────────────────────
+function procedureView() {
+  const box = el('div', 'cropdb');
+  const q = filter.q;
+  const rows = (data.procedures || []).filter(p => !q || p.title.toLowerCase().includes(q) || String(p.category || '').toLowerCase().includes(q));
+  if (!rows.length) box.append(el('div', 'empty', 'No procedure matches that.'));
+  let cat = null;
+  rows.forEach(p => {
+    if (p.category !== cat) {
+      cat = p.category;
+      const fam = el('div', 'cropdb-fam');
+      fam.append(el('b', null, cat || 'Other'), el('span', 'hint', ` · ${rows.filter(x => x.category === cat).length}`));
+      box.append(fam);
+    }
+    const d = el('details', 'cropdb-row');
+    const sum = el('summary');
+    const left = el('span');
+    left.append(el('b', null, p.title));
+    left.append(el('div', 'hint', `${p.crops} crop${p.crops === 1 ? '' : 's'} · ${p.steps} step${p.steps === 1 ? '' : 's'}` +
+      (p.status !== 'approved' ? ` · ${p.status}` : '')));
+    const right = el('span', 'cropdb-right');
+    right.append(el('span', 'mono', `${num(p.estimated_minutes, 0)} + ${num(p.minutes_per_unit, 1)}/${UNIT_WORD[p.unit] || p.unit || 'unit'}`));
+    sum.append(left, right);
+    d.append(sum);
+    const body = el('div', 'cropdb-body');
+    d.append(body);
+    d.addEventListener('toggle', async () => {
+      if (!d.open || body.childNodes.length) return;
+      body.append(el('div', 'hint', 'Reading…'));
+      try {
+        const full = await rpc('procedure', { p_sop: p.id, p_farm: farm.id });
+        body.textContent = '';
+        (full.steps || []).forEach(st => {
+          const row = el('div', 'cropdb-step');
+          const head = el('div');
+          if (st.section) head.append(el('div', 'cropdb-step-sec', st.section));
+          head.append(el('b', null, `${st.seq}. ${st.title}`), el('span', 'cropdb-step-type',
+            st.type + (st.type === 'measure' && (st.min != null || st.max != null) ? ` ${st.min ?? ''}–${st.max ?? ''} ${st.unit || ''}` : '')));
+          row.append(head);
+          if (st.instruction) row.append(el('div', 'hint', st.instruction));
+          if (st.expected) { const e = el('div', 'hint'); e.append(el('b', null, 'Expected: '), st.expected); row.append(e); }
+          if (st.action_plan) { const e = el('div', 'hint'); e.append(el('b', null, 'If not OK: '), st.action_plan); row.append(e); }
+          body.append(row);
+        });
+        if (!(full.steps || []).length) body.append(el('div', 'hint', 'No checklist steps.'));
+      } catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); }
+    });
+    box.append(d);
+  });
+  return box;
 }
 
 // ── a procedure, read only ─────────────────────────────────────────────────

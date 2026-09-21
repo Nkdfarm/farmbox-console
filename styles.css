@@ -891,3 +891,18 @@ html { zoom: var(--zoom, 1); }
 
 /* Weekly plan: the positions under a grouped task (0.7.59) */
 .week-positions { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+
+/* Crop database: counts, Crops | Procedures, the review-page look (0.7.60) */
+.cropdb-kpi { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text-faint); font-size: var(--text-sm); margin: 0 0 var(--space-3); }
+.cropdb-kpi b { color: var(--text); }
+.cropdb-tabs { margin-bottom: var(--space-2); }
+.cropdb-fam b { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); }
+.cropdb-fam i { border-radius: 3px; }
+.cropdb-phase { grid-template-columns: 150px 1fr; }
+.cropdb-proc a { color: var(--success, #4fc39b); border-bottom: 0; font-weight: 500; }
+.cropdb-proc a:hover { text-decoration: underline; color: var(--success, #4fc39b); }
+.cropdb-proc .mono { font-size: 12px; }
+.cropdb-step { padding: 8px 0; border-top: 1px dashed var(--divider); font-size: var(--text-sm); }
+.cropdb-step:first-child { border-top: 0; }
+.cropdb-step-sec { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.cropdb-step-type { font-family: var(--font-mono, monospace); font-size: 11px; background: var(--surface-offset); padding: 1px 6px; border-radius: 4px; margin-left: 6px; color: var(--text-muted); }

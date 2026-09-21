@@ -1,5 +1,5 @@
 {
-  "version": "0.7.54",
+  "version": "0.7.55",
   "released": "2026-09-21",
-  "note": "The Farmazone API key moved to Settings > Integrations."
+  "note": "Task families and sub-families are a list in Settings; People picks a family, then its sub-families."
 }

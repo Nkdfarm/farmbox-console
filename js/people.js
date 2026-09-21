@@ -314,7 +314,7 @@ function openPerson(p) {
     acct,
     el('div', 'sec-title', 'Responsible for'),
     el('div', 'hint',
-       'Tick a whole family, or only the sub-families they look after. Leave it empty and ' +
+       'Pick a family, then tick its sub-families — or All of it. Leave it empty and ' +
        'the planner will treat them as available for anything.'),
     resp.node,
   );
@@ -496,60 +496,92 @@ async function shrink(blob) {
 }
 
 // ── the responsibility picker ──────────────────────────────────────────────
-// One block per family: an "All of …" toggle, then its categories. Picking the
-// whole family clears the categories, because it already covers them.
+// Pick a family from the menu, then its sub-families (or "All of <family>",
+// which covers every one). What is chosen, across all families, shows above as
+// coloured labels — click one to take it off. The list is Settings › Task
+// families; family_tree adds how many procedures each has on this farm.
 function respPicker(current) {
   const node = el('div', 'resp');
   const state = new Map(); // family -> { all: bool, cats: Set }
-
-  families().forEach(f => {
+  const fams = families();
+  fams.forEach(f => {
     state.set(f.name, {
       all: current.some(r => r.family === f.name && !r.category),
       cats: new Set(current.filter(r => r.family === f.name && r.category).map(r => r.category)),
     });
   });
 
-  families().forEach(f => {
+  if (!fams.length) {
+    node.append(el('div', 'note',
+      'No task families yet. Add them in Settings › Task families and come back.'));
+    return { node, value: () => [] };
+  }
+
+  // what is chosen, all families together
+  const chosen = el('div', 'chips');
+  chosen.style.marginBottom = 'var(--space-3)';
+  const paintChosen = () => {
+    chosen.textContent = '';
+    for (const [family, s] of state) {
+      const tags = s.all ? [el('span', 'chip fam-' + family, 'All ' + family)]
+                         : [...s.cats].map(c => subFamilyTag(c, 'chip'));
+      tags.forEach((t, i) => {
+        t.style.cursor = 'pointer';
+        t.title = 'Click to take it off';
+        t.onclick = () => {
+          if (s.all) s.all = false; else s.cats.delete([...s.cats][i]);
+          paintChosen(); paintFamily();
+        };
+        chosen.append(t);
+      });
+    }
+    if (!chosen.children.length) chosen.append(el('span', 'hint', 'Nothing yet — pick a family below.'));
+  };
+
+  // the family menu, then that family's sub-families
+  const pick = el('select');
+  fams.forEach(f => {
+    const o = el('option', null, `${f.name} · ${f.procedures} procedure${f.procedures === 1 ? '' : 's'}`);
+    o.value = f.name;
+    pick.append(o);
+  });
+  const firstUsed = fams.find(f => state.get(f.name).all || state.get(f.name).cats.size);
+  pick.value = (firstUsed || fams[0]).name;
+  const subs = el('div', 'resp-cats');
+  const paintFamily = () => {
+    subs.textContent = '';
+    const f = fams.find(x => x.name === pick.value);
     const s = state.get(f.name);
-    const block = el('div', 'resp-fam');
-    const head = el('header');
-    head.append(el('b', null, f.name));
     const all = el('button', 'toggle all', 'All of ' + f.name);
     all.type = 'button';
-    head.append(all);
-    head.append(el('span', 'count', `${f.procedures} procedure${f.procedures === 1 ? '' : 's'}`));
-    block.append(head);
-
-    const cats = el('div', 'resp-cats');
-    const buttons = f.cats.map(c => {
-      const b = el('button', 'toggle', c.name);
+    all.setAttribute('aria-pressed', String(s.all));
+    all.onclick = () => { s.all = !s.all; if (s.all) s.cats.clear(); paintFamily(); paintChosen(); };
+    subs.append(all);
+    f.cats.forEach(c => {
+      const b = el('button', 'toggle', c.procedures ? `${c.name} · ${c.procedures}` : c.name);
       b.type = 'button';
+      b.setAttribute('aria-pressed', String(s.cats.has(c.name)));
       b.onclick = () => {
-        s.cats.has(c.name) ? s.cats.delete(c.name) : s.cats.add(c.name);
+        if (s.cats.has(c.name)) s.cats.delete(c.name); else s.cats.add(c.name);
         if (s.cats.size) s.all = false;
-        sync();
+        paintFamily(); paintChosen();
       };
-      cats.append(b);
-      return [c.name, b];
+      subs.append(b);
     });
-    if (!f.cats.length) cats.append(el('span', 'hint', 'No sub-families yet — the family covers it.'));
-    block.append(cats);
+    if (!f.cats.length) subs.append(el('span', 'hint', 'No sub-families yet — the family covers it.'));
+  };
+  pick.onchange = paintFamily;
 
-    all.onclick = () => { s.all = !s.all; if (s.all) s.cats.clear(); sync(); };
-
-    const sync = () => {
-      all.setAttribute('aria-pressed', String(s.all));
-      buttons.forEach(([name, b]) => b.setAttribute('aria-pressed', String(s.cats.has(name))));
-    };
-    sync();
-    node.append(block);
-  });
-
-  if (!families().length) {
-    node.append(el('div', 'note',
-      'This FarmBox has no procedures yet, so there is nothing to divide up. ' +
-      'Sync the procedures first and come back.'));
-  }
+  const menu = el('div', 'row');
+  menu.style.marginBottom = 'var(--space-2)';
+  const lbl = el('span', 'hint', 'Family');
+  const wrap = el('div', 'field');
+  wrap.style.margin = '0';
+  wrap.append(pick);
+  menu.append(lbl, wrap);
+  node.append(chosen, menu, subs);
+  paintChosen();
+  paintFamily();
 
   return {
     node,

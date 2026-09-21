@@ -10,6 +10,7 @@ import { api, fn, select, rpc } from './api.js';
 import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
+import { familiesRow } from './families.js';
 
 const THEME_KEY = 'fbc_theme';
 const START_KEY = 'fbc_start';
@@ -55,6 +56,7 @@ export function openSettings(ctx) {
     section('Appearance', appearance()),
     section('Layout', layout(ctx, touched)),
     section('Notion', notion(ctx)),
+    section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Integrations', integrations()),
     section('Account', account(ctx, d)),
     section('Version', version()),

@@ -18,6 +18,7 @@ import { renderIssues } from './issues.js';
 import { renderHarvest } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
+import { loadFamilies } from './families.js';
 import { openSettings, applyTheme, startPage } from './settings.js';
 
 const $ = id => document.getElementById(id);
@@ -353,7 +354,7 @@ async function start() {
     // everyone's own picture, for every avatar on every page (ui.js setPhotos)
     try { setPhotos(await select('worker', 'select=id,photo_url&photo_url=not.is.null')); } catch { /* demo faces */ }
     // Available systems and media, before any page draws a system or a medium
-    await loadCatalog();
+    await Promise.all([loadCatalog(), loadFamilies()]);
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
     const v = document.getElementById('version');

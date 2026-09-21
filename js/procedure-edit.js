@@ -8,8 +8,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, field, input, selectBox, toast, drawer, busy, systemTypes } from './ui.js';
+import { familyOptions, subFamiliesOf } from './families.js';
 
-const FAMILIES = [['Agriculture', 'Agriculture'], ['Maintenance', 'Maintenance'], ['Office', 'Office']];
 const FREQ = [['', '—'], ['Daily', 'Daily'], ['Weekly', 'Weekly'], ['Monthly', 'Monthly'],
               ['Per batch', 'Per batch'], ['Per crop template', 'Per crop template'], ['On demand', 'On demand']];
 const TARGETS = [['system', 'Each bay (per system)'], ['area', 'Each area'], ['farm', 'The whole FarmBox']];
@@ -79,12 +79,19 @@ export function editProcedure(p, subFamilies, onSaved) {
 
   // ── details ──
   const title = input({ value: p.title || '' });
-  const family = selectBox(FAMILIES, p.family || 'Agriculture');
-  const category = input({ value: p.category || '', placeholder: 'e.g. Crop care' });
-  const dl = el('datalist');
-  dl.id = 'sub-families';
-  (subFamilies || []).forEach(c => { const o = el('option'); o.value = c; dl.append(o); });
-  category.setAttribute('list', 'sub-families');
+  // family first, then its sub-families (Settings › Task families)
+  const family = selectBox(familyOptions(p.family), p.family || 'Agriculture');
+  const category = el('select');
+  const fillSubs = keep => {
+    category.textContent = '';
+    [['', '—'], ...subFamiliesOf(family.value, keep).map(n => [n, n])].forEach(([v, t]) => {
+      const o = el('option', null, t); o.value = v; category.append(o);
+    });
+    category.value = subFamiliesOf(family.value, keep).includes(keep) ? keep : '';
+  };
+  fillSubs(p.category || '');
+  family.onchange = () => fillSubs(category.value);
+  const dl = el('span');
   const freq = selectBox(FREQ, p.frequency || '');
   const rule = input({ value: p.frequency_rule || '', placeholder: 'e.g. Mondays at 08:00' });
   const target = selectBox(TARGETS, p.target || 'farm');
@@ -111,7 +118,7 @@ export function editProcedure(p, subFamilies, onSaved) {
   d.body.append(
     dl,
     grid('grid3', field('Title', title), field('Family', family),
-         field('Sub-family', category, 'The same sub-families People › Responsible for uses.')),
+         field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
     grid('grid3', field('When', freq), field('Rule', rule), field('Repeats over', target)),
     areasF, systemsF,
     grid('grid3', field('Trigger', trigger), field('Validation', validation), field('Status', status)),

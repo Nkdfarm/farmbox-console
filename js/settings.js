@@ -51,6 +51,7 @@ export function openSettings(ctx) {
     { onClose: () => { if (touched.page) ctx.refresh?.(); } });
   d.box.classList.add('settings');
   d.body.append(
+    section('FarmBox', farmBox(ctx, d)),
     section('Appearance', appearance()),
     section('Layout', layout(ctx, touched)),
     section('Notion', notion(ctx)),
@@ -111,6 +112,40 @@ function switchBox(on, onChange, label) {
     onChange(next);
   };
   return b;
+}
+
+// ── farmbox ────────────────────────────────────────────────────────────────
+// Which FarmBox every page shows — the same switch as the picker in the top
+// bar, remembered on this device. The list is whatever RLS lets this account read.
+function farmBox(ctx, d) {
+  const list = el('div', 'set-list');
+  const farms = ctx.farms || [];
+  if (!farms.length) {
+    list.append(el('div', 'note', 'This account can open no FarmBox yet.'));
+    return list;
+  }
+  const pick = el('select');
+  pick.setAttribute('aria-label', 'FarmBox');
+  farms.forEach(f => {
+    const o = el('option', null,
+      `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
+    o.value = f.id;
+    pick.append(o);
+  });
+  pick.value = ctx.farmId || farms[0].id;
+  pick.disabled = farms.length < 2;
+  pick.onchange = () => {
+    ctx.switchFarm(pick.value);
+    const f = farms.find(x => x.id === pick.value);
+    toast(`Now showing ${f?.name || 'that FarmBox'}`, 'ok');
+    d.close();
+  };
+  const f = el('div', 'field');
+  f.append(pick);
+  list.append(row('Farm', farms.length < 2
+    ? 'This account has access to one FarmBox only.'
+    : 'Every page shows this FarmBox. Remembered on this device.', f));
+  return list;
 }
 
 // ── appearance ─────────────────────────────────────────────────────────────

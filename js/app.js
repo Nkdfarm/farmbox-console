@@ -130,6 +130,9 @@ $('settingsBtn').addEventListener('click', () => {
     },
     signOut: doSignOut,
     refresh: () => { if (farm) route(); },
+    farms,
+    farmId: farm?.id,
+    switchFarm,
   });
 });
 

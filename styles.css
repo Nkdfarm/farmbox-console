@@ -603,6 +603,11 @@ span.chip { cursor: default; }
 .tag.fam-ag { background: var(--fam-ag-bg); color: var(--fam-ag-fg); }
 .tag.fam-mt { background: var(--fam-mt-bg); color: var(--fam-mt-fg); }
 .tag.fam-of { background: var(--fam-of-bg); color: var(--fam-of-fg); }
+/* sub-families: one hue each (subFamilyTag in ui.js), readable in both themes */
+.tag.sub, .chip.sub { background: hsl(var(--h) 70% 50% / 0.16); color: hsl(var(--h) 75% 72%);
+  border-color: transparent; }
+:root[data-theme="light"] .tag.sub, :root[data-theme="light"] .chip.sub {
+  background: hsl(var(--h) 70% 45% / 0.13); color: hsl(var(--h) 65% 30%); }
 
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-3); margin-bottom: var(--space-5); }

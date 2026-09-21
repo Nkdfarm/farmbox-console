@@ -349,3 +349,24 @@ export function avatar(p, size = '') {
 export const SYSTEM_TYPES = [['nft','NFT'],['ngs','NGS'],['drip_substrate','Drip-irrigated substrate'],
   ['ebb_flow','Ebb & flow'],['vertical_tower','Vertical tower'],['dwc','DWC']];
 export const systemLabel = t => (SYSTEM_TYPES.find(x => x[0] === t) || [t, String(t || '').replace(/_/g, ' ')])[1];
+
+// A sub-family's colour: the same hue wherever it appears (Procedures, People),
+// fixed for the ones FarmLab uses and derived from the name for any new one.
+const SUB_HUES = {
+  'crop care': 140, 'nutrients & water': 195, 'irrigation': 215, 'harvest & packing': 42,
+  'sanitation': 172, 'pest & disease': 355, 'climate': 22, 'pumps & filters': 262,
+  'electrical': 55, 'safety': 320, 'purchasing': 285, 'admin': 230, 'commissioning': 95,
+};
+export function subFamilyHue(name) {
+  const k = String(name || '').trim().toLowerCase();
+  if (k in SUB_HUES) return SUB_HUES[k];
+  let h = 0;
+  for (const c of k) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+export function subFamilyTag(name, cls = 'tag') {
+  if (!name) return el('span', 'hint', '—');
+  const t = el('span', cls + ' sub', name);
+  t.style.setProperty('--h', subFamilyHue(name));
+  return t;
+}

@@ -7,7 +7,7 @@
 // runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, toast, num } from './ui.js';
+import { el, table, pageHead, drawer, toast, num, subFamilyTag } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -67,7 +67,7 @@ function paint() {
         const s = el('span', 'tag ' + (FAM[v] || ''), v);
         return s; } },
     // the same sub-family People › Responsible for and the planner use
-    { key: 'category', label: 'Sub-family', fmt: v => v || '—' },
+    { key: 'category', label: 'Sub-family', fmt: v => subFamilyTag(v) },
     { key: 'frequency', label: 'When', fmt: (v, r) =>
         [v, r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area' : null]
           .filter(Boolean).join(' · ') },

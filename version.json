@@ -1,5 +1,5 @@
 {
-  "version": "0.7.47",
+  "version": "0.7.48",
   "released": "2026-09-21",
-  "note": "Procedures can be edited in the console: details and checklist steps. A changed checklist becomes a new approved version."
+  "note": "Sub-families are coloured labels like the families, one colour each, on Procedures and People."
 }

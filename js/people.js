@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, select } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer,
-         avatar, suggestPassword, busy, setPhotos } from './ui.js';
+         avatar, suggestPassword, busy, setPhotos, subFamilyTag } from './ui.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -190,8 +190,9 @@ function personRow(p) {
   const chips = el('div', 'chips');
   const rs = p.responsibilities || [];
   if (!rs.length) chips.append(el('span', 'chip', '—'));
-  rs.slice(0, 4).forEach(r => chips.append(
-    el('span', 'chip fam-' + r.family, r.category ? r.category : 'All ' + r.family)));
+  rs.slice(0, 4).forEach(r => chips.append(r.category
+    ? subFamilyTag(r.category, 'chip')
+    : el('span', 'chip fam-' + r.family, 'All ' + r.family)));
   if (rs.length > 4) chips.append(el('span', 'chip', `+${rs.length - 4}`));
   tr.append(td(chips));
 

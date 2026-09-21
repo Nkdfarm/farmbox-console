@@ -1,5 +1,5 @@
 {
-  "version": "0.7.46",
+  "version": "0.7.47",
   "released": "2026-09-21",
-  "note": "Procedures: a Sub-family column after Family, the same sub-families People and the planner use."
+  "note": "Procedures can be edited in the console: details and checklist steps. A changed checklist becomes a new approved version."
 }

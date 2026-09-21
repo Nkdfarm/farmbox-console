@@ -1,14 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Procedures — what this FarmBox is supposed to do, and how (spec §7.5)
 //
-// Read only, and that is the design rather than an omission. Procedures are
-// written in Notion and pulled across by the sync, and Notion owns the
-// status: a procedure approved here would be quietly demoted on the next
-// sync, so the console shows what is in force and sends you to Notion to
-// change it.
+// Edited here since console 0.7.47 (migration 0056): the console owns the
+// procedures and the Notion sync leaves them alone. Details change in place;
+// a changed checklist becomes a new approved version (the one a phone already
+// runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, table, pageHead, drawer, toast, num } from './ui.js';
+import { editProcedure } from './procedure-edit.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 
@@ -42,8 +42,8 @@ function paint() {
   search.style.minWidth = '220px';
 
   mount.append(pageHead('Procedures',
-    `${all.length} in force. Written in Notion, synced here; the checklist a ` +
-    'phone runs is the approved version of the procedure, frozen.',
+    `${all.length} in force. Open one and press Edit to change it; a changed checklist ` +
+    'becomes a new approved version, and the phone runs that one from the next task.',
     search));
 
   const chips = el('div', 'chips');
@@ -76,7 +76,7 @@ function paint() {
     { key: 'tasks_28d', label: 'Used 28 d', align: 'right' },
     { key: 'status', label: 'Status', fmt: (v, r) => {
         const s = el('span', 'pill' + (v === 'approved' ? ' ok' : ' warn'), v);
-        if (!r.app_ready) s.title = 'Not marked App ready in Notion';
+        if (!r.app_ready) s.title = 'Not marked App ready — the phone does not show it';
         return s; } },
   ], shown, {
     onRow: r => openProcedure(r),
@@ -117,10 +117,14 @@ async function openProcedure(row) {
     d.body.append(el('div', 'sec-title', 'Purpose'));
     d.body.append(el('p', null, p.purpose));
   }
-  if ((p.ppe || []).length || (p.tools || []).length) {
+  // PPE and tools are free text in the database, not lists
+  const list = v => Array.isArray(v) ? v
+    : (v ? String(v).split(/[,;\n]/).map(x => x.trim()).filter(Boolean) : []);
+  const ppe = list(p.ppe), tools = list(p.tools);
+  if (ppe.length || tools.length) {
     d.body.append(el('div', 'sec-title', 'Before starting'));
-    if ((p.ppe || []).length) d.body.append(el('p', 'hint', 'PPE: ' + p.ppe.join(', ')));
-    if ((p.tools || []).length) d.body.append(el('p', 'hint', 'Tools: ' + p.tools.join(', ')));
+    if (ppe.length) d.body.append(el('p', 'hint', 'PPE: ' + ppe.join(', ')));
+    if (tools.length) d.body.append(el('p', 'hint', 'Tools: ' + tools.join(', ')));
   }
 
   d.body.append(el('div', 'sec-title', `Checklist — version ${p.version}, frozen`));
@@ -145,15 +149,15 @@ async function openProcedure(row) {
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
-  if (p.notion_page_id) {
-    const a = el('a', 'btn btn-primary', 'Open in Notion');
-    a.href = 'https://www.notion.so/' + String(p.notion_page_id).replace(/-/g, '');
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.title = 'Editing and approving happen in Notion; the sync brings it back.';
-    d.footer.append(a);
+  if (p.may_edit) {
+    const edit = el('button', 'btn btn-primary', 'Edit');
+    edit.onclick = () => {
+      d.close();
+      const cats = [...new Set((data?.procedures || []).map(x => x.category).filter(Boolean))].sort();
+      editProcedure(p, cats, load);
+    };
+    d.footer.append(edit);
   } else {
-    const n = el('span', 'hint', 'Approve and edit in Notion, then run the sync.');
-    d.footer.append(n);
+    d.footer.append(el('span', 'hint', 'Only the franchisor edits a standard procedure.'));
   }
 }

@@ -344,8 +344,8 @@ export function avatar(p, size = '') {
   return box;
 }
 
-// The words for a growing system's type, one list for every page (0051:
-// dutch_bucket → slab_bucket, raft → dwc, tray and soil_bed gone).
-export const SYSTEM_TYPES = [['nft','NFT'],['ngs','NGS'],['slab_bucket','Slab / bucket'],
+// The words for a growing system's type, one list for every page (0051–0052:
+// dutch_bucket → slab_bucket → drip_substrate, raft → dwc, tray and soil_bed gone).
+export const SYSTEM_TYPES = [['nft','NFT'],['ngs','NGS'],['drip_substrate','Drip-irrigated substrate'],
   ['ebb_flow','Ebb & flow'],['vertical_tower','Vertical tower'],['dwc','DWC']];
 export const systemLabel = t => (SYSTEM_TYPES.find(x => x[0] === t) || [t, String(t || '').replace(/_/g, ' ')])[1];

@@ -348,9 +348,11 @@ export function avatar(p, size = '') {
 // from system_catalog at sign-in (setCatalog) and after an edit on Farm setup.
 // The built-in copy below is only what shows before the first read.
 let CATALOG = {
-  systems: [['nft','NFT'],['ngs','NGS'],['drip_substrate','Drip-irrigated substrate'],
-            ['ebb_flow','Ebb & flow'],['vertical_tower','Vertical tower'],['dwc','DWC']]
-    .map(([code, label]) => ({ code, label, active: true, default_media: [] })),
+  systems: [['nft','NFT',['net_cup']],['ngs','NGS',['net_cup']],
+            ['drip_substrate','Drip-irrigated substrate',['slab','bucket']],
+            ['ebb_flow','Ebb & flow',['pot','tray','rockwool']],
+            ['vertical_tower','Vertical tower',['net_cup']],['dwc','DWC',['net_cup']]]
+    .map(([code, label, default_media]) => ({ code, label, active: true, default_media })),
   media: [['net_cup','Net cup'],['pot','Pots'],['tray','Trays'],['rockwool','Rockwool'],
           ['slab','Slab'],['bucket','Bucket']]
     .map(([code, label]) => ({ code, label, active: true })),

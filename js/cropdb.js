@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, table, pageHead, drawer, num, systemLabel, mediumLabel, systemsFor } from './ui.js';
+import { editCrop } from './crop-edit.js';
 
 
 let farm = null, data = null, mount = null, filter = { cat: '', q: '' };
@@ -175,8 +176,12 @@ async function openCrop(row) {
 
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
-  d.footer.append(el('span', 'hint',
-    'The library is the standard package. A farm-specific change is an override (§5.6), not an edit here.'));
-  d.footer.append(el('div', 'spacer'));
   d.footer.append(close);
+  if (c.may_edit) {
+    const edit = el('button', 'btn btn-primary', 'Edit');
+    edit.onclick = () => { d.close(); editCrop(c, load); };
+    d.footer.append(edit);
+  } else {
+    d.footer.prepend(el('span', 'hint', 'Only the franchisor edits a standard crop.'));
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.36",
-  "released": "2026-09-18",
-  "note": "Prices & market shows the price of one unit (each, bunch or punnet) beside the price per kg."
+  "version": "0.7.37",
+  "released": "2026-09-21",
+  "note": "Crops & plan: each zone's title names its medium (Zone 1 · Slab / Bucket); the system-type and medium chips are gone."
 }

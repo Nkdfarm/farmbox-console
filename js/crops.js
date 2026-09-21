@@ -169,9 +169,13 @@ function zoneCard(s, cur) {
   const head = el('div', 'row');
   head.style.padding = 'var(--space-3) var(--space-4)';
   head.style.borderBottom = '1px solid var(--border)';
-  head.append(el('b', null, s.name));
-  head.append(el('span', 'chip', s.type));
-  (s.media || []).forEach(m => head.append(el('span', 'chip fam-Agriculture', MEDIUM[m] || m)));
+  // The medium is part of the zone's name, in the same type: it is what decides
+  // which crops fit. The system type stays as a tooltip.
+  const media = (s.media || []).map(m => (MEDIUM[m] || m)
+    .replace(/\b\w/g, c => c.toUpperCase())).join(' + ');
+  const title = el('b', null, media ? `${s.name} · ${media}` : s.name);
+  title.title = String(s.type || '').replace(/_/g, ' ');
+  head.append(title);
   if ((s.categories || []).length) {
     const c = el('span', 'pill warn', 'kept for ' + s.categories.join(', ').replace(/_/g, ' '));
     c.title = 'A choice this farm has made, not a limit of the system.';

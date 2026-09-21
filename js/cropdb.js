@@ -194,10 +194,10 @@ function cropRow(c) {
     const list = editing ? await procedureList() : [];
     let day = 0;
     if (!phases.length) body.append(el('div', 'hint', 'No cycle yet — the planner will not place this crop.'));
-    phases.forEach(p => {
+    phases.forEach((p, i) => {
       const row = el('div', 'cropdb-phase');
       const head = el('div');
-      head.append(el('b', null, `${p.seq}. ${p.name}`));
+      head.append(el('b', null, `${i + 1}. ${p.name}`));
       head.append(el('div', 'mono hint', `day ${day} · ${Number(p.days)} d`));
       const right = el('div', 'cropdb-procs');
       if (!editing) {
@@ -206,8 +206,11 @@ function cropRow(c) {
           const a = el('a', null, pr.title);
           a.href = '#';
           a.onclick = e => { e.preventDefault(); openProcedure(pr); };
+          const off = Number(pr.day_offset) || 0;
+          const per = Number(pr.minutes_per_unit) || 0;
           line.append(a, el('span', 'mono hint',
-            ` +${pr.day_offset}${pr.repeat_days ? ` every ${pr.repeat_days} d` : ''} · ${num(pr.estimated_minutes, 0)} + ${num(pr.minutes_per_unit, 1)}/${UNIT_WORD[pr.unit] || pr.unit || 'unit'}`));
+            ` ${off < 0 ? '−' : '+'}${Math.abs(off)}${pr.repeat_days ? ` every ${pr.repeat_days} d` : ''} · ${num(pr.estimated_minutes, 0)}` +
+            (per ? ` + ${num(per, 1)}/${UNIT_WORD[pr.unit] || pr.unit || 'unit'}` : '') + ' min'));
           right.append(line);
         });
         if (!p.procedures.length) right.append(el('span', 'hint warn', 'No procedure on this phase.'));

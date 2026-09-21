@@ -1,5 +1,5 @@
 {
-  "version": "0.7.60",
+  "version": "0.7.61",
   "released": "2026-09-22",
-  "note": "Crop database like the library review page: every crop open with its phases and procedures, the counts on top, and a Procedures view with the checklists."
+  "note": "Crop database: phases numbered 1, 2, 3; a procedure before its phase reads −28, and one with no per-unit time shows its minutes alone."
 }

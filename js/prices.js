@@ -24,7 +24,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNIT_WORD = { piece: 'each', bunch: 'per bunch', punnet: 'per punnet' };
 
-let farm = null, data = null, trends = null, mount = null;
+let farm = null, data = null, trends = null, mount = null, keys = null;
 
 export async function renderPrices(container, currentFarm) {
   farm = currentFarm; mount = container;
@@ -35,10 +35,12 @@ async function load() {
   mount.textContent = '';
   mount.append(el('div', 'empty', 'Reading the price book…'));
   try {
-    [data, trends] = await Promise.all([
+    [data, trends, keys] = await Promise.all([
       rpc('price_table', { p_farm: farm.id }),
       // the market card is extra: a database without it still shows the book
       rpc('market_trends', { p_farm: farm.id }).catch(() => null),
+      // whether a Farmazone key is set (never the key itself)
+      rpc('integration_status', {}).catch(() => null),
     ]);
   } catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();
@@ -52,12 +54,21 @@ function paint() {
   const scan = el('button', 'btn', 'Scan Cape Town now');
   scan.title = 'Collect this week’s Cape Town Market prices now. It also runs by itself every Monday at 13:30.';
   scan.onclick = () => scanMarket(scan);
+  // the Farmazone API key, pasted here (franchisor only; the key never comes back)
+  let keyBtn = null;
+  if (keys?.may_edit) {
+    const fz = keys.farmazone;
+    keyBtn = el('button', 'btn', fz?.set ? `Farmazone key ··${fz.last4 || ''}` : 'Farmazone key — not set');
+    if (!fz?.set) keyBtn.classList.add('btn-warn');
+    keyBtn.title = 'The API key Farmazone needs for its prices. Stored on the server, never shown again.';
+    keyBtn.onclick = () => farmazoneKey();
+  }
 
   mount.append(pageHead('Prices & market',
     `${data.currency} per kg in ${ci.name || data.country}, sold ` +
     `${data.channel === 'direct' ? 'direct to the consumer' : 'to a retailer'}. ` +
     `It is ${data.season_now} here now.`,
-    data.may_edit ? scan : null, data.may_edit ? rec : null));
+    keyBtn, data.may_edit ? scan : null, data.may_edit ? rec : null));
 
   if (trends) mount.append(marketCard());
 
@@ -280,4 +291,52 @@ function record() {
     } catch (e) { busy(save, false); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);
+}
+
+// ── Farmazone API key ──────────────────────────────────────────────────────
+// Pasted by the franchisor, kept in app.integration_key on the server. The
+// console only ever learns whether it is set and its last 4 characters.
+function farmazoneKey() {
+  const fz = keys?.farmazone;
+  const d = drawer('Farmazone API key',
+    fz?.set ? `A key ending in ${fz.last4} is set.` : 'No key yet — the scan reads only the Cape Town Market page.');
+  const k = input({ type: 'password', placeholder: 'fz_live_…', autocomplete: 'off' });
+  k.spellcheck = false;
+  d.body.append(field(fz?.set ? 'Replace it with' : 'Paste the key', k,
+    'Farmazone › sign in › Developer Dashboard › generate a key. The free tier allows 100 requests a day; one scan uses 7.'));
+  const link = el('a', null, 'Open Farmazone’s API page');
+  link.href = 'https://farmazone.co.za/api/v1/docs/';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  d.body.append(link);
+
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.onclick = d.close;
+  const save = el('button', 'btn btn-primary', 'Save the key');
+  save.onclick = async () => {
+    const v = k.value.trim();
+    if (!v) { toast('Paste the key first', 'bad'); return; }
+    busy(save, true, 'Saving…');
+    try {
+      keys = await rpc('set_integration_key', { p_name: 'farmazone', p_value: v });
+      k.value = '';
+      toast('Farmazone key saved — the next scan uses it', 'ok');
+      d.close();
+      paint();
+    } catch (e) { busy(save, false, 'Save the key'); toast(e.message, 'bad'); }
+  };
+  if (fz?.set) {
+    const rm = el('button', 'btn btn-danger', 'Remove');
+    rm.onclick = async () => {
+      try {
+        keys = await rpc('set_integration_key', { p_name: 'farmazone', p_value: '' });
+        toast('Farmazone key removed', 'ok');
+        d.close();
+        paint();
+      } catch (e) { toast(e.message, 'bad'); }
+    };
+    d.footer.append(rm, el('div', 'spacer'));
+  }
+  d.footer.append(cancel, save);
+  setTimeout(() => k.focus(), 50);
 }

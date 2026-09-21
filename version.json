@@ -1,5 +1,5 @@
 {
-  "version": "0.7.52",
+  "version": "0.7.53",
   "released": "2026-09-21",
-  "note": "Market scan: Farmazone now needs an API key; without one it is skipped quietly and Cape Town Market prices still come in."
+  "note": "Prices & market: paste the Farmazone API key in the console (Farmazone key button)."
 }

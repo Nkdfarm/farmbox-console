@@ -1,5 +1,5 @@
 {
-  "version": "0.7.43",
+  "version": "0.7.44",
   "released": "2026-09-21",
-  "note": "Positions in different zones may share a name (A, B, C...); a duplicate inside one zone is explained instead of a database error."
+  "note": "Farm setup: Remove works on every position; one with a crop on it shows the crop and asks before removing it with its batch."
 }

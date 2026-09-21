@@ -8,7 +8,7 @@
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, busy, drawer, SYSTEM_TYPES } from './ui.js';
+import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer, SYSTEM_TYPES } from './ui.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
@@ -321,9 +321,9 @@ function editZone(z) {
       cap.disabled = !!r.remove;
       cap.oninput = () => { r.capacity = cap.value; paintSum(); };
       const x = el('button', 'btn btn-sm', r.remove ? 'Keep' : 'Remove');
-      if (r.used && !r.remove) {
+      if (r.harvested) {
         x.disabled = true;
-        x.title = 'Batches or tasks were planned here, so it keeps its history.';
+        x.title = 'A harvest was recorded here, so it keeps its history. Set the zone out of service instead.';
       }
       x.onclick = () => {
         if (!r.id) rows.splice(rows.indexOf(r), 1); else r.remove = !r.remove;
@@ -331,6 +331,15 @@ function editZone(z) {
       };
       line.append(code, cap, el('span', 'hint', 'places'), x);
       posBox.append(line);
+      // what is standing on it, so nobody removes a crop without seeing it
+      const on = r.batches || [];
+      if (on.length) {
+        const w = el('div', 'hint', (r.remove ? 'Will also remove: ' : 'On it: ')
+          + on.map(b => `${b.crop} (${b.status === 'active' ? 'growing' : b.status})`).join(', '));
+        w.style.margin = '-4px 0 var(--space-2)';
+        if (r.remove) w.style.color = 'var(--bad, #e5484d)';
+        posBox.append(w);
+      }
     });
     paintSum();
   };
@@ -359,7 +368,7 @@ function editZone(z) {
   d.body.append(posHead, posBox);
   d.body.append(el('div', 'hint',
     'A position is the unit you plan in: a whole NFT table, an NGS row, a bench. ' +
-    'One that ever had a batch or a task keeps its history and cannot be removed.'));
+    'Removing one with a crop on it removes that batch too and cancels its open tasks; you are asked first.'));
   paintPositions();
 
   const cancel = el('button', 'btn', 'Cancel');
@@ -380,10 +389,21 @@ function editZone(z) {
     const positions = [];
     rows.forEach(r => {
       if (!r.id) positions.push({ code: r.code || null, capacity: Number(r.capacity) });
-      else if (r.remove) positions.push({ id: r.id, remove: true });
+      else if (r.remove) positions.push({ id: r.id, remove: true, force: (r.batches || []).length > 0 || !!r.used });
       else if (r.code !== r.orig.code || Number(r.capacity) !== Number(r.orig.capacity))
         positions.push({ id: r.id, code: r.code || r.orig.code, capacity: Number(r.capacity) });
     });
+    const withCrops = rows.filter(r => r.remove && r.id && (r.batches || []).length);
+    if (withCrops.length) {
+      const n = withCrops.reduce((a, r) => a + r.batches.length, 0);
+      const ok = await confirmDrawer('Remove positions with crops on them?',
+        `${withCrops.map(r => r.code).join(', ')} ${withCrops.length === 1 ? 'has' : 'have'} ${n} `
+        + `batch${n === 1 ? '' : 'es'} on ${withCrops.length === 1 ? 'it' : 'them'} (`
+        + [...new Set(withCrops.flatMap(r => r.batches.map(b => b.crop)))].join(', ')
+        + '). They will be removed with the positions and their open tasks cancelled. '
+        + 'Tasks already done are kept.', 'Remove them', true);
+      if (!ok) return;
+    }
     busy(save, true, 'Saving…');
     try {
       const r = await rpc('save_growing_system', { p_system: z.id, p: {

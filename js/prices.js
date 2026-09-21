@@ -231,6 +231,8 @@ async function scanMarket(button) {
         (r.backfilled_weeks ? `, and ${r.backfilled_weeks} earlier weeks from the 30-day trend` : '')
       : 'The market had no prices for these species today', n ? 'ok' : '');
     if (r.problems?.length) setTimeout(() => toast(`Partly: ${r.problems.join(' · ')}`, 'bad'), 3400);
+    // information, not a failure (e.g. Farmazone skipped until its API key is set)
+    else if (r.notes?.length) setTimeout(() => toast(r.notes.join(' · ')), 3400);
     await load();
   } catch (e) {
     busy(button, false, 'Scan Cape Town now');

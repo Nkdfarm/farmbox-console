@@ -1,5 +1,5 @@
 {
-  "version": "0.7.51",
+  "version": "0.7.52",
   "released": "2026-09-21",
-  "note": "Farm setup: Available systems and media is one line with an Open button; the lists open in their own window."
+  "note": "Market scan: Farmazone now needs an API key; without one it is skipped quietly and Cape Town Market prices still come in."
 }

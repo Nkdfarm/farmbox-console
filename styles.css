@@ -906,3 +906,21 @@ html { zoom: var(--zoom, 1); }
 .linkish { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; color: var(--success, #4fc39b); font-weight: 500; }
 .linkish:hover { text-decoration: underline; }
 .cropdb-proc .linkish { color: var(--success, #4fc39b); }
+
+/* IPM — sticky traps (0.7.64) */
+.ipm-tiles { margin-bottom: var(--space-4); }
+.tile.is-bad .tile-value { color: var(--danger, #ff6b6b); }
+.tile.is-warn .tile-value { color: var(--warning, #e0a020); }
+.ipm-code { display: inline-block; font-family: var(--font-mono, monospace); font-weight: 800; letter-spacing: .04em; padding: 2px 8px; border-radius: 6px; background: #f4d24a; color: #2b2400; }
+.ipm-code.blue { background: #3b82f6; color: #fff; }
+.ipm-over { color: var(--danger, #ff6b6b); }
+.ipm-watch { color: var(--warning, #e0a020); }
+.ipm-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; cursor: zoom-in; display: block; }
+.ipm-photo { width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--radius-lg, 12px); background: #000; margin-bottom: var(--space-3); }
+.ipm-spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.ipm-spark circle { fill: var(--accent); }
+.ipm-rule { stroke: var(--danger, #ff6b6b); stroke-width: 1; stroke-dasharray: 2 3; }
+.ipm-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); padding: 0 var(--space-4) var(--space-4); }
+.ipm-fig { margin: 0; cursor: zoom-in; }
+.ipm-fig img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+.ipm-fig figcaption { font-size: var(--text-xs); color: var(--text-muted); margin-top: 4px; }

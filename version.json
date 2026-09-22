@@ -1,5 +1,5 @@
 {
-  "version": "0.7.63",
+  "version": "0.7.64",
   "released": "2026-09-22",
-  "note": "Fixes from a code review: Add phase works again, search keeps its focus, planning skips positions out of service, phases keep their names after a cycle edit, the last harvest frees the later tasks, removing a position frees its grouped tasks."
+  "note": "IPM: sticky traps with a code that says where they hang, a weekly trap round with a photo and an insect count per trap, an IPM page with counts, trends, photos and rounds. Naked Brain 0.11.7 runs the round."
 }

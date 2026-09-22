@@ -15,6 +15,7 @@ import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
+import { renderIpm } from './ipm.js';
 import { renderHarvest } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
@@ -112,6 +113,7 @@ const ROUTES = {
   prices: { title: 'Prices & market', render: renderPrices },
   reports: { title: 'Reports', render: renderReports },
   issues: { title: 'Issues', render: renderIssues },
+  ipm:    { title: 'IPM', render: renderIpm },
   units:  { title: 'All FarmBoxes', render: renderNetwork },
 };
 
@@ -314,7 +316,7 @@ async function warm() {
     ['labour_week', { ...p, p_week: defaultWeek() }], ['crop_map', p],
     ['harvests', { ...p, p_days: 30 }], ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['reports', { ...p, ...reportRange() }],
+    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],
     ['people', p], ['family_tree', p], ['farm_market', p],
   ];
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);

@@ -142,6 +142,7 @@ $('signinForm').addEventListener('submit', async e => {
 });
 
 function doSignOut() {
+  warmed.clear();   // the next person on this tab gets their own offline copies
   signOut();
   location.hash = '';
   showSignin();

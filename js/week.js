@@ -266,6 +266,9 @@ function daysCard() {
   return box;
 }
 
+const UNIT_WORDS = { tray: ['tray', 'trays'], plant: ['plant', 'plants'], m2: ['m²', 'm²'], system: ['system', 'systems'], batch: ['batch', 'batches'], position: ['position', 'positions'] };
+const unitWord = (u, n) => (UNIT_WORDS[u] || [u, u])[Number(n) === 1 ? 0 : 1];
+
 function taskRow(task) {
   const tr = el('tr');
 
@@ -282,7 +285,7 @@ function taskRow(task) {
     const unit = task.unit && task.unit !== 'position' ? task.unit : null;
     pos.textContent = task.positions.map(p =>
       p.code + (unit && p.quantity ? ` ${Math.round(p.quantity * 10) / 10}` : '') + (p.minutes ? ` (${Math.round(p.minutes)} min)` : '')).join(' · ')
-      + (unit && task.quantity ? ` — ${Math.round(task.quantity * 10) / 10} ${unit === 'm2' ? 'm²' : unit + (task.quantity == 1 ? '' : 's')}` : '');
+      + (unit && task.quantity ? ` — ${Math.round(task.quantity * 10) / 10} ${unitWord(unit, task.quantity)}` : '');
     pos.title = task.positions.map(p => `${p.code}: ${p.quantity ?? ''} ${p.unit ?? ''} · ${p.minutes ?? 0} min`).join(String.fromCharCode(10));
     what.append(pos);
   }

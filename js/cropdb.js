@@ -10,7 +10,7 @@
 // Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy,
+import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd,
          systemLabel, mediumLabel, systemsFor } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
@@ -25,12 +25,14 @@ const catLabel = c => CATS[c]?.[0] || String(c || '').replace('_', ' ');
 const catColour = c => CATS[c]?.[1] || '#888';
 const UNIT_WORD = { tray: 'tray', plant: 'plant', position: 'position', m2: 'm²', system: 'system', batch: 'batch' };
 
-let farm = null, data = null, mount = null, filter = { q: '', view: 'crops' };
+let farm = null, data = null, mount = null, filter = { q: '', raw: '', view: 'crops' };
 let procs = null;          // approved procedures, for the inline phase editor
 const opened = new Set();  // crop ids the person opened (everything is folded by default)
 
 export async function renderCropDb(container, currentFarm) {
+  if (farm?.id !== currentFarm.id) { opened.clear(); procs = null; }
   farm = currentFarm; mount = container;
+  procs = null;   // a procedure approved since is offered next time the editor opens
   await load();
 }
 
@@ -48,7 +50,7 @@ async function procedureList() {
     const d = await rpc('procedures', { p_farm: farm.id });
     procs = (d.procedures || []).filter(x => x.status === 'approved')
       .sort((a, b) => (a.trigger === 'crop_plan' ? 0 : 1) - (b.trigger === 'crop_plan' ? 0 : 1) || a.title.localeCompare(b.title));
-  } catch { procs = []; }
+  } catch (e) { toast(e.message, 'bad'); return []; }
   return procs;
 }
 
@@ -61,8 +63,14 @@ function paint() {
   const search = el('input');
   search.type = 'search';
   search.placeholder = 'Search crops';
-  search.value = filter.q;
-  search.oninput = () => { filter.q = search.value.trim().toLowerCase(); paint(); search.focus(); };
+  search.value = filter.raw;
+  search.setAttribute('aria-label', 'Search crops');
+  search.oninput = () => {
+    filter.raw = search.value; filter.q = search.value.trim().toLowerCase();
+    paint();
+    const s = mount.querySelector('input[type=search]');
+    if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  };
   search.style.minWidth = '200px';
 
   const plan = data.may_plan ? el('button', 'btn btn-primary', 'Plan a crop') : null;
@@ -94,8 +102,9 @@ function paint() {
     tabs.append(b);
   });
   if (filter.view === 'crops') {
-    const fold = el('button', 'btn btn-sm btn-ghost', opened.size ? 'Fold all' : 'Open all');
-    fold.onclick = () => { if (opened.size) opened.clear(); else all.forEach(c => opened.add(c.id)); paint(); };
+    const anyOpen = shown.some(c => opened.has(c.id));
+    const fold = el('button', 'btn btn-sm btn-ghost', anyOpen ? 'Fold all' : 'Open all');
+    fold.onclick = () => { shown.forEach(c => anyOpen ? opened.delete(c.id) : opened.add(c.id)); paint(); };
     tabs.append(el('div', 'spacer'), fold);
   }
   mount.append(tabs);
@@ -141,12 +150,14 @@ function cropRow(c) {
   const body = el('div', 'cropdb-body');
   d.append(body);
   d.addEventListener('toggle', () => { if (d.open) opened.add(c.id); else opened.delete(c.id); });
+  let gen = 0;   // a second paint (Edit pressed twice) supersedes the first
   paintBody();
 
-  // the cycle came with the list; may_edit is the library's (standard crops)
+  // the cycle came with the list; may_edit is per crop (can_write_scoped on the server)
   async function paintBody(editing = false) {
+    const my = ++gen;
     body.textContent = '';
-    const full = { ...c, may_edit: data.may_edit || c.scope !== 'standard', phases: c.cycle || [] };
+    const full = { ...c, may_edit: c.may_edit ?? data.may_edit, phases: c.cycle || [] };
 
     // ── the tools ──
     const tools = el('div', 'row cropdb-tools');
@@ -157,7 +168,7 @@ function cropRow(c) {
       plugs.onchange = async () => {
         const v = parseInt(plugs.value, 10);
         if (!(v > 0)) return;
-        try { await rpc('save_crop', { p_crop: c.id, p: { plugs_per_tray: v } }); toast('Plugs per tray saved', 'ok'); c.plugs_per_tray = v; }
+        try { await rpc('save_crop', { p_crop: c.id, p: { plugs_per_tray: v } }); toast('Plugs per tray saved', 'ok'); c.plugs_per_tray = v; paint(); }
         catch (e) { toast(e.message, 'bad'); }
       };
       const lbl = el('label', 'hint', 'Plugs per tray ');
@@ -192,20 +203,21 @@ function cropRow(c) {
     // ── the phases ──
     const phases = (full.phases || []).map(p => ({ ...p, procedures: (p.procedures || []).map(x => ({ ...x })) }));
     const list = editing ? await procedureList() : [];
+    if (my !== gen) return;
     let day = 0;
     if (!phases.length) body.append(el('div', 'hint', 'No cycle yet — the planner will not place this crop.'));
     phases.forEach((p, i) => {
       const row = el('div', 'cropdb-phase');
       const head = el('div');
       head.append(el('b', null, `${i + 1}. ${p.name}`));
-      head.append(el('div', 'mono hint', `day ${day} · ${Number(p.days)} d`));
+      head.append(el('div', 'mono hint', `day ${day} · ${Number(p.days) || 0} d`));
       const right = el('div', 'cropdb-procs');
       if (!editing) {
         p.procedures.forEach(pr => {
           const line = el('div', 'cropdb-proc');
-          const a = el('a', null, pr.title);
-          a.href = '#';
-          a.onclick = e => { e.preventDefault(); openProcedure(pr); };
+          const a = el('button', 'linkish', pr.title);
+          a.type = 'button';
+          a.onclick = () => openProcedure(pr);
           const off = Number(pr.day_offset) || 0;
           const per = Number(pr.minutes_per_unit) || 0;
           line.append(a, el('span', 'mono hint',
@@ -219,7 +231,9 @@ function cropRow(c) {
           right.textContent = '';
           p.procedures.forEach((pr, j) => {
             const line = el('div', 'row cropdb-proc-edit');
-            const pick = selectBox(list.map(x => [x.id, x.title]), pr.sop_id);
+            const opts = list.map(x => [x.id, x.title]);
+            if (pr.sop_id && !list.some(x => x.id === pr.sop_id)) opts.unshift([pr.sop_id, (pr.title || 'procedure') + ' (not approved)']);
+            const pick = selectBox(opts, pr.sop_id);
             pick.onchange = () => { pr.sop_id = pick.value; };
             const off = input({ type: 'number', step: '1', value: pr.day_offset ?? 0 });
             off.style.width = '60px';
@@ -250,7 +264,8 @@ function cropRow(c) {
       try {
         const r = await rpc('save_crop', { p_crop: c.id, p: {
           phases: phases.map(p => ({ name: p.name, type: p.type || 'vegetative', days: p.days ?? 0, cues: p.cues || '',
-            procedures: p.procedures.filter(x => x.sop_id).map(x => ({ sop_id: x.sop_id, day_offset: x.day_offset ?? 0, repeat_days: x.repeat_days ?? '' })) })),
+            procedures: p.procedures.filter(x => x.sop_id).map(x => ({ sop_id: x.sop_id,
+              day_offset: parseInt(x.day_offset, 10) || 0, repeat_days: parseInt(x.repeat_days, 10) || '' })) })),
         } });
         toast(`Phases saved · ${r.procedures} procedure link${r.procedures === 1 ? '' : 's'}` +
               (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
@@ -322,7 +337,7 @@ async function openProcedure(pr) {
   catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
   d.body.textContent = '';
   d.body.append(el('div', 'hint',
-    `Version ${p.version ?? '—'} · ${p.minutes} min` + (p.minutes_per_unit ? ` + ${p.minutes_per_unit} per ${p.unit || 'unit'}` : '') +
+    `Version ${p.version ?? '—'} · ${num(p.minutes, 0)} min` + (p.minutes_per_unit ? ` + ${num(p.minutes_per_unit, 1)} per ${p.unit || 'unit'}` : '') +
     (p.purpose ? ` · ${p.purpose}` : '')));
   d.body.append(table([
     { key: 'seq', label: '#', align: 'right' },
@@ -352,7 +367,7 @@ async function openPlan(full) {
   const crops = (map.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   const crop = selectBox(crops.map(c => [c.id, c.name]), full?.id ?? crops[0]?.id);
   const zone = selectBox([], '');
-  const when = input({ type: 'date', value: new Date().toISOString().slice(0, 10) });
+  const when = input({ type: 'date', value: ymd(new Date()) });
   const posBox = el('div', 'cropdb-positions');
   const chosen = new Set();
 
@@ -374,7 +389,8 @@ async function openPlan(full) {
     chosen.clear();
     const s = (map.systems || []).find(x => x.id === zone.value);
     if (!s) { posBox.append(el('div', 'note warn', 'No zone grows this crop — give it that medium on the crop, or widen a zone.')); return; }
-    const free = (s.positions || []).filter(p => !(p.batches || []).some(b => b.status !== 'cancelled'));
+    // crop_map already lists only live batches; a position out of service is not offered
+    const free = (s.positions || []).filter(p => !['maintenance', 'out_of_service'].includes(p.status) && !(p.batches || []).length);
     if (!free.length) { posBox.append(el('div', 'hint', 'Every position in this zone has a batch on it.')); return; }
     const all = el('button', 'btn btn-sm', 'All free');
     all.type = 'button';
@@ -384,7 +400,7 @@ async function openPlan(full) {
       const lbl = el('label', 'cropdb-pos');
       const cb = el('input'); cb.type = 'checkbox'; cb.value = p.id;
       cb.onchange = () => { cb.checked ? chosen.add(p.id) : chosen.delete(p.id); };
-      lbl.append(cb, el('span', null, ` ${p.code}`), el('span', 'hint', ` · ${Number(p.capacity).toLocaleString()} places`));
+      lbl.append(cb, el('span', null, ` ${p.code}`), el('span', 'hint', ` · ${Number(p.capacity || 0).toLocaleString('en-ZA')} places`));
       posBox.append(lbl);
     });
   };

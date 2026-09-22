@@ -118,9 +118,11 @@ export async function editCrop(c, onSaved, farm) {
       cues.style.flex = '2';
       cues.oninput = () => { p.cues = cues.value; };
       const up = el('button', 'btn btn-sm', '↑');
+      up.type = 'button';
       up.disabled = i === 0;
       up.onclick = () => { phases.splice(i - 1, 0, phases.splice(i, 1)[0]); paintPhases(); };
       const rm = el('button', 'btn btn-sm', '✕');
+      rm.type = 'button';
       rm.title = 'Remove this phase';
       rm.onclick = () => { phases.splice(i, 1); paintPhases(); };
       line.append(nm, ty, days, el('span', 'hint', 'd'), cues, up, rm);
@@ -167,7 +169,8 @@ export async function editCrop(c, onSaved, farm) {
   const ph = el('div', 'row');
   ph.append(el('div', 'sec-title', 'Cycle'), total, el('div', 'spacer'));
   const addPhase = el('button', 'btn btn-sm', '+ Add phase');
-  addPhase.onclick = () => { phases.push({ name: '', type: 'vegetative', days: 7 }); paintPhases(); };
+  addPhase.type = 'button';
+  addPhase.onclick = () => { phases.push({ name: '', type: 'vegetative', days: 7, procedures: [] }); paintPhases(); };
   ph.append(addPhase);
   d.body.append(ph, phaseBox);
   paintPhases();
@@ -222,7 +225,7 @@ export async function editCrop(c, onSaved, farm) {
         phases: phases.map(p => ({ name: String(p.name).trim(), type: p.type || 'vegetative',
                                    days: p.days ?? 0, cues: p.cues || '',
                                    procedures: p.procedures.map(x => ({ sop_id: x.sop_id,
-                                     day_offset: x.day_offset ?? 0, repeat_days: x.repeat_days ?? '' })) })),
+                                     day_offset: parseInt(x.day_offset, 10) || 0, repeat_days: parseInt(x.repeat_days, 10) || '' })) })),
         // only the systems somebody changed; an emptied figure goes back to the library
         yields: yields.filter(y => y.touched)
           .map(y => ({ system_type: y.system_type, yield_per_position: y.ypp ?? '',

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.62",
+  "version": "0.7.63",
   "released": "2026-09-22",
-  "note": "Crop database: crops are folded by default; click one to see its phases and procedures (Open all / Fold all at the top)."
+  "note": "Fixes from a code review: Add phase works again, search keeps its focus, planning skips positions out of service, phases keep their names after a cycle edit, the last harvest frees the later tasks, removing a position frees its grouped tasks."
 }

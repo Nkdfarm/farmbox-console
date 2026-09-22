@@ -12,6 +12,7 @@ import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
          systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
+import { patch } from './api.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
 const CHANNELS = [['direct','Direct to the consumer'], ['retail','To a retailer']];
@@ -186,6 +187,25 @@ function weekCard() {
   card.append(el('div', 'hint',
     'The days somebody is on site. Daily work is only generated on these; the weekend ' +
     'is covered by the remote check instead. Change it on the People page for now.'));
+
+  // the working morning (0081): its length, for every person on site, is the room
+  // the anytime tasks fill before the line; the afternoon starts at its end
+  const mf = el('input', 'input'); mf.type = 'time'; mf.value = String(data.morning_from || '08:00').slice(0, 5);
+  const mt = el('input', 'input'); mt.type = 'time'; mt.value = String(data.morning_to || '13:00').slice(0, 5);
+  const save = el('button', 'btn btn-sm', 'Save');
+  save.onclick = async () => {
+    if (!mf.value || !mt.value || mt.value <= mf.value) { toast('The morning must end after it starts', 'bad'); return; }
+    busy(save, true, 'Saving…');
+    try {
+      const rows = await patch('farm', `id=eq.${farm.id}`, { morning_from: mf.value, morning_to: mt.value });
+      if (!rows?.length) throw new Error('Only an admin or the farm manager may change the working day');
+      toast(`Morning ${mf.value}–${mt.value}`, 'ok'); busy(save, false, 'Save');
+    } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  const m = el('div', 'row'); m.style.marginTop = 'var(--space-3)'; m.style.alignItems = 'center';
+  m.append(el('span', null, 'Morning'), mf, el('span', null, 'to'), mt, save);
+  card.append(m);
+  card.append(el('div', 'hint', 'The morning is the room the anytime tasks fill before the line on the boards; the afternoon starts at its end.'));
 
   const p = el('div', 'row');
   p.style.marginTop = 'var(--space-3)';

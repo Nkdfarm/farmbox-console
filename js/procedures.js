@@ -13,9 +13,15 @@ import { editProcedure } from './procedure-edit.js';
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 
 let farm = null, data = null, mount = null, filter = { family: '', q: '' };
+// a library (0.7.70): one family's procedures under its own section — Grow ›
+// Routines, IPM › Programs, Office › Farm management, Maintenance › Preventive.
+// `keep` says which procedures belong; "Every procedure" widens it on demand.
+let lib = null, showAll = false;
 
-export async function renderProcedures(container, currentFarm) {
+export async function renderProcedures(container, currentFarm, library = null) {
   farm = currentFarm; mount = container;
+  if (library !== lib) { showAll = false; filter = { family: '', q: '' }; }
+  lib = library;
   await load();
 }
 
@@ -29,7 +35,7 @@ async function load() {
 
 function paint() {
   mount.textContent = '';
-  const all = data.procedures;
+  const all = lib && !showAll ? data.procedures.filter(lib.keep) : data.procedures;
   const shown = all.filter(p =>
     (!filter.family || p.family === filter.family) &&
     (!filter.q || (p.title + ' ' + (p.category || '')).toLowerCase().includes(filter.q)));
@@ -41,22 +47,27 @@ function paint() {
   search.oninput = () => { filter.q = search.value.trim().toLowerCase(); paint(); search.focus(); };
   search.style.minWidth = '220px';
 
-  mount.append(pageHead('Procedures',
+  const widen = lib ? el('button', 'btn btn-sm btn-ghost', showAll ? `Back to ${lib.title}` : 'Every procedure') : null;
+  if (widen) widen.onclick = () => { showAll = !showAll; filter.family = ''; paint(); };
+  mount.append(pageHead(lib && !showAll ? lib.title : 'Procedures',
+    (lib && !showAll ? lib.blurb + ' ' : '') +
     `${all.length} in force. Open one and press Edit to change it; a changed checklist ` +
     'becomes a new approved version, and the phone runs that one from the next task.',
-    search));
+    search, widen));
 
-  const chips = el('div', 'chips');
-  chips.style.marginBottom = 'var(--space-4)';
-  const add = (label, value, n) => {
-    const c = el('button', 'chip' + (filter.family === value ? ' on' : ''),
-                 n == null ? label : `${label} · ${n}`);
-    c.onclick = () => { filter.family = value; paint(); };
-    chips.append(c);
-  };
-  add('Everything', '', all.length);
-  data.families.forEach(f => add(f.family, f.family, f.n));
-  mount.append(chips);
+  if (!lib || showAll) {
+    const chips = el('div', 'chips');
+    chips.style.marginBottom = 'var(--space-4)';
+    const add = (label, value, n) => {
+      const c = el('button', 'chip' + (filter.family === value ? ' on' : ''),
+                   n == null ? label : `${label} · ${n}`);
+      c.onclick = () => { filter.family = value; paint(); };
+      chips.append(c);
+    };
+    add('Everything', '', all.length);
+    data.families.forEach(f => add(f.family, f.family, f.n));
+    mount.append(chips);
+  }
 
   mount.append(table([
     { key: 'title', label: 'Procedure', fmt: (v, r) => {

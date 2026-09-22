@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20260922m">
+  <link rel="stylesheet" href="styles.css?v=20260922n">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png?v=2" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
@@ -65,16 +65,10 @@
     <div class="rail-group">This FarmBox</div>
     <a href="#/dashboard" data-route="dashboard" data-icon="dashboard">Dashboard</a>
     <a href="#/week" data-route="week" data-icon="calendar">Tasks</a>
-    <a href="#/crops" data-route="crops" data-icon="sprout">Crops &amp; plan</a>
-    <a href="#/cropdb" data-route="cropdb" data-icon="database">Crop database</a>
-    <a href="#/procedures" data-route="procedures" data-icon="clipboard">Procedures</a>
-    <a href="#/maintenance" data-route="maintenance" data-icon="wrench">Maintenance</a>
-    <a href="#/purchasing" data-route="purchasing" data-icon="cart">Purchasing</a>
-    <a href="#/prices" data-route="prices" data-icon="trend">Prices &amp; market</a>
-    <a href="#/issues" data-route="issues" data-icon="alert">Issues</a>
+    <a href="#/grow" data-route="grow" data-icon="sprout">Grow</a>
     <a href="#/ipm" data-route="ipm" data-icon="bug">IPM</a>
-    <a href="#/reports" data-route="reports" data-icon="chart">Reports</a>
-    <a href="#/people" data-route="people" data-icon="users">People</a>
+    <a href="#/office" data-route="office" data-icon="clipboard">Office</a>
+    <a href="#/maintenance" data-route="maintenance" data-icon="wrench">Maintenance</a>
     <a href="#/farm" data-route="farm" data-icon="farm">Farm setup</a>
 
     <div class="rail-group">Franchisor</div>
@@ -107,11 +101,12 @@
               data-icon="settings" aria-label="Settings" title="Settings"></button>
     </header>
     <div class="offline-bar" id="offlineBar" hidden></div>
+    <nav class="sec-tabs" id="secTabs" hidden></nav>
     <main class="page" id="page"></main>
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20260922m"></script>
+<script type="module" src="js/app.js?v=20260922n"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

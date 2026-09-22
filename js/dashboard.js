@@ -113,7 +113,7 @@ function tiles() {
     value: `${o.pct}%`,
     sub: `${o.occupied} of ${o.positions} positions${o.proposed ? ` · ${o.proposed} proposed` : ''}`,
     tone: o.pct >= 80 ? 'ok' : o.pct >= 40 ? '' : 'warn',
-    go: '#/crops',
+    go: '#/grow/planner',
   }));
 
   wrap.append(tile({
@@ -123,7 +123,7 @@ function tiles() {
     sub: h.d14.kg > h.d7.kg ? `${h.d14.kg} kg within 14` : 'nothing more within 14 days',
     tone: '',
     list: h.d7.by_crop.map(c => `${c.crop} · ${c.kg} kg`),
-    go: '#/crops',
+    go: '#/grow/planner',
   }));
 
   const planWords = {
@@ -463,7 +463,7 @@ function weekView(res, from) {
     });
     if (list.length > 3) {
       const more = el('a', 'ev more', `+${list.length - 3} more`);
-      more.href = '#/crops';
+      more.href = '#/grow/planner';
       more.title = list.slice(3).map(x => `${x.crop} · ${eventDetail(x)}`).join('\n');
       col.append(more);
     }
@@ -550,7 +550,7 @@ function bays() {
   head.append(el('div', 'sec-title', 'Bays'));
   head.append(el('div', 'spacer'));
   const a = el('a', 'btn btn-sm', 'Open the plan');
-  a.href = '#/crops';
+  a.href = '#/grow/planner';
   head.append(a);
   card.append(head);
 

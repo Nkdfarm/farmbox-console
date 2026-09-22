@@ -98,21 +98,42 @@ let myWorkerId = null;   // the signed-in person's own worker row, when they hav
 
 applyTheme();
 
-const ROUTES = {
-  dashboard: { title: 'Dashboard', render: renderDashboard },
-  people: { title: 'People', render: renderPeople },
-  week:   { title: 'Tasks', render: renderWeek },
-  farm:   { title: 'Farm setup', render: renderFarm },
-  crops:  { title: 'Crops & plan', render: renderCrops },
-  cropdb: { title: 'Crop database', render: renderCropDb },
-  procedures: { title: 'Procedures', render: renderProcedures },
-  maintenance: { title: 'Maintenance', render: renderMaintenance },
-  purchasing: { title: 'Purchasing', render: renderPurchasing },
-  prices: { title: 'Prices & market', render: renderPrices },
-  reports: { title: 'Reports', render: renderReports },
-  issues: { title: 'Issues', render: renderIssues },
-  ipm:    { title: 'IPM', render: renderIpm },
-  units:  { title: 'All FarmBoxes', render: renderNetwork },
+// ── the map of the console (0.7.70) ────────────────────────────────────────
+// Seven sections, one per responsibility — Dashboard, Tasks, Grow, IPM, Office,
+// Maintenance, Farm setup — each with tabs across the top. The procedures are
+// not one page any more: each library shows its own family (the crop ones
+// live in the Crop library). Addresses read #/section/tab; the old one-word
+// addresses still open the right place (MOVED).
+const LIB = {
+  routines: { title: 'Routines', keep: p => p.family === 'Agriculture' && p.trigger !== 'crop_plan' && p.category !== 'Pest & disease',
+    blurb: 'The growing work that is not tied to one crop — irrigation, nutrients and water, climate, sanitation, the daily and weekly rounds. The crop-specific procedures are in the Crop library.' },
+  ipm: { title: 'IPM programs', keep: p => p.category === 'Pest & disease',
+    blurb: 'Scouting, the sticky-trap round, treatments: every Pest & disease procedure.' },
+  office: { title: 'Farm management', keep: p => p.family === 'Office',
+    blurb: 'The office procedures: admin, orders and deliveries, the weekend remote check.' },
+  maintenance: { title: 'Preventive maintenance', keep: p => p.family === 'Maintenance',
+    blurb: 'The maintenance procedures the equipment rules call, at their own interval.' },
+};
+const lib = key => (c, f, ctx) => renderProcedures(c, f, LIB[key]);
+
+const SECTIONS = {
+  dashboard: { title: 'Dashboard', tabs: [
+    ['overview', 'Overview', renderDashboard], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
+  week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek]] },
+  grow: { title: 'Grow', tabs: [
+    ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')]] },
+  ipm: { title: 'IPM', tabs: [['traps', 'Traps', renderIpm], ['programs', 'Programs', lib('ipm')]] },
+  office: { title: 'Office', tabs: [
+    ['sell', 'Sell', renderPrices], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
+  maintenance: { title: 'Maintenance', tabs: [
+    ['equipment', 'Equipment', renderMaintenance], ['preventive', 'Preventive maintenance', lib('maintenance')]] },
+  farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm], ['people', 'People', renderPeople]] },
+  units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
+};
+const MOVED = {
+  crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/routines',
+  prices: 'office/sell', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
+  people: 'farm/people', harvest: 'dashboard/overview',
 };
 
 // ── sign in ────────────────────────────────────────────────────────────────
@@ -221,7 +242,7 @@ function switchFarm(id) {
   $('farmPick').value = farm.id;
   pref.set(FARM_KEY, farm.id);
   paintMyRole();
-  location.hash = '#/dashboard';
+  location.hash = '#/dashboard/overview';
   route();
   warm();
 }
@@ -328,17 +349,42 @@ async function warm() {
 }
 
 // ── routing ────────────────────────────────────────────────────────────────
+// #/section/tab. An old address is rewritten in place, so a bookmark or a
+// link in an e-mail keeps working.
 function currentRoute() {
-  const name = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/')[0];
-  return ROUTES[name] ? name : 'dashboard';
+  const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
+  let sec = parts[0] || 'dashboard', tab = parts[1] || '';
+  if (MOVED[sec]) { [sec, tab] = MOVED[sec].split('/'); }
+  if (!SECTIONS[sec]) { sec = 'dashboard'; tab = ''; }
+  const tabs = SECTIONS[sec].tabs;
+  const t = tabs.find(x => x[0] === tab) || tabs[0];
+  return { sec, tab: t };
+}
+
+function paintTabs(sec, active) {
+  const nav = $('secTabs');
+  nav.textContent = '';
+  const tabs = SECTIONS[sec].tabs;
+  nav.hidden = tabs.length < 2;
+  nav.setAttribute('aria-label', SECTIONS[sec].title);
+  tabs.forEach(([key, label]) => {
+    const a = el('a', null, label);
+    a.href = `#/${sec}/${key}`;
+    if (key === active[0]) a.setAttribute('aria-current', 'page');
+    nav.append(a);
+  });
 }
 
 async function route() {
-  const name = currentRoute();
+  const { sec, tab } = currentRoute();
+  const wanted = `#/${sec}/${tab[0]}`;
+  if (location.hash !== wanted) { history.replaceState(null, '', wanted); }
   document.querySelectorAll('.rail a').forEach(a =>
-    a.dataset.route === name ? a.setAttribute('aria-current', 'page')
-                             : a.removeAttribute('aria-current'));
-  document.title = `${ROUTES[name].title} · FarmBox Console`;
+    a.dataset.route === sec ? a.setAttribute('aria-current', 'page')
+                            : a.removeAttribute('aria-current'));
+  const title = SECTIONS[sec].title;
+  document.title = `${tab[1] === title ? title : tab[1] + ' · ' + title} · FarmBox Console`;
+  paintTabs(sec, tab);
 
   newPage();
   const page = $('page');
@@ -353,7 +399,7 @@ async function route() {
     return;
   }
   try {
-    await ROUTES[name].render(page, farm, { switchFarm, reloadFarms: loadFarms });
+    await tab[2](page, farm, { switchFarm, reloadFarms: loadFarms });
   } catch (err) {
     page.textContent = '';
     page.append(el('div', 'note bad', err.message));

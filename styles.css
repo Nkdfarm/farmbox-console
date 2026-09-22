@@ -987,3 +987,13 @@ html { zoom: var(--zoom, 1); }
 .tk-mc.today .tk-mn { color: var(--accent); font-weight: 700; }
 .tk-morelink { font-size: 11px; color: var(--accent); background: transparent; border: 0; cursor: pointer; text-align: left; padding: 0 4px; font-family: inherit; }
 tr.off { opacity: .6; }
+
+/* the sections' tabs, under the top bar (0.7.70) */
+.sec-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-4) var(--space-8) 0; }
+.sec-tabs[hidden] { display: none; }
+.sec-tabs a { padding: 7px 14px; border-radius: var(--radius-full); color: var(--text-muted); text-decoration: none;
+  font-size: var(--text-sm); font-weight: 600; border: 1px solid transparent; }
+.sec-tabs a:hover { color: var(--text); background: var(--hover); }
+.sec-tabs a[aria-current="page"] { background: var(--surface-offset); color: var(--text); border-color: var(--border); }
+.sec-tabs + .page { padding-top: var(--space-4); }
+@media (max-width: 900px) { .sec-tabs { padding-left: var(--space-4); padding-right: var(--space-4); } }

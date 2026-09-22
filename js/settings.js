@@ -37,7 +37,9 @@ export function applyTheme(choice = currentTheme()) {
 darkQuery.addEventListener('change', () => { if (currentTheme() === 'system') applyTheme(); });
 
 // 'harvest' was a page until 0.7.68 (removed at the owner's request): a device that still opens on it lands on the dashboard
-export const startPage = () => { const s = get(START_KEY); return !s || s === 'harvest' ? 'dashboard' : s; };
+// the sections of 0.7.70; a device that chose one of the old pages lands in its section
+const OLD_START = { crops: 'grow', cropdb: 'grow', procedures: 'grow', people: 'farm', harvest: 'dashboard', prices: 'office', purchasing: 'office', issues: 'dashboard', reports: 'dashboard' };
+export const startPage = () => { const s = get(START_KEY); return !s ? 'dashboard' : (OLD_START[s] || s); };
 
 // ── the panel ──────────────────────────────────────────────────────────────
 // ctx comes from app.js: { user, name, roleText, roleTone, isFranchisor,
@@ -255,8 +257,8 @@ function layout(ctx, touched) {
 
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
-  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['crops', 'Crops & plan'],
-   ['people', 'People']].forEach(([v, label]) => {
+  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'IPM'], ['office', 'Office'],
+   ['maintenance', 'Maintenance'], ['farm', 'Farm setup']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;
     pick.append(o);

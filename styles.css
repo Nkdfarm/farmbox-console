@@ -975,7 +975,7 @@ html { zoom: var(--zoom, 1); }
 .tk.big .tk-title { -webkit-line-clamp: 3; }
 .tk-day { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 /* morning · afternoon · anytime (0079): bands across the week, one line between AM and PM */
-.tk-cal.tk-bands { grid-template-rows: auto minmax(120px, auto) minmax(120px, auto) auto; }
+.tk-cal.tk-bands { grid-template-rows: auto minmax(160px, auto) minmax(160px, auto); }
 .tk-cal.tk-bands .tk-cell { background: var(--surface); }
 .tk-band { background: var(--surface); min-width: 0; padding: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
 .tk-band.today { box-shadow: inset 2px 0 0 var(--accent); }

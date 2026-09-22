@@ -120,8 +120,16 @@ const SLOTS = ['am', 'pm', 'any'];
 const SLOT_WORD = { am: 'Morning', pm: 'Afternoon', any: 'Anytime' };
 const SLOT_SHORT = { am: 'AM', pm: 'PM', any: '—' };
 const slotOf = t => SLOTS.includes(t.slot) ? t.slot : (t.due_time ? (t.due_time < '12:00' ? 'am' : 'pm') : 'any');
-const byTime = (a, b) => (SLOTS.indexOf(slotOf(a)) - SLOTS.indexOf(slotOf(b)))
-  || (a.due_time || '99').localeCompare(b.due_time || '99') || a.title.localeCompare(b.title);
+// where it is drawn (0080): an anytime task fills the morning while the morning has room, else the afternoon
+const BANDS = ['am', 'pm'];
+const bandOf = t => BANDS.includes(t.plan_slot) ? t.plan_slot : (slotOf(t) === 'pm' ? 'pm' : 'am');
+const PRIO_ORDER = { critical: 0, high: 1, normal: 2, low: 3 };
+// within a half: the fixed work first (by its hour), then anytime in the order it was placed
+const byTime = (a, b) => (BANDS.indexOf(bandOf(a)) - BANDS.indexOf(bandOf(b)))
+  || ((slotOf(a) === 'any') - (slotOf(b) === 'any'))
+  || (a.due_time || '99').localeCompare(b.due_time || '99')
+  || ((PRIO_ORDER[a.priority] ?? 2) - (PRIO_ORDER[b.priority] ?? 2))
+  || a.title.localeCompare(b.title);
 
 // ── the page ───────────────────────────────────────────────────────────────
 function paint() {
@@ -265,11 +273,11 @@ function weekBoard(tasks) {
     head.append(el('span', null, shortDay(date)), el('span', 'tk-count', n ? String(n) : ''));
     grid.append(head);
   }
-  SLOTS.forEach(slot => {
+  BANDS.forEach(slot => {
     for (let i = 0; i < 7; i++) {
       const date = shift(week, i);
       const cell = el('div', 'tk-band ' + slot + (date === tod ? ' today' : ''));
-      const list = tasks.filter(t => t.date === date && slotOf(t) === slot).sort(byTime);
+      const list = tasks.filter(t => t.date === date && bandOf(t) === slot).sort(byTime);
       if (i === 0 || list.length) cell.append(el('div', 'tk-band-label', SLOT_WORD[slot]));
       list.forEach(t => cell.append(chip(t)));
       grid.append(cell);
@@ -284,8 +292,8 @@ function dayView(tasks) {
   if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
   box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h`));
-  SLOTS.forEach(slot => {
-    const part = list.filter(t => slotOf(t) === slot);
+  BANDS.forEach(slot => {
+    const part = list.filter(t => bandOf(t) === slot);
     const band = el('div', 'tk-band ' + slot);
     band.append(el('div', 'tk-band-label', SLOT_WORD[slot] + (part.length ? '' : ' — nothing')));
     part.forEach(t => band.append(chip(t, { big: true })));
@@ -442,7 +450,7 @@ function openTask(t) {
   fact('Kind', subFamilyTag(t.category || t.family));
   fact('Family', t.family);
   if (t.crop) fact('Crop', t.crop);
-  fact('When', SLOT_WORD[slotOf(t)]);
+  fact('When', SLOT_WORD[slotOf(t)] + (slotOf(t) === 'any' ? ' · drawn in the ' + SLOT_WORD[bandOf(t)].toLowerCase() : ''));
   fact('Takes', hrs(t.minutes) + ' h');
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') : t.status.replace('_', ' '));

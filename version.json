@@ -1,5 +1,5 @@
 {
-  "version": "0.7.78",
+  "version": "0.7.79",
   "released": "2026-09-23",
-  "note": "Morning, afternoon, anytime: a task's place in the day is one of three words; the week and the day draw the morning above a line and the afternoon below it. Migration 0079, Naked Brain 0.11.17."
+  "note": "One line between AM and PM: anytime work fills the morning while it has room, then the afternoon, so the day is one list with one line in it. Migration 0080, Naked Brain 0.11.18."
 }

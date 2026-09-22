@@ -1,5 +1,5 @@
 {
-  "version": "0.7.66",
+  "version": "0.7.67",
   "released": "2026-09-22",
   "note": "IPM: sticky traps with a code that says where they hang, a weekly trap round with a photo and an insect count per trap, an IPM page with counts, trends, photos and rounds. Naked Brain 0.11.7 runs the round."
 }

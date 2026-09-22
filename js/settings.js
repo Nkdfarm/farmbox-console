@@ -254,7 +254,7 @@ function layout(ctx, touched) {
 
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
-  [['dashboard', 'Dashboard'], ['week', 'Weekly plan'], ['crops', 'Crops & plan'],
+  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['crops', 'Crops & plan'],
    ['harvest', 'Harvest'], ['people', 'People']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;

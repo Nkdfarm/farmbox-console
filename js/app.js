@@ -3,7 +3,7 @@ import { getSession, signIn, signOut, me, select, rpc,
          connection, onConnection, newPage, reconnect } from './api.js';
 import { el, toast, icon, avatar, pref, setPhotos } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
-import { renderWeek, defaultWeek } from './week.js';
+import { renderWeek, defaultWeek, nextWeek } from './week.js';
 import { renderFarm } from './farm.js';
 import { renderCrops } from './crops.js';
 import { renderDashboard, calendarRange } from './dashboard.js';
@@ -102,7 +102,7 @@ applyTheme();
 const ROUTES = {
   dashboard: { title: 'Dashboard', render: renderDashboard },
   people: { title: 'People', render: renderPeople },
-  week:   { title: 'Weekly plan', render: renderWeek },
+  week:   { title: 'Tasks', render: renderWeek },
   farm:   { title: 'Farm setup', render: renderFarm },
   crops:  { title: 'Crops & plan', render: renderCrops },
   cropdb: { title: 'Crop database', render: renderCropDb },
@@ -313,7 +313,7 @@ async function warm() {
   const p = { p_farm: id };
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
-    ['labour_week', { ...p, p_week: defaultWeek() }], ['crop_map', p],
+    ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
     ['harvests', { ...p, p_days: 30 }], ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],

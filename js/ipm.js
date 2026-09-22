@@ -10,7 +10,7 @@
 // and set the watch / over thresholds. A count over the threshold has
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn } from './api.js';
+import { rpc, fn, api, URL_BASE } from './api.js';
 import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -220,7 +220,21 @@ function sparkline(points, th) {
 function openReading(t, r) {
   const d = drawer(`Trap ${t.code}`, `${when(r.read_at)} · ${num(r.total, 0)} insects` + (r.replaced ? ' · trap replaced' : ''));
   d.box.style.width = 'min(720px, 100vw)';
-  if (r.photo_data) { const im = el('img', 'ipm-photo'); im.src = r.photo_data; im.alt = `trap ${t.code}`; d.body.append(im); }
+  if (r.photo_data) {
+    const im = el('img', 'ipm-photo'); im.src = r.photo_data; im.alt = `trap ${t.code}`; d.body.append(im);
+    // the full photo from the evidence bucket, when the phone uploaded one (Naked Brain 0.11.11)
+    if (r.photo_path) {
+      const link = el('a', 'linkish', 'Full photo…'); link.style.display = 'inline-block'; link.style.marginBottom = 'var(--space-3)';
+      link.href = '#'; link.onclick = e => { e.preventDefault(); };
+      d.body.append(link);
+      fullPhotoUrl(r.photo_path).then(u => {
+        if (!u) { link.textContent = 'Full photo not reachable'; return; }
+        im.src = u; im.title = 'the full photo';
+        link.textContent = 'Open the full photo in a new tab';
+        link.href = u; link.target = '_blank'; link.rel = 'noopener'; link.onclick = null;
+      }).catch(() => { link.textContent = 'Full photo not reachable'; });
+    }
+  }
   const c = r.counts || {};
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k), el('span', 'fact-v', v ?? '—')); facts.append(f); };
@@ -294,6 +308,13 @@ function openReading(t, r) {
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
+}
+
+// a signed URL (one hour) for a photo in the private evidence bucket; storage RLS
+// lets a member of the farm read its own farm's folder
+async function fullPhotoUrl(path) {
+  const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  return res?.signedURL ? URL_BASE + '/storage/v1' + res.signedURL : null;
 }
 
 // the AI's species list: common name, taxon, group, count with a bar, confidence

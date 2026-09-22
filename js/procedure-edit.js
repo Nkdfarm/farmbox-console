@@ -13,6 +13,8 @@ import { familyOptions, subFamiliesOf } from './families.js';
 const FREQ = [['', '—'], ['Daily', 'Daily'], ['Weekly', 'Weekly'], ['Monthly', 'Monthly'],
               ['Per batch', 'Per batch'], ['Per crop template', 'Per crop template'], ['On demand', 'On demand']];
 const TARGETS = [['system', 'Each bay (per system)'], ['area', 'Each area'], ['farm', 'The whole FarmBox']];
+// a crop-plan procedure may also make one task per crop (the harvests) or per batch
+const CROP_TARGETS = [['crop', 'Each crop, per bay'], ['position', 'Each batch']];
 const AREAS = [['zone', 'Zone'], ['sump', 'Sump'], ['room', 'Pump room'], ['nursery', 'Nursery'],
                ['packing', 'Packing'], ['office', 'Office'], ['outside', 'Outside']];
 const TRIGGERS = [['routine', 'Routine'], ['crop_plan', 'Crop plan'], ['maintenance_rule', 'Maintenance rule'],
@@ -94,17 +96,25 @@ export function editProcedure(p, subFamilies, onSaved) {
   const dl = el('span');
   const freq = selectBox(FREQ, p.frequency || '');
   const rule = input({ value: p.frequency_rule || '', placeholder: 'e.g. Mondays at 08:00' });
-  const target = selectBox(TARGETS, p.target || 'farm');
+  const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
+  const target = selectBox(p.trigger_kind === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS, p.target || 'farm');
   const areas = toggles(AREAS, p.area_kinds);
   const systems = toggles(systemTypes(p.systems || []), p.systems);
-  const areasF = field('Areas', areas);
+  const areasF = field('Areas', areas, 'For a crop-plan job on the whole FarmBox: where it happens (nursery, packing).');
   const systemsF = field('Systems', systems);
+  const fillTargets = () => {
+    const list = trigger.value === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS;
+    const keep = target.value;
+    target.textContent = '';
+    list.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; target.append(o); });
+    target.value = list.some(([v]) => v === keep) ? keep : 'system';
+  };
   const showTarget = () => {
-    areasF.style.display = target.value === 'area' ? '' : 'none';
-    systemsF.style.display = target.value === 'system' ? '' : 'none';
+    areasF.style.display = target.value === 'area' || (target.value === 'farm' && trigger.value === 'crop_plan') ? '' : 'none';
+    systemsF.style.display = target.value === 'system' && trigger.value !== 'crop_plan' ? '' : 'none';
   };
   target.onchange = showTarget;
-  const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
+  trigger.onchange = () => { fillTargets(); showTarget(); };
   const validation = selectBox(VALIDATION, p.validation || 'checklist');
   const minutes = input({ type: 'number', min: 1, step: '1', value: p.minutes ?? 5 });
   const people = input({ type: 'number', min: 1, step: '1', value: p.min_workers ?? 1 });

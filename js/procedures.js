@@ -80,7 +80,8 @@ function paint() {
     // the same sub-family People › Responsible for and the planner use
     { key: 'category', label: 'Sub-family', fmt: v => subFamilyTag(v) },
     { key: 'frequency', label: 'When', fmt: (v, r) =>
-        [v, r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area' : null]
+        [v, r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area'
+              : r.target === 'crop' ? 'per crop' : r.target === 'position' ? 'per batch' : null]
           .filter(Boolean).join(' · ') },
     { key: 'steps', label: 'Steps', align: 'right' },
     { key: 'minutes', label: 'Minutes', align: 'right', fmt: v => num(v) },
@@ -115,7 +116,9 @@ async function openProcedure(row) {
   fact('Frequency', p.frequency);
   fact('Repeats over', p.target === 'system' ? 'each bay'
                      : p.target === 'area' ? (p.area_kinds || []).join(', ') || 'each area'
-                     : 'the whole FarmBox');
+                     : p.target === 'crop' ? 'each crop in each bay'
+                     : p.target === 'position' ? 'each batch'
+                     : 'the whole FarmBox' + ((p.area_kinds || []).length ? ' · ' + p.area_kinds.join(', ') : ''));
   fact('Minutes', p.minutes_per_unit
         ? `${p.minutes} + ${p.minutes_per_unit}/${p.unit || 'unit'}` : p.minutes);
   fact('People', p.min_workers);

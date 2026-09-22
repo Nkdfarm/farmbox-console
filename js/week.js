@@ -109,7 +109,7 @@ function visible(tasks) {
     (filters.status === 'all' || (filters.status === 'done' ? t.status === 'done' : isOpen(t)))
     && (!filters.family || t.family === filters.family)
     && (!filters.category || (t.category || '') === filters.category)
-    && (!filters.crop || (t.crop || '') === filters.crop)
+    && (!filters.crop || (t.crops?.length ? t.crops : [t.crop || '']).includes(filters.crop))
     && (!filters.area || (t.area || '') === filters.area)
     && (!filters.priority || t.priority === filters.priority)
     && (!filters.worker || (filters.worker === 'nobody' ? !t.workers.length : t.workers.some(w => w.id === filters.worker)))
@@ -174,7 +174,7 @@ function filterBar() {
   sel('status', 'Status', STATUS);
   sel('family', 'Type', uniq(t => t.family).map(x => [x, x]));
   sel('category', 'Sub-family', uniq(t => t.category).map(x => [x, x]));
-  sel('crop', 'Crop', uniq(t => t.crop).map(x => [x, x]));
+  sel('crop', 'Crop', [...new Set(tasks.flatMap(t => t.crops?.length ? t.crops : [t.crop]).filter(Boolean))].sort().map(x => [x, x]));
   const people = new Map();
   tasks.forEach(t => (t.workers || []).forEach(w => people.set(w.id, w.name)));
   (data?.roster || []).forEach(r => people.set(r.worker_id, r.name));
@@ -365,14 +365,21 @@ const cell = child => { const c = el('td'); c.append(child); return c; };
 const UNIT_WORDS = { tray: ['tray', 'trays'], plant: ['plant', 'plants'], m2: ['m²', 'm²'], system: ['system', 'systems'], batch: ['batch', 'batches'], position: ['position', 'positions'] };
 const unitWord = (u, n) => (UNIT_WORDS[u] || [u, u])[Number(n) === 1 ? 0 : 1];
 
+// The positions a task covers, by zone: "Zone 2 · 2A 138 plants (35 min) · 2B …".
+// The crop is named on the position only when the task has more than one.
 function positionsLine(task) {
   if (!task.positions?.length) return null;
   const unit = task.unit && task.unit !== 'position' ? task.unit : null;
+  const crops = new Set(task.positions.map(p => p.crop).filter(Boolean));
+  const one = p => p.code + (crops.size > 1 && p.crop ? ` ${p.crop}` : '')
+    + (unit && p.quantity ? ` ${Math.round(p.quantity * 10) / 10}` : '') + (p.minutes ? ` (${Math.round(p.minutes)} min)` : '');
+  const zones = new Map();
+  task.positions.forEach(p => { const z = p.zone || ''; if (!zones.has(z)) zones.set(z, []); zones.get(z).push(p); });
   const pos = el('div', 'hint week-positions');
-  pos.textContent = task.positions.map(p =>
-    p.code + (unit && p.quantity ? ` ${Math.round(p.quantity * 10) / 10}` : '') + (p.minutes ? ` (${Math.round(p.minutes)} min)` : '')).join(' · ')
+  pos.textContent = [...zones.entries()].map(([z, ps]) =>
+    (zones.size > 1 && z ? z + ' — ' : '') + ps.map(one).join(' · ')).join('  ·  ')
     + (unit && task.quantity ? ` — ${Math.round(task.quantity * 10) / 10} ${unitWord(unit, task.quantity)}` : '');
-  pos.title = task.positions.map(p => `${p.code}: ${p.quantity ?? ''} ${p.unit ?? ''} · ${p.minutes ?? 0} min`).join(String.fromCharCode(10));
+  pos.title = task.positions.map(p => `${[p.zone, p.code].filter(Boolean).join(' ')}${p.crop ? ' · ' + p.crop : ''}: ${p.quantity ?? ''} ${p.unit ?? ''} · ${p.minutes ?? 0} min`).join(String.fromCharCode(10));
   return pos;
 }
 
@@ -421,7 +428,11 @@ function openTask(t) {
   if (t.harvest_kg != null) fact('Harvested', `${Number(t.harvest_kg)} kg`);
   d.body.append(facts);
   const pos = positionsLine(t);
-  if (pos) { d.body.append(el('div', 'sec-title', 'Positions')); pos.className = ''; d.body.append(pos); }
+  if (pos) {
+    const zones = [...new Set(t.positions.map(p => p.zone).filter(Boolean))];
+    d.body.append(el('div', 'sec-title', 'Positions' + (zones.length > 1 ? ' · ' + zones.join(', ') : '')));
+    pos.className = ''; d.body.append(pos);
+  }
 
   const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
   if (t.status !== 'done') {

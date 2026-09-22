@@ -1,5 +1,5 @@
 {
-  "version": "0.7.71",
+  "version": "0.7.72",
   "released": "2026-09-22",
-  "note": "IPM: sticky traps with a code that says where they hang, a weekly trap round with a photo and an insect count per trap, an IPM page with counts, trends, photos and rounds. Naked Brain 0.11.7 runs the round."
+  "note": "Tasks aggregated by what the procedure covers: one transplant task per zone with every crop in it, one sowing task a day for the whole FarmBox, harvests still per crop. Positions listed by zone with their crop. Migration 0073, Naked Brain 0.11.13."
 }

@@ -383,7 +383,7 @@ function taskRow(task) {
   tr.append(cell(el('span', 'mono', hhmm(task.due_time) || '—')));
   const what = el('div');
   what.append(el('b', null, task.title));
-  what.append(el('div', 'hint', [task.area, task.crop, hrs(task.minutes) + ' h'].filter(Boolean).join(' · ')));
+  what.append(el('div', 'hint', [task.area, task.crop, hrs(task.minutes) + ' h', task.harvest_kg != null ? `${Number(task.harvest_kg)} kg harvested` : null].filter(Boolean).join(' · ')));
   const pos = positionsLine(task); if (pos) what.append(pos);
   tr.append(cell(what));
   tr.append(cell(subFamilyTag(task.category || task.family)));
@@ -418,6 +418,7 @@ function openTask(t) {
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') : t.status.replace('_', ' '));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') : 'nobody yet');
+  if (t.harvest_kg != null) fact('Harvested', `${Number(t.harvest_kg)} kg`);
   d.body.append(facts);
   const pos = positionsLine(t);
   if (pos) { d.body.append(el('div', 'sec-title', 'Positions')); pos.className = ''; d.body.append(pos); }

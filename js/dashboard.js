@@ -429,7 +429,7 @@ const byDate = rows => {
 const dayIndex = rows => new Map((rows || []).map(r => [String(r.date).slice(0, 10), r]));
 const openOn = (res, d) => !res.operating_days || res.operating_days.includes(isoDow(d));
 const todayKey = res => String(res.today || ymd(new Date())).slice(0, 10);
-const eventDetail = x => x.kind === 'harvest' ? `${x.position} · ${x.kg ?? '—'} kg`
+const eventDetail = x => x.kind === 'harvest' ? `${x.position} · ${x.kg ?? '—'} kg` + (x.recorded === true ? ' harvested' : x.recorded === false ? ' expected' : '')
                        : x.kind === 'transplant' ? `${x.position} · in`
                        : `${x.position} · sown`;
 

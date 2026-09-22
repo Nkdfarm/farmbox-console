@@ -394,3 +394,16 @@ export function subFamilyTag(name, cls = 'tag') {
   t.style.setProperty('--h', subFamilyHue(name));
   return t;
 }
+
+// The crop's sowing parameters as one line: "1 seed/plug · 10 mm deep · vermiculite · 24–28 °C" (0074).
+export function sowingLine(s) {
+  if (!s || typeof s !== 'object') return '';
+  const n = v => (v === '' || v == null ? null : Number(v));
+  return [n(s.seeds_per_plug) != null ? `${n(s.seeds_per_plug)} seed${n(s.seeds_per_plug) === 1 ? '' : 's'}/plug` : null,
+          n(s.seed_g_per_tray) != null ? `${n(s.seed_g_per_tray)} g/tray` : null,
+          n(s.depth_mm) != null ? (n(s.depth_mm) === 0 ? 'on the surface' : `${n(s.depth_mm)} mm deep`) : null,
+          s.cover && s.cover !== 'none' ? String(s.cover) : null,
+          n(s.blackout_days) != null ? `blackout ${n(s.blackout_days)} d` : null,
+          s.germination_c ? `${s.germination_c} °C` : null,
+          s.notes || null].filter(Boolean).join(' · ');
+}

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.72",
+  "version": "0.7.73",
   "released": "2026-09-22",
-  "note": "Tasks aggregated by what the procedure covers: one transplant task per zone with every crop in it, one sowing task a day for the whole FarmBox, harvests still per crop. Positions listed by zone with their crop. Migration 0073, Naked Brain 0.11.13."
+  "note": "The library pass: the routine checks come off the crop phases, one generic transplant / crop-end procedure with variants by system, and the crop's own sowing figures on the sowing task. Migration 0074, Naked Brain 0.11.14."
 }

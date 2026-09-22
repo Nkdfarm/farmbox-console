@@ -7,7 +7,7 @@
 // runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, toast, num, subFamilyTag } from './ui.js';
+import { el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -119,6 +119,9 @@ async function openProcedure(row) {
                      : p.target === 'crop' ? 'each crop in each bay'
                      : p.target === 'position' ? 'each batch'
                      : 'the whole FarmBox' + ((p.area_kinds || []).length ? ' · ' + p.area_kinds.join(', ') : ''));
+  if (p.variant_of) fact('Variant of', data.procedures.find(x => x.id === p.variant_of)?.title || '—');
+  const variants = data.procedures.filter(x => x.variant_of === p.id && x.status === 'approved');
+  if (variants.length) fact('Variants', variants.map(x => `${x.title} (${(x.systems || []).map(systemLabel).join(', ')})`).join(' · '));
   fact('Minutes', p.minutes_per_unit
         ? `${p.minutes} + ${p.minutes_per_unit}/${p.unit || 'unit'}` : p.minutes);
   fact('People', p.min_workers);
@@ -168,7 +171,7 @@ async function openProcedure(row) {
     edit.onclick = () => {
       d.close();
       const cats = [...new Set((data?.procedures || []).map(x => x.category).filter(Boolean))].sort();
-      editProcedure(p, cats, load);
+      editProcedure(p, cats, load, data.procedures);
     };
     d.footer.append(edit);
   } else {

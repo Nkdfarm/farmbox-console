@@ -74,7 +74,7 @@ const textarea = (value, placeholder, rows = 2) => {
   return t;
 };
 
-export function editProcedure(p, subFamilies, onSaved) {
+export function editProcedure(p, subFamilies, onSaved, all = []) {
   const d = drawer('Edit ' + p.title,
     `Version ${p.version ?? '—'} · a changed checklist is saved as a new version`);
   d.box.style.width = 'min(760px, 100vw)';
@@ -109,11 +109,19 @@ export function editProcedure(p, subFamilies, onSaved) {
     list.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; target.append(o); });
     target.value = list.some(([v]) => v === keep) ? keep : 'system';
   };
+  // a variant: the same act on particular systems; the phase links the parent (0074)
+  const parents = all.filter(x => x.trigger === 'crop_plan' && x.id !== p.id && !x.variant_of && x.status === 'approved')
+    .sort((a, b) => a.title.localeCompare(b.title)).map(x => [x.id, x.title]);
+  const variantOf = selectBox([['', '— (a procedure of its own)'], ...parents], p.variant_of || '');
+  const variantF = field('Variant of', variantOf, 'The generic procedure a crop phase links; this one is used instead on the systems ticked below.');
   const showTarget = () => {
-    areasF.style.display = target.value === 'area' || (target.value === 'farm' && trigger.value === 'crop_plan') ? '' : 'none';
-    systemsF.style.display = target.value === 'system' && trigger.value !== 'crop_plan' ? '' : 'none';
+    const cropPlan = trigger.value === 'crop_plan';
+    areasF.style.display = target.value === 'area' || (target.value === 'farm' && cropPlan) ? '' : 'none';
+    variantF.style.display = cropPlan ? '' : 'none';
+    systemsF.style.display = (target.value === 'system' && !cropPlan) || (cropPlan && variantOf.value) ? '' : 'none';
   };
   target.onchange = showTarget;
+  variantOf.onchange = showTarget;
   trigger.onchange = () => { fillTargets(); showTarget(); };
   const validation = selectBox(VALIDATION, p.validation || 'checklist');
   const minutes = input({ type: 'number', min: 1, step: '1', value: p.minutes ?? 5 });
@@ -130,7 +138,7 @@ export function editProcedure(p, subFamilies, onSaved) {
     grid('grid3', field('Title', title), field('Family', family),
          field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
     grid('grid3', field('When', freq), field('Rule', rule), field('Repeats over', target)),
-    areasF, systemsF,
+    areasF, variantF, systemsF,
     grid('grid3', field('Trigger', trigger), field('Validation', validation), field('Status', status)),
     grid('grid3', field('Minutes', minutes), field('People', people), field('Phone', appReady)),
     field('Purpose', purpose),
@@ -235,6 +243,7 @@ export function editProcedure(p, subFamilies, onSaved) {
       title: title.value.trim(), family: family.value, category: category.value.trim(),
       frequency: freq.value, frequency_rule: rule.value.trim(),
       target_kind: target.value, area_kinds: areas.value(), systems: systems.value(),
+      variant_of: trigger.value === 'crop_plan' ? variantOf.value : '',
       trigger_kind: trigger.value, validation: validation.value,
       estimated_minutes: Number(minutes.value) || 5, min_workers: Number(people.value) || 1,
       purpose: purpose.value, safety_ppe: ppe.value, tools: tools.value,

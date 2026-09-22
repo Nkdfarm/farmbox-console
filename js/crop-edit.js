@@ -10,7 +10,7 @@
 // overwrites it; leaving it empty goes back to the library figure.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num, sowingLine } from './ui.js';
 
 const CATEGORIES = [['leafy', 'Leafy'], ['mixed_leafy', 'Mixed leafy'], ['herbs', 'Herbs'],
                     ['microgreens', 'Microgreens'], ['fruiting_vines', 'Fruiting vines'], ['fruiting_bush', 'Fruiting bush']];
@@ -71,6 +71,21 @@ export async function editCrop(c, onSaved, farm) {
   notes.value = c.notes || '';
   notes.style.width = '100%';
 
+  // sowing: the procedure is the method, these are the crop's numbers (0074)
+  const sw = c.sowing || {};
+  const seeds = input({ type: 'number', min: 1, step: '1', value: sw.seeds_per_plug ?? '' });
+  const depth = input({ type: 'number', min: 0, step: '1', value: sw.depth_mm ?? '' });
+  const cover = selectBox([['', '—'], ['none', 'None (needs light)'], ['vermiculite', 'Vermiculite'], ['medium', 'Medium'], ['blackout', 'Blackout']], sw.cover || '');
+  const germ = input({ value: sw.germination_c ?? '', placeholder: 'e.g. 18–24' });
+  const seedG = input({ type: 'number', min: 0, step: 'any', value: sw.seed_g_per_tray ?? '' });
+  const blackout = input({ type: 'number', min: 0, step: '1', value: sw.blackout_days ?? '' });
+  const sowNotes = input({ value: sw.notes ?? '', placeholder: 'e.g. soak 8 h' });
+  const sowing = () => ({ seeds_per_plug: seeds.value, depth_mm: depth.value, cover: cover.value, germination_c: germ.value.trim(),
+                          seed_g_per_tray: seedG.value, blackout_days: blackout.value, notes: sowNotes.value.trim() });
+  const sowHint = el('div', 'hint');
+  const paintSow = () => { sowHint.textContent = sowingLine(sowing()) || 'Nothing yet — the sowing task shows these under each batch.'; };
+  [seeds, depth, cover, germ, seedG, blackout, sowNotes].forEach(x => { x.oninput = paintSow; x.onchange = paintSow; });
+
   const sysHint = el('div', 'hint');
   const paintSysHint = m => {
     const s = systemsFor(m).map(x => x.label);
@@ -87,8 +102,14 @@ export async function editCrop(c, onSaved, farm) {
                   field('Plugs per tray', plugs, 'Turns plants into trays for a procedure counted per tray.'),
                   field('Rotation group', rotation)),
     field('Notes', notes),
+    el('div', 'sec-title', 'Sowing'),
+    grid('grid3', field('Seeds per plug', seeds), field('Depth (mm)', depth, '0 = on the surface.'), field('Cover', cover)),
+    grid('grid3', field('Germination °C', germ), field('Seed g per tray', seedG, 'Microgreens: seed weight per 1020 tray.'),
+                  field('Blackout days', blackout)),
+    field('Sowing note', sowNotes), sowHint,
   );
   showGrams();
+  paintSow();
 
   // ── the cycle ──
   const phases = (c.phases || []).map(p => ({ ...p, procedures: (p.procedures || []).map(x => ({ ...x })) }));
@@ -222,6 +243,7 @@ export async function editCrop(c, onSaved, farm) {
         grams_per_unit: sell.value === 'kg' ? '' : grams.value,
         seedling_lead_days: lead.value, rotation_group: rotation.value, notes: notes.value,
         plugs_per_tray: plugs.value,
+        sowing: sowing(),
         phases: phases.map(p => ({ name: String(p.name).trim(), type: p.type || 'vegetative',
                                    days: p.days ?? 0, cues: p.cues || '',
                                    procedures: p.procedures.map(x => ({ sop_id: x.sop_id,

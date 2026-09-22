@@ -10,7 +10,7 @@
 // Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd,
+import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine,
          systemLabel, mediumLabel, systemsFor } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
@@ -457,6 +457,7 @@ async function openCrop(row) {
   fact('Seedling lead', c.seedling_lead_days ? c.seedling_lead_days + ' days' : '—');
   fact('Rotation group', c.rotation_group);
   fact('Scope', c.scope);
+  fact('Sowing', sowingLine(c.sowing) || '—');
   d.body.append(facts);
 
   d.body.append(el('div', 'sec-title', 'Systems and yield'));

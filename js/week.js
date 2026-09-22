@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
-         mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon } from './ui.js';
+         mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine } from './ui.js';
 import { roleLabel } from './people.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -432,6 +432,14 @@ function openTask(t) {
     const zones = [...new Set(t.positions.map(p => p.zone).filter(Boolean))];
     d.body.append(el('div', 'sec-title', 'Positions' + (zones.length > 1 ? ' · ' + zones.join(', ') : '')));
     pos.className = ''; d.body.append(pos);
+    // the crop's sowing figures, once per crop, when the task is a sowing or nursery one (0074)
+    const sow = new Map();
+    t.positions.forEach(p => { if (p.sowing && !sow.has(p.crop || '')) sow.set(p.crop || '', p.sowing); });
+    if (sow.size) {
+      const box = el('div', 'hint');
+      box.textContent = [...sow.entries()].map(([crop, x]) => (crop ? crop + ': ' : '') + sowingLine(x)).join('  ·  ');
+      d.body.append(box);
+    }
   }
 
   const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';

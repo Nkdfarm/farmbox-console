@@ -7,7 +7,7 @@
 // onto it; if not, only the details are written.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, systemTypes } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList } from './ui.js';
 import { familyOptions, subFamiliesOf } from './families.js';
 
 const FREQ = [['', '—'], ['Daily', 'Daily'], ['Weekly', 'Weekly'], ['Monthly', 'Monthly'],
@@ -99,7 +99,8 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
   const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
   const target = selectBox(p.trigger_kind === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS, p.target || 'farm');
   const areas = toggles(AREAS, p.area_kinds);
-  const systems = toggles(systemTypes(p.systems || []), p.systems);
+  // a system type, or a growing medium: {tray} is the tray benches, whatever their type (0077)
+  const systems = toggles([...systemTypes(p.systems || []), ...mediaList(p.systems || []).map(([c, l]) => [c, 'Medium · ' + l])], p.systems);
   const areasF = field('Areas', areas, 'For a crop-plan job on the whole FarmBox: where it happens (nursery, packing).');
   const systemsF = field('Systems', systems);
   const fillTargets = () => {

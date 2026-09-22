@@ -1,5 +1,5 @@
 {
-  "version": "0.7.75",
+  "version": "0.7.76",
   "released": "2026-09-22",
-  "note": "A routine can be one task a day with its systems listed (the irrigation check: one card, five zones). A batch standing in the zone without dates can be dated on its position. Migration 0076."
+  "note": "A routine may name a growing medium among its systems: Microgreens daily care on {tray} lands on the tray benches again. Migration 0077."
 }

@@ -95,6 +95,8 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
   family.onchange = () => fillSubs(category.value);
   const dl = el('span');
   const freq = selectBox(FREQ, p.frequency || '');
+  // morning, afternoon or anytime: how the day is planned (0079); a rule's hour stays a detail
+  const slot = selectBox([['any', 'Anytime'], ['am', 'Morning'], ['pm', 'Afternoon']], p.slot || 'any');
   const rule = input({ value: p.frequency_rule || '', placeholder: 'e.g. Mondays at 08:00' });
   const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
   const target = selectBox(p.trigger_kind === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS, p.target || 'farm');
@@ -146,6 +148,7 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
     areasF, variantF, systemsF, oneTaskF,
     grid('grid3', field('Trigger', trigger), field('Validation', validation), field('Status', status)),
     grid('grid3', field('Minutes', minutes), field('People', people), field('Phone', appReady)),
+    grid('grid3', field('Time of day', slot, 'Morning, afternoon or anytime — the boards order by it; open tasks follow a change.')),
     field('Purpose', purpose),
     grid('grid2', field('PPE', ppe), field('Tools', tools)),
   );
@@ -246,7 +249,7 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
     const measure = s => s.type === 'measure';
     const payload = {
       title: title.value.trim(), family: family.value, category: category.value.trim(),
-      frequency: freq.value, frequency_rule: rule.value.trim(),
+      frequency: freq.value, frequency_rule: rule.value.trim(), slot: slot.value,
       target_kind: target.value, area_kinds: areas.value(), systems: systems.value(),
       variant_of: trigger.value === 'crop_plan' ? variantOf.value : '',
       trigger_kind: trigger.value, validation: validation.value,

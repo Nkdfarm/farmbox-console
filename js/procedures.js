@@ -114,6 +114,7 @@ async function openProcedure(row) {
   fact('Version', p.version);
   fact('Status', p.status + (p.app_ready ? ' · app ready' : ''));
   fact('Frequency', p.frequency);
+  fact('Time of day', { am: 'Morning', pm: 'Afternoon' }[p.slot] || 'Anytime');
   fact('Repeats over', p.target === 'system' ? 'each bay'
                      : p.target === 'area' ? (p.area_kinds || []).join(', ') || 'each area'
                      : p.target === 'crop' ? 'each crop in each bay'

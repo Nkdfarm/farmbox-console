@@ -115,7 +115,13 @@ function visible(tasks) {
     && (!filters.worker || (filters.worker === 'nobody' ? !t.workers.length : t.workers.some(w => w.id === filters.worker)))
     && (!q || [t.title, t.area, t.crop, t.category, ...(t.workers || []).map(w => w.name)].join(' ').toLowerCase().includes(q)));
 }
-const byTime = (a, b) => (a.due_time || '99').localeCompare(b.due_time || '99') || a.title.localeCompare(b.title);
+// Morning · afternoon · anytime (0079): the slot orders the day; a clock time is a detail
+const SLOTS = ['am', 'pm', 'any'];
+const SLOT_WORD = { am: 'Morning', pm: 'Afternoon', any: 'Anytime' };
+const SLOT_SHORT = { am: 'AM', pm: 'PM', any: '—' };
+const slotOf = t => SLOTS.includes(t.slot) ? t.slot : (t.due_time ? (t.due_time < '12:00' ? 'am' : 'pm') : 'any');
+const byTime = (a, b) => (SLOTS.indexOf(slotOf(a)) - SLOTS.indexOf(slotOf(b)))
+  || (a.due_time || '99').localeCompare(b.due_time || '99') || a.title.localeCompare(b.title);
 
 // ── the page ───────────────────────────────────────────────────────────────
 function paint() {
@@ -247,20 +253,28 @@ function paintBody() {
   else body.append(weekBoard(tasks));
 }
 
+// The week as bands: the morning above a line, the afternoon below it, anytime
+// under a dotted one — the same line across every day (0079).
 function weekBoard(tasks) {
-  const grid = el('div', 'tk-cal');
+  const grid = el('div', 'tk-cal tk-bands');
   const tod = today();
   for (let i = 0; i < 7; i++) {
     const date = shift(week, i);
-    const col = el('div', 'tk-col' + (date === tod ? ' today' : ''));
-    const list = tasks.filter(t => t.date === date).sort(byTime);
-    const head = el('div', 'tk-col-head');
-    head.append(el('span', null, shortDay(date)), el('span', 'tk-count', list.length ? String(list.length) : ''));
-    col.append(head);
-    list.forEach(t => col.append(chip(t)));
-    if (!list.length) col.append(el('div', 'tk-none', '—'));
-    grid.append(col);
+    const n = tasks.filter(t => t.date === date).length;
+    const head = el('div', 'tk-col-head tk-cell' + (date === tod ? ' today' : ''));
+    head.append(el('span', null, shortDay(date)), el('span', 'tk-count', n ? String(n) : ''));
+    grid.append(head);
   }
+  SLOTS.forEach(slot => {
+    for (let i = 0; i < 7; i++) {
+      const date = shift(week, i);
+      const cell = el('div', 'tk-band ' + slot + (date === tod ? ' today' : ''));
+      const list = tasks.filter(t => t.date === date && slotOf(t) === slot).sort(byTime);
+      if (i === 0 || list.length) cell.append(el('div', 'tk-band-label', SLOT_WORD[slot]));
+      list.forEach(t => cell.append(chip(t)));
+      grid.append(cell);
+    }
+  });
   return grid;
 }
 
@@ -270,7 +284,13 @@ function dayView(tasks) {
   if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
   box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h`));
-  list.forEach(t => box.append(chip(t, { big: true })));
+  SLOTS.forEach(slot => {
+    const part = list.filter(t => slotOf(t) === slot);
+    const band = el('div', 'tk-band ' + slot);
+    band.append(el('div', 'tk-band-label', SLOT_WORD[slot] + (part.length ? '' : ' — nothing')));
+    part.forEach(t => band.append(chip(t, { big: true })));
+    box.append(band);
+  });
   return box;
 }
 
@@ -338,7 +358,7 @@ function chip(t, opts = {}) {
   title.title = [t.title, t.area, t.crop].filter(Boolean).join(' · ');
   text.append(title);
   if (opts.big) {
-    text.append(el('span', 'tk-sub', [hhmm(t.due_time) || null, t.area, t.crop, t.category, hrs(t.minutes) + ' h',
+    text.append(el('span', 'tk-sub', [hhmm(t.due_time) || SLOT_WORD[slotOf(t)], t.area, t.crop, t.category, hrs(t.minutes) + ' h',
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
   }
   c.append(ic, text);
@@ -388,7 +408,7 @@ function positionsLine(task) {
 function taskRow(task) {
   const tr = el('tr');
   if (task.status === 'done') tr.className = 'off';
-  tr.append(cell(el('span', 'mono', hhmm(task.due_time) || '—')));
+  tr.append(cell(el('span', 'mono', hhmm(task.due_time) || SLOT_SHORT[slotOf(task)])));
   const what = el('div');
   what.append(el('b', null, task.title));
   what.append(el('div', 'hint', [task.area, task.crop, hrs(task.minutes) + ' h', task.harvest_kg != null ? `${Number(task.harvest_kg)} kg harvested` : null].filter(Boolean).join(' · ')));
@@ -416,12 +436,13 @@ function taskRow(task) {
 // ── one task: the facts and the actions ────────────────────────────────────
 function openTask(t) {
   const wk = weeks.get(mondayOf(t.date)) || data;
-  const d = drawer(t.title, [longDate(t.date), hhmm(t.due_time) || null, t.area].filter(Boolean).join(' · '));
+  const d = drawer(t.title, [longDate(t.date), SLOT_WORD[slotOf(t)] + (hhmm(t.due_time) ? ' · ' + hhmm(t.due_time) : ''), t.area].filter(Boolean).join(' · '));
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
   fact('Kind', subFamilyTag(t.category || t.family));
   fact('Family', t.family);
   if (t.crop) fact('Crop', t.crop);
+  fact('When', SLOT_WORD[slotOf(t)]);
   fact('Takes', hrs(t.minutes) + ' h');
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') : t.status.replace('_', ' '));
@@ -445,6 +466,20 @@ function openTask(t) {
   }
 
   const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
+  if (t.status !== 'done' && mayPlan) {
+    // move this one task to the other half of the day (the procedure sets the default)
+    const mv = el('div', 'acts');
+    SLOTS.filter(x => x !== slotOf(t)).forEach(x => {
+      const b = el('button', 'btn btn-sm btn-ghost', 'Move to ' + SLOT_WORD[x].toLowerCase());
+      b.onclick = async () => {
+        busy(b, true, 'Moving…');
+        try { await rpc('set_task_slot', { p_task: t.id, p_slot: x }); d.close(); toast(`Moved to the ${SLOT_WORD[x].toLowerCase()}`, 'ok'); await load(); }
+        catch (e) { busy(b, false, 'Move'); toast(e.message, 'bad'); }
+      };
+      mv.append(b);
+    });
+    d.body.append(mv);
+  }
   if (t.status !== 'done') {
     if (mayPlan) {
       const ch = el('button', 'btn', 'Change who');

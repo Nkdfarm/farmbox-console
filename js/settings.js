@@ -36,7 +36,8 @@ export function applyTheme(choice = currentTheme()) {
 }
 darkQuery.addEventListener('change', () => { if (currentTheme() === 'system') applyTheme(); });
 
-export const startPage = () => get(START_KEY) || 'dashboard';
+// 'harvest' was a page until 0.7.68 (removed at the owner's request): a device that still opens on it lands on the dashboard
+export const startPage = () => { const s = get(START_KEY); return !s || s === 'harvest' ? 'dashboard' : s; };
 
 // ── the panel ──────────────────────────────────────────────────────────────
 // ctx comes from app.js: { user, name, roleText, roleTone, isFranchisor,
@@ -255,7 +256,7 @@ function layout(ctx, touched) {
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
   [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['crops', 'Crops & plan'],
-   ['harvest', 'Harvest'], ['people', 'People']].forEach(([v, label]) => {
+   ['people', 'People']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;
     pick.append(o);

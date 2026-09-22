@@ -16,7 +16,6 @@ import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderIpm } from './ipm.js';
-import { renderHarvest } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -106,7 +105,6 @@ const ROUTES = {
   farm:   { title: 'Farm setup', render: renderFarm },
   crops:  { title: 'Crops & plan', render: renderCrops },
   cropdb: { title: 'Crop database', render: renderCropDb },
-  harvest: { title: 'Harvest', render: renderHarvest },
   procedures: { title: 'Procedures', render: renderProcedures },
   maintenance: { title: 'Maintenance', render: renderMaintenance },
   purchasing: { title: 'Purchasing', render: renderPurchasing },
@@ -314,7 +312,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['harvests', { ...p, p_days: 30 }], ['crop_library', p], ['procedures', p],
+    ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],
     ['people', p], ['family_tree', p], ['farm_market', p],

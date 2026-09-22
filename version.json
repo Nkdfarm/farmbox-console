@@ -1,5 +1,5 @@
 {
-  "version": "0.7.74",
+  "version": "0.7.75",
   "released": "2026-09-22",
-  "note": "task_item: what a task covers, whatever the module. Maintenance groups its interval rules into one task per procedure, zone and day with one tickable row per asset; a done task signs every rule off. Migration 0075, Naked Brain 0.11.15."
+  "note": "A routine can be one task a day with its systems listed (the irrigation check: one card, five zones). A batch standing in the zone without dates can be dated on its position. Migration 0076."
 }

@@ -118,6 +118,7 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
     const cropPlan = trigger.value === 'crop_plan';
     areasF.style.display = target.value === 'area' || (target.value === 'farm' && cropPlan) ? '' : 'none';
     variantF.style.display = cropPlan ? '' : 'none';
+    oneTaskF.style.display = !cropPlan && ['system', 'area'].includes(target.value) ? '' : 'none';
     systemsF.style.display = (target.value === 'system' && !cropPlan) || (cropPlan && variantOf.value) ? '' : 'none';
   };
   target.onchange = showTarget;
@@ -128,6 +129,9 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
   const people = input({ type: 'number', min: 1, step: '1', value: p.min_workers ?? 1 });
   const status = selectBox(STATUS, p.status || 'approved');
   const appReady = checkbox('App ready (shown on the phone)', p.app_ready);
+  // a routine over systems or areas: one task a day with the targets listed (0076)
+  const oneTask = checkbox('One task a day, the systems listed on it', p.one_task);
+  const oneTaskF = field('Grouping', oneTask, 'For a checklist of ticks. A checklist that measures per system keeps one task per system.');
   const purpose = textarea(p.purpose, 'Why this procedure exists');
   const ppe = input({ value: Array.isArray(p.ppe) ? p.ppe.join(', ') : (p.ppe || '') });
   const tools = input({ value: Array.isArray(p.tools) ? p.tools.join(', ') : (p.tools || '') });
@@ -138,7 +142,7 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
     grid('grid3', field('Title', title), field('Family', family),
          field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
     grid('grid3', field('When', freq), field('Rule', rule), field('Repeats over', target)),
-    areasF, variantF, systemsF,
+    areasF, variantF, systemsF, oneTaskF,
     grid('grid3', field('Trigger', trigger), field('Validation', validation), field('Status', status)),
     grid('grid3', field('Minutes', minutes), field('People', people), field('Phone', appReady)),
     field('Purpose', purpose),
@@ -247,7 +251,7 @@ export function editProcedure(p, subFamilies, onSaved, all = []) {
       trigger_kind: trigger.value, validation: validation.value,
       estimated_minutes: Number(minutes.value) || 5, min_workers: Number(people.value) || 1,
       purpose: purpose.value, safety_ppe: ppe.value, tools: tools.value,
-      status: status.value, app_ready: appReady.value(),
+      status: status.value, app_ready: appReady.value(), one_task: oneTask.value(),
       change_note: note.value.trim(),
       steps: steps.map(s => ({
         from_seq: s.from_seq ?? null,

@@ -243,6 +243,22 @@ function openPosition(p, s, cur) {
     row('Transplant', fmt(b.transplant_date));
     row('Harvest', fmt(b.harvest_start) + (b.harvest_end ? ' → ' + fmt(b.harvest_end) : ''));
     if (b.yield) row('Expected', Math.round(b.yield) + ' kg · ' + money(b.revenue, cur));
+    // a batch standing here without dates never makes a task: a manager dates it (0076)
+    if (map.may_plan && b.id && ['validated', 'active'].includes(b.status) && !b.transplant_date) {
+      const when = input({ type: 'date' });
+      const go = el('button', 'btn btn-sm', 'Set dates');
+      go.onclick = async () => {
+        if (!when.value) { toast('Pick the transplant date', 'bad'); return; }
+        busy(go, true, 'Saving…');
+        try {
+          const r = await rpc('set_batch_dates', { p_plan: b.id, p_transplant: when.value });
+          d.close(); toast(`Dated · harvest from ${fmt(r.harvest_start)} · ${r.tasks} tasks`, 'ok'); await load();
+        } catch (e) { busy(go, false, 'Set dates'); toast(e.message, 'bad'); }
+      };
+      const r = el('div', 'set-row'); r.append(el('span', null, 'Transplanted on'));
+      const w = el('span'); w.append(when, go); r.append(w); facts.append(r);
+      facts.append(el('div', 'hint', 'No dates on this batch, so it has no tasks. The harvest window follows from the cycle.'));
+    }
   });
   if (!(p.batches || []).length) row('Free from', fmt(p.free_on));
   row('Grows in', (s.media || []).map(m => mediumLabel(m)).join(', '));

@@ -367,11 +367,12 @@ const unitWord = (u, n) => (UNIT_WORDS[u] || [u, u])[Number(n) === 1 ? 0 : 1];
 
 // The positions a task covers, by zone: "Zone 2 · 2A 138 plants (35 min) · 2B …".
 // The crop is named on the position only when the task has more than one.
+// A maintenance task lists its assets the same way (task_item, 0075), ✓ when ticked.
 function positionsLine(task) {
   if (!task.positions?.length) return null;
-  const unit = task.unit && task.unit !== 'position' ? task.unit : null;
+  const unit = task.unit && !['position', 'asset', 'area', 'trap'].includes(task.unit) ? task.unit : null;
   const crops = new Set(task.positions.map(p => p.crop).filter(Boolean));
-  const one = p => p.code + (crops.size > 1 && p.crop ? ` ${p.crop}` : '')
+  const one = p => (p.done_at ? '✓ ' : '') + (p.code || p.label || '?') + (crops.size > 1 && p.crop ? ` ${p.crop}` : '')
     + (unit && p.quantity ? ` ${Math.round(p.quantity * 10) / 10}` : '') + (p.minutes ? ` (${Math.round(p.minutes)} min)` : '');
   const zones = new Map();
   task.positions.forEach(p => { const z = p.zone || ''; if (!zones.has(z)) zones.set(z, []); zones.get(z).push(p); });
@@ -430,7 +431,8 @@ function openTask(t) {
   const pos = positionsLine(t);
   if (pos) {
     const zones = [...new Set(t.positions.map(p => p.zone).filter(Boolean))];
-    d.body.append(el('div', 'sec-title', 'Positions' + (zones.length > 1 ? ' · ' + zones.join(', ') : '')));
+    const items = t.positions.every(p => p.kind && p.kind !== 'position');
+    d.body.append(el('div', 'sec-title', (items ? 'Items' : 'Positions') + (zones.length > 1 ? ' · ' + zones.join(', ') : '')));
     pos.className = ''; d.body.append(pos);
     // the crop's sowing figures, once per crop, when the task is a sowing or nursery one (0074)
     const sow = new Map();

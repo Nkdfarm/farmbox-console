@@ -1,5 +1,5 @@
 {
-  "version": "0.7.73",
+  "version": "0.7.74",
   "released": "2026-09-22",
-  "note": "The library pass: the routine checks come off the crop phases, one generic transplant / crop-end procedure with variants by system, and the crop's own sowing figures on the sowing task. Migration 0074, Naked Brain 0.11.14."
+  "note": "task_item: what a task covers, whatever the module. Maintenance groups its interval rules into one task per procedure, zone and day with one tickable row per asset; a done task signs every rule off. Migration 0075, Naked Brain 0.11.15."
 }

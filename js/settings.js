@@ -38,7 +38,7 @@ darkQuery.addEventListener('change', () => { if (currentTheme() === 'system') ap
 
 // 'harvest' was a page until 0.7.68 (removed at the owner's request): a device that still opens on it lands on the dashboard
 // the sections of 0.7.70; a device that chose one of the old pages lands in its section
-const OLD_START = { crops: 'grow', cropdb: 'grow', procedures: 'grow', people: 'farm', harvest: 'dashboard', prices: 'office', purchasing: 'office', issues: 'dashboard', reports: 'dashboard' };
+const OLD_START = { crops: 'grow', cropdb: 'grow', procedures: 'grow', people: 'farm', harvest: 'grow', prices: 'office', purchasing: 'office', issues: 'dashboard', reports: 'dashboard' };
 export const startPage = () => { const s = get(START_KEY); return !s ? 'dashboard' : (OLD_START[s] || s); };
 
 // ── the panel ──────────────────────────────────────────────────────────────

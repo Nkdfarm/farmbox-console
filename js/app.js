@@ -16,6 +16,7 @@ import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderIpm } from './ipm.js';
+import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -121,7 +122,8 @@ const SECTIONS = {
     ['overview', 'Overview', renderDashboard], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek]] },
   grow: { title: 'Grow', tabs: [
-    ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')]] },
+    ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')],
+    ['harvest', 'Harvest', renderHarvest]] },
   ipm: { title: 'IPM', tabs: [['traps', 'Traps', renderIpm], ['programs', 'Programs', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     ['sell', 'Sell', renderPrices], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
@@ -133,7 +135,7 @@ const SECTIONS = {
 const MOVED = {
   crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/routines',
   prices: 'office/sell', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
-  people: 'farm/people', harvest: 'dashboard/overview',
+  people: 'farm/people', harvest: 'grow/harvest',
 };
 
 // ── sign in ────────────────────────────────────────────────────────────────
@@ -336,6 +338,7 @@ async function warm() {
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],
+    ['harvest_overview', { ...p, ...harvestRange() }],
     ['people', p], ['family_tree', p], ['farm_market', p],
   ];
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);

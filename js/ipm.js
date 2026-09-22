@@ -10,12 +10,13 @@
 // and set the watch / over thresholds. A count over the threshold has
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, fn } from './api.js';
 import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PESTS = [['', '—'], ['whitefly', 'Whitefly'], ['thrips', 'Thrips'], ['fungus_gnat', 'Fungus gnats'],
-               ['aphid', 'Aphids'], ['leafminer', 'Leaf miners'], ['moth', 'Moths'], ['other', 'Other / mixed']];
+               ['shore_fly', 'Shore flies'], ['aphid', 'Aphids'], ['leafminer', 'Leaf miners'], ['moth', 'Moths'],
+               ['beneficial', 'Natural enemies'], ['other', 'Other / mixed']];
 const pestLabel = v => (PESTS.find(p => p[0] === v) || [v, v || '—'])[1];
 
 let farm = null, data = null, mount = null;
@@ -68,6 +69,22 @@ function paint() {
   tile(stale.length, 'not read in 10 days', stale.length ? 'is-warn' : '');
   mount.append(tiles);
 
+  // ── what the AI saw on the photos, last four weeks ──
+  const sp = data.species || [];
+  if (sp.length || data.ai_pending) {
+    const c = el('div', 'card');
+    const head = el('div', 'row'); head.style.padding = 'var(--space-3) var(--space-4)';
+    head.append(el('b', null, 'Species on the traps'),
+      el('span', 'hint', ' · named by the AI from the last four weeks of photos' +
+        (data.ai_pending ? ` · ${data.ai_pending} photo${data.ai_pending > 1 ? 's' : ''} waiting` : '')));
+    c.append(head);
+    if (sp.length) c.append(speciesTable(sp, true));
+    else c.append(el('div', 'empty', 'No photo named yet.'));
+    mount.append(c);
+  } else if (!data.ai_ready) {
+    mount.append(el('div', 'note', 'Species detection is off: paste an Anthropic API key in Settings › Integrations and every new trap photo is sent to the AI, which names what it sees.'));
+  }
+
   // ── week by week ──
   if ((data.weeks || []).length) {
     const c = el('div', 'card');
@@ -115,7 +132,12 @@ function paint() {
           s.title = `previous ${v}`;
           return s; } },
       { key: 'trend', label: 'Trend', fmt: (v, t) => sparkline(v || [], th) },
-      { key: 'last', label: 'Mostly', fmt: v => v ? pestLabel(v.pest) + (v.corrected ? '' : v.algo_total != null ? ' · phone count' : '') : '—' },
+      { key: 'last', label: 'Mostly', fmt: v => {
+          if (!v) return '—';
+          if (v.pest) return pestLabel(v.pest) + (v.corrected ? '' : v.algo_total != null ? ' · phone count' : '');
+          if (v.ai_status === 'done' && v.ai_pest) return el('span', 'hint', pestLabel(v.ai_pest) + ' · AI');
+          if (v.ai_status === 'queued') return el('span', 'hint', 'AI looking…');
+          return '—'; } },
       { key: 'last', label: 'Photo', fmt: (v, t) => {
           if (!v?.photo_data) return '—';
           const im = el('img', 'ipm-thumb'); im.src = v.photo_data; im.alt = `trap ${t.code}`;
@@ -158,7 +180,8 @@ function paint() {
     data.recent.filter(r => r.photo_data).forEach(r => {
       const fig = el('figure', 'ipm-fig');
       const im = el('img'); im.src = r.photo_data; im.alt = `trap ${r.trap}`;
-      fig.append(im, el('figcaption', null, `${r.trap} · ${num(r.total, 0)} · ${when(r.read_at)}`));
+      fig.append(im, el('figcaption', null, `${r.trap} · ${num(r.total, 0)} · ${when(r.read_at)}` +
+        (r.ai_status === 'done' && r.ai_pest ? ` · ${pestLabel(r.ai_pest)}` : '')));
       fig.onclick = () => openReading({ code: r.trap }, r);
       grid.append(fig);
     });
@@ -209,6 +232,29 @@ function openReading(t, r) {
   if (r.notes) fact('Note', r.notes);
   d.body.append(facts);
 
+  // what the AI saw on the photo
+  const secAI = el('div', 'ipm-narrow');
+  const paintAI = rr => {
+    secAI.textContent = '';
+    secAI.append(el('div', 'sec-title', 'Species, named by the AI'));
+    if (rr.ai_status === 'done') {
+      const list = Array.isArray(rr.species) ? rr.species : [];
+      if (list.length) secAI.append(speciesTable(list, false));
+      else secAI.append(el('div', 'hint', 'Nothing it could name.'));
+      const meta = [rr.ai_total != null ? `${num(rr.ai_total, 0)} insects in all` : null,
+                    rr.ai_quality && rr.ai_quality !== 'ok' ? 'photo ' + rr.ai_quality.replace('_', ' ') : null,
+                    rr.ai_model, rr.ai_at ? when(rr.ai_at) : null].filter(Boolean).join(' · ');
+      if (meta) secAI.append(el('div', 'hint', meta));
+      if (rr.ai_notes) secAI.append(el('p', 'ipm-ai-notes', rr.ai_notes));
+    } else if (rr.ai_status === 'queued') secAI.append(el('div', 'hint', 'Sent to the AI — the answer is on the page at the next reload.'));
+    else if (rr.ai_status === 'failed') secAI.append(el('div', 'note bad', 'The AI could not answer: ' + (rr.ai_error || 'unknown error')));
+    else if (rr.ai_status === 'no_key') secAI.append(el('div', 'hint', 'Not sent: no Anthropic API key. Paste one in Settings › Integrations.'));
+    else if (!rr.photo_data) secAI.append(el('div', 'hint', 'No photo to send.'));
+    else secAI.append(el('div', 'hint', 'Not asked yet.'));
+  };
+  paintAI(r);
+  d.body.append(secAI);
+
   if (r.id) {
     d.body.append(el('div', 'sec-title', 'Correct it'));
     const total = input({ type: 'number', min: 0, step: 1, value: r.total });
@@ -225,9 +271,51 @@ function openReading(t, r) {
     };
     d.footer.append(save);
   }
+  if (r.id && r.photo_data && data.may_write !== false) {
+    const label = () => r.ai_status === 'done' ? 'Identify again' : 'Identify with AI';
+    const ai = el('button', 'btn', label());
+    ai.title = 'Send this photo to Claude (Anthropic) to name the species';
+    ai.onclick = async () => {
+      if (!data.ai_ready) { toast('Paste an Anthropic API key in Settings › Integrations first', 'bad'); return; }
+      busy(ai, true, 'Asking the AI… about half a minute');
+      try {
+        await rpc('identify_trap_species', { p_id: r.id, p_force: true });
+        const res = await fn('trap-species', { reading_id: r.id });
+        if (!res?.ok) throw new Error(res?.error || 'no answer');
+        Object.assign(r, res.reading);
+        paintAI(r);
+        busy(ai, false, label());
+        toast('Species named', 'ok');
+        load();
+      } catch (e) { busy(ai, false, label()); toast(e.message, 'bad'); }
+    };
+    d.footer.append(ai);
+  }
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
+}
+
+// the AI's species list: common name, taxon, group, count with a bar, confidence
+function speciesTable(list, rolled) {
+  const max = Math.max(...list.map(s => Number(s.count) || 0), 1);
+  const cols = [
+    { key: 'common', label: 'Species', fmt: (v, s) => {
+        const b = el('div');
+        b.append(el('b', null, v || s.name || '?'));
+        b.append(el('div', 'hint', (v && s.name && s.name !== v ? s.name : '') + (s.beneficial ? (s.name ? ' · ' : '') + 'natural enemy' : '')));
+        return b; } },
+    { key: 'group', label: 'Group', fmt: v => pestLabel(v) },
+    { key: 'count', label: 'Insects', align: 'right', fmt: (v, s) => {
+        const w = el('div', 'ipm-bar-wrap');
+        const bar = el('div', 'ipm-bar' + (s.beneficial ? ' good' : ''));
+        bar.style.width = Math.max(2, Math.round((rolled ? 90 : 48) * (Number(v) || 0) / max)) + 'px';
+        w.append(bar, el('span', null, num(v, 0)));
+        return w; } },
+  ];
+  if (rolled) cols.push({ key: 'traps', label: 'On traps', align: 'right', fmt: (v, s) => `${v} · ${s.readings} reading${s.readings > 1 ? 's' : ''}` });
+  cols.push({ key: 'confidence', label: 'Sure', align: 'right', fmt: v => v != null ? Math.round(Number(v) * 100) + ' %' : '—' });
+  return table(cols, list);
 }
 
 // ── add or edit a trap ─────────────────────────────────────────────────────

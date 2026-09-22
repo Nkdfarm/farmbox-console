@@ -155,64 +155,81 @@ function farmBox(ctx, d) {
 // API keys for outside services (migration 0059). The key is kept on the server
 // and never comes back here: the panel only learns whether one is set and its
 // last 4 characters. The franchisor sets it; everyone else sees the status.
+// The keys of outside services, pasted here by the franchisor and kept in the
+// database (app.integration_key); the console only ever sees "set" + last 4.
+const INTEGRATIONS = [
+  { name: 'farmazone', label: 'Farmazone API key', placeholder: 'fz_live_…',
+    setText: 'The market scan uses it.', unsetText: 'Not set — the market scan reads only the Cape Town Market page.',
+    savedToast: 'Farmazone key saved — the next scan uses it',
+    help: 'Farmazone’s fresh-produce prices need it. Sign in at Farmazone › Developer Dashboard › generate a key ' +
+          '(free: 100 requests a day; one market scan uses 7). ',
+    link: ['Farmazone API page', 'https://farmazone.co.za/api/v1/docs/'] },
+  { name: 'anthropic', label: 'Anthropic API key', placeholder: 'sk-ant-…',
+    setText: 'Every new sticky-trap photo is sent to Claude, which names the species.',
+    unsetText: 'Not set — trap photos are counted on the phone only; no species detection.',
+    savedToast: 'Anthropic key saved — the next trap photo is identified',
+    help: 'IPM species detection needs it: the trap round’s photos go to Claude (Anthropic), which names and counts ' +
+          'the insects on each trap. Create a key in the Anthropic Console (a small image costs a few cents). ',
+    link: ['Anthropic Console', 'https://console.anthropic.com/settings/keys'] },
+];
+
 function integrations() {
   const list = el('div', 'set-list');
-  const status = el('small', null, 'Reading…');
-  const text = el('div', 'set-text');
-  text.append(el('b', null, 'Farmazone API key'), status);
-  const r = el('div', 'set-row');
-  r.append(text);
-  list.append(r);
+  const rows = INTEGRATIONS.map(def => {
+    const status = el('small', null, 'Reading…');
+    const text = el('div', 'set-text');
+    text.append(el('b', null, def.label), status);
+    const r = el('div', 'set-row');
+    r.append(text);
+    const help = el('div', 'hint');
+    help.style.padding = '0 var(--space-4) var(--space-3)';
+    help.append(document.createTextNode(def.help));
+    const a = el('a', null, def.link[0]);
+    a.href = def.link[1];
+    a.target = '_blank';
+    a.rel = 'noopener';
+    help.append(a);
+    list.append(r, help);
+    return { def, r, status };
+  });
 
-  const help = el('div', 'hint');
-  help.style.padding = '0 var(--space-4) var(--space-3)';
-  help.append(document.createTextNode(
-    'Farmazone’s fresh-produce prices need it. Sign in at Farmazone › Developer Dashboard › generate a key ' +
-    '(free: 100 requests a day; one market scan uses 7). '));
-  const a = el('a', null, 'Farmazone API page');
-  a.href = 'https://farmazone.co.za/api/v1/docs/';
-  a.target = '_blank';
-  a.rel = 'noopener';
-  help.append(a);
-
-  const paint = st => {
-    const fz = st?.farmazone;
-    status.textContent = fz?.set
-      ? `Set${fz.last4 ? ` — ends in ${fz.last4}` : ''}. The market scan uses it.`
-      : 'Not set — the market scan reads only the Cape Town Market page.';
-    r.querySelectorAll('.fz-ctl').forEach(n => n.remove());
+  const paint = st => rows.forEach(({ def, r, status }) => {
+    const k0 = st?.[def.name];
+    status.textContent = k0?.set
+      ? `Set${k0.last4 ? ` — ends in ${k0.last4}` : ''}. ${def.setText}`
+      : def.unsetText;
+    r.querySelectorAll('.key-ctl').forEach(n => n.remove());
     if (!st?.may_edit) return;
-    const k = input({ type: 'password', placeholder: fz?.set ? 'Paste a new key to replace it' : 'fz_live_…',
+    const k = input({ type: 'password', placeholder: k0?.set ? 'Paste a new key to replace it' : def.placeholder,
                       autocomplete: 'off' });
-    k.className = 'fz-ctl';
+    k.className = 'key-ctl';
     k.spellcheck = false;
     k.style.maxWidth = '220px';
-    const save = el('button', 'btn btn-sm btn-primary fz-ctl', 'Save');
+    const save = el('button', 'btn btn-sm btn-primary key-ctl', 'Save');
     save.onclick = async () => {
       const v = k.value.trim();
       if (!v) { toast('Paste the key first', 'bad'); return; }
       busy(save, true, 'Saving…');
       try {
-        const st2 = await rpc('set_integration_key', { p_name: 'farmazone', p_value: v });
+        const st2 = await rpc('set_integration_key', { p_name: def.name, p_value: v });
         k.value = '';
-        toast('Farmazone key saved — the next scan uses it', 'ok');
+        toast(def.savedToast, 'ok');
         paint(st2);
       } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
     };
     r.append(k, save);
-    if (fz?.set) {
-      const rm = el('button', 'btn btn-sm fz-ctl', 'Remove');
+    if (k0?.set) {
+      const rm = el('button', 'btn btn-sm key-ctl', 'Remove');
       rm.onclick = async () => {
         try {
-          paint(await rpc('set_integration_key', { p_name: 'farmazone', p_value: '' }));
-          toast('Farmazone key removed', 'ok');
+          paint(await rpc('set_integration_key', { p_name: def.name, p_value: '' }));
+          toast(`${def.label} removed`, 'ok');
         } catch (e) { toast(e.message, 'bad'); }
       };
       r.append(rm);
     }
-  };
-  rpc('integration_status', {}).then(paint).catch(e => { status.textContent = e.message; });
-  list.append(help);
+  });
+  rpc('integration_status', {}).then(paint).catch(e => { rows.forEach(x => { x.status.textContent = e.message; }); });
   return list;
 }
 

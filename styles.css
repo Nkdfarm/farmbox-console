@@ -924,3 +924,10 @@ html { zoom: var(--zoom, 1); }
 .ipm-fig { margin: 0; cursor: zoom-in; }
 .ipm-fig img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
 .ipm-fig figcaption { font-size: var(--text-xs); color: var(--text-muted); margin-top: 4px; }
+
+/* IPM: the AI's species list (0.7.65) */
+.ipm-bar-wrap { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.ipm-bar { height: 8px; border-radius: 4px; background: var(--accent, #ff5b1f); opacity: .85; }
+.ipm-bar.good { background: var(--success, #3dbf7a); }
+.ipm-ai-notes { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--text); }
+.ipm-narrow table { min-width: 0; }

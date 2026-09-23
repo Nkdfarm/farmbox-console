@@ -407,3 +407,20 @@ export function sowingLine(s) {
           s.germination_c ? `${s.germination_c} °C` : null,
           s.notes || null].filter(Boolean).join(' · ');
 }
+
+// A crop's picture, drawn like a face (0088): the photo when there is one, else
+// the crop's initials on a tint of its category. Used on the Crop database only —
+// a grouped task covers several crops, so the task cards carry no picture.
+const CROP_HUE = { fruiting_vines: 8, fruiting_bush: 24, leafy: 140, mixed_leafy: 165, herbs: 95, microgreens: 190 };
+export function cropAvatar(c, size = '') {
+  const box = el('div', ['avatar', 'crop', size].filter(Boolean).join(' '), initials(c.name || '?'));
+  box.style.background = `hsl(${CROP_HUE[c.category] ?? 200} 45% 45%)`;
+  if (c.photo_url) {
+    box.textContent = '';
+    box.style.backgroundImage = `url("${c.photo_url}")`;
+    box.style.backgroundSize = 'cover';
+    box.style.backgroundPosition = 'center';
+  }
+  box.title = c.name || '';
+  return box;
+}

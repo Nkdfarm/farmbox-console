@@ -9,8 +9,8 @@
 // cycle. A yield typed here is the farm's own figure and the library seed never
 // overwrites it; leaving it empty goes back to the library figure.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num, sowingLine } from './ui.js';
+import { rpc, api, URL_BASE } from './api.js';
+import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num, sowingLine, cropAvatar } from './ui.js';
 
 const CATEGORIES = [['leafy', 'Leafy'], ['mixed_leafy', 'Mixed leafy'], ['herbs', 'Herbs'],
                     ['microgreens', 'Microgreens'], ['fruiting_vines', 'Fruiting vines'], ['fruiting_bush', 'Fruiting bush']];
@@ -86,6 +86,28 @@ export async function editCrop(c, onSaved, farm) {
   const paintSow = () => { sowHint.textContent = sowingLine(sowing()) || 'Nothing yet — the sowing task shows these under each batch.'; };
   [seeds, depth, cover, germ, seedG, blackout, sowNotes].forEach(x => { x.oninput = paintSow; x.onchange = paintSow; });
 
+  // the picture (0088): chosen here, shrunk to 512 px, put in the public bucket as <crop id>.jpg
+  let photoUrl = c.photo_url || '';
+  const picBox = el('div', 'row'); picBox.style.alignItems = 'center';
+  const picNow = () => { picBox.textContent = ''; picBox.append(cropAvatar({ ...c, photo_url: photoUrl }, 'lg')); picBox.append(pickBtn, dropBtn); dropBtn.style.display = photoUrl ? '' : 'none'; };
+  const pick = el('input'); pick.type = 'file'; pick.accept = 'image/*'; pick.style.display = 'none';
+  const pickBtn = el('button', 'btn btn-sm', 'Choose a picture');
+  pickBtn.onclick = () => pick.click();
+  const dropBtn = el('button', 'btn btn-sm btn-ghost', 'Remove');
+  dropBtn.onclick = () => { photoUrl = ''; picNow(); };
+  pick.onchange = async () => {
+    const f = pick.files[0]; if (!f) return;
+    busy(pickBtn, true, 'Uploading…');
+    try {
+      const blob = await shrink(f, 512);
+      await api(`/storage/v1/object/crop-photos/${c.id}.jpg`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob });
+      photoUrl = `${URL_BASE}/storage/v1/object/public/crop-photos/${c.id}.jpg?t=${Date.now()}`;
+      busy(pickBtn, false, 'Choose a picture'); picNow();
+      toast('Picture uploaded — Save to keep it', 'ok');
+    } catch (e) { busy(pickBtn, false, 'Choose a picture'); toast(e.message, 'bad'); }
+  };
+  picNow();
+
   const sysHint = el('div', 'hint');
   const paintSysHint = m => {
     const s = systemsFor(m).map(x => x.label);
@@ -95,6 +117,7 @@ export async function editCrop(c, onSaved, farm) {
   paintSysHint(c.media);
 
   d.body.append(
+    field('Picture', picBox, 'Shown on the Crop database like a face. A grouped task covers several crops, so the task cards carry none.'), pick,
     grid('grid3', field('Name', name), field('Variety', variety), field('Category', category)),
     field('Medium', media), sysHint,
     grid('grid3', field('Sold by', sell), gramsF, field('Status', status)),
@@ -244,6 +267,7 @@ export async function editCrop(c, onSaved, farm) {
         seedling_lead_days: lead.value, rotation_group: rotation.value, notes: notes.value,
         plugs_per_tray: plugs.value,
         sowing: sowing(),
+        photo_url: photoUrl,
         phases: phases.map(p => ({ name: String(p.name).trim(), type: p.type || 'vegetative',
                                    days: p.days ?? 0, cues: p.cues || '',
                                    procedures: p.procedures.map(x => ({ sop_id: x.sop_id,
@@ -259,4 +283,15 @@ export async function editCrop(c, onSaved, farm) {
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);
+}
+
+// a picture shrunk to fit a square of `max` px, as a JPEG blob (the phone does the same for its evidence)
+async function shrink(file, max) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  bmp.close?.();
+  return new Promise(res => cv.toBlob(b => res(b), 'image/jpeg', 0.86));
 }

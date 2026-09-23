@@ -10,7 +10,7 @@
 // Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine,
+import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
          systemLabel, mediumLabel, systemsFor } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
@@ -132,10 +132,13 @@ function cropRow(c) {
   const d = el('details', 'cropdb-row');
   d.open = opened.has(c.id);
   const sum = el('summary');
-  const left = el('span');
-  left.append(el('b', null, c.name));
+  const left = el('span', 'cropdb-name');
+  left.append(cropAvatar(c));
+  const txt = el('span');
+  left.append(txt);
+  txt.append(el('b', null, c.name));
   const sys = systemsFor(c.media).map(x => x.label).join(', ');
-  left.append(el('div', 'hint',
+  txt.append(el('div', 'hint',
     [(c.media || []).map(mediumLabel).join(', '), sys, `${c.plugs_per_tray} plugs/tray`,
      `${c.phases} phase${c.phases === 1 ? '' : 's'}`].filter(Boolean).join(' · ')));
   const right = el('span', 'cropdb-right');
@@ -443,6 +446,10 @@ async function openCrop(row) {
   catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
 
   d.body.textContent = '';
+  // the picture, big, at the top (0088)
+  const pic = cropAvatar(c, 'lg');
+  pic.style.margin = '0 0 var(--space-3)';
+  d.body.append(pic);
   const facts = el('div', 'facts');
   const fact = (k, v) => {
     const f = el('div', 'fact');

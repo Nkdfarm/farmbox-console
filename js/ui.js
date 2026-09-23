@@ -408,19 +408,49 @@ export function sowingLine(s) {
           s.notes || null].filter(Boolean).join(' · ');
 }
 
-// A crop's picture, drawn like a face (0088): the photo when there is one, else
-// the crop's initials on a tint of its category. Used on the Crop database only —
-// a grouped task covers several crops, so the task cards carry no picture.
+// A crop's picture, drawn like a face (0088): the photo somebody put on the crop
+// when there is one; else a default photo of the plant from Wikipedia (the page
+// named in CROP_WIKI, or the crop's first word), kept on this device like the
+// faces; else the crop's initials on a tint of its category. Used on the Crop
+// database only — a grouped task covers several crops, so the task cards carry none.
 const CROP_HUE = { fruiting_vines: 8, fruiting_bush: 24, leafy: 140, mixed_leafy: 165, herbs: 95, microgreens: 190 };
+const CROP_WIKI = {
+  'Tomato cherry indeterminate': 'Cherry_tomato', 'Tomato round indeterminate': 'Tomato', 'Tomato determinate': 'Tomato',
+  'Cucumber mini': 'Cucumber', 'Cucumber English': 'Cucumber', 'Climbing green bean': 'Green_bean', 'Bush green bean': 'Green_bean',
+  'Bell pepper red': 'Bell_pepper', 'Bell pepper yellow': 'Bell_pepper', 'Chilli': 'Chili_pepper', 'Eggplant': 'Eggplant',
+  'Courgette': 'Zucchini', 'Strawberry Albion': 'Strawberry', 'Strawberry Chandler': 'Strawberry',
+  'Butterhead lettuce': 'Butterhead_lettuce', 'Iceberg lettuce': 'Iceberg_lettuce', 'Romaine lettuce': 'Romaine_lettuce',
+  'Leaf lettuce': 'Lettuce', 'Frisée': 'Endive', 'Escarole': 'Endive', 'Radicchio': 'Radicchio', 'Baby spinach': 'Spinach',
+  'Pak choi': 'Bok_choy', 'Kale': 'Kale', 'Swiss chard': 'Chard', 'Rocket': 'Eruca_vesicaria', 'Mizuna': 'Mizuna',
+  'Mâche': 'Valerianella_locusta', 'Watercress': 'Watercress', 'Tatsoi': 'Tatsoi', 'Basil': 'Basil', 'Coriander': 'Coriander',
+  'Flat parsley': 'Parsley', 'Curly parsley': 'Parsley', 'Dill': 'Dill', 'Mint': 'Mentha', 'Chives': 'Chives', 'Thyme': 'Thyme',
+  'Oregano': 'Oregano', 'Sage': 'Salvia_officinalis',
+};
+const wikiTitle = c => CROP_WIKI[c.name] || (c.category === 'microgreens' ? 'Microgreen' : String(c.name || '').split(/[ —(]/)[0]);
+const cropDefault = async c => {
+  const title = wikiTitle(c);
+  if (!title) return '';
+  const key = 'fbc_cropimg_' + title;
+  try { const hit = localStorage.getItem(key); if (hit !== null) return hit; } catch { /* no storage */ }
+  let url = '';
+  try {
+    const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title), { headers: { Accept: 'application/json' } });
+    if (r.ok) { const j = await r.json(); url = j?.thumbnail?.source || ''; }
+  } catch { url = ''; }
+  try { localStorage.setItem(key, url); } catch { /* fine */ }
+  return url;
+};
 export function cropAvatar(c, size = '') {
   const box = el('div', ['avatar', 'crop', size].filter(Boolean).join(' '), initials(c.name || '?'));
   box.style.background = `hsl(${CROP_HUE[c.category] ?? 200} 45% 45%)`;
-  if (c.photo_url) {
-    box.textContent = '';
-    box.style.backgroundImage = `url("${c.photo_url}")`;
-    box.style.backgroundSize = 'cover';
-    box.style.backgroundPosition = 'center';
-  }
   box.title = c.name || '';
+  const show = src => {
+    if (!src) return;
+    const img = new Image(); img.alt = ''; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+    img.onload = () => { box.textContent = ''; box.append(img); box.classList.add('has-photo'); };
+    img.src = src;
+  };
+  if (c.photo_url) show(c.photo_url);
+  else cropDefault(c).then(show);
   return box;
 }

@@ -213,7 +213,8 @@ th.right, td.right { text-align: right; }
   box-shadow: 0 0 0 2px var(--surface); }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
-.avatar.crop { border-radius: 10px; }
+.avatar.crop { border-radius: 10px; overflow: hidden; }
+.avatar.crop img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar.lg { width: 72px; height: 72px; font-size: 22px; border-radius: 14px; }
 .cropdb-name { display: inline-flex; align-items: center; gap: 10px; }
 .avatar.lg { width: 44px; height: 44px; font-size: var(--text-sm); }

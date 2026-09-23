@@ -1,5 +1,5 @@
 {
-  "version": "0.7.84",
+  "version": "0.7.85",
   "released": "2026-09-23",
-  "note": "A picture on each crop in the Crop database, like a face; chosen in the crop editor. Migration 0088."
+  "note": "Every crop has a picture by default: a photo of the plant, kept on the device; a photo put on the crop always wins."
 }

@@ -100,7 +100,7 @@ function paint() {
         fmt: m => {
           if (!m) return '—';
           const w = el('div');
-          const s = el('span', null, num(m.price, 2));
+          const s = el('span', null, `R ${num(m.price, 2)} /kg`);
           s.title = `${m.species} at Cape Town Market, week of ${shortDate(m.week_start)} · ${m.source}`;
           w.append(s, el('div', 'hint', `wk ${shortDate(m.week_start)}`));
           return w; } },
@@ -152,17 +152,17 @@ function marketCard() {
         h.title = (r.crops || []).join('\n');
         b.append(h);
         return b; } },
-    { key: 'this_week', label: 'This week', align: 'right', fmt: w => {
+    { key: 'this_week', label: 'This week (R/kg)', align: 'right', fmt: w => {
         if (!w) return el('span', 'hint', 'not collected');
         const b = el('div');
-        const v = el('b', null, num(w.price_kg, 2));
+        const v = el('b', null, `R ${num(w.price_kg, 2)} /kg`);
         v.title = `${w.source}\n${w.days} trading day${w.days === 1 ? '' : 's'}` +
           (w.kg_sold ? ` · ${num(w.kg_sold)} kg sold` : '') +
           (w.low_kg != null ? ` · R${num(w.low_kg, 2)}–${num(w.high_kg, 2)}/kg` : '');
         b.append(v, el('div', 'hint', `wk ${shortDate(w.week_start)}${w.weighted ? '' : ' · unweighted'}`));
         return b; } },
-    { key: 'previous_week', label: 'Previous week', align: 'right',
-      fmt: w => (w ? num(w.price_kg, 2) : '—') },
+    { key: 'previous_week', label: 'Previous week (R/kg)', align: 'right',
+      fmt: w => (w ? `R ${num(w.price_kg, 2)} /kg` : '—') },
     { key: 'key', label: 'Change', align: 'right', fmt: (_, r) => {
         const a = r.this_week?.price_kg, b = r.previous_week?.price_kg;
         if (a == null || !b) return '—';

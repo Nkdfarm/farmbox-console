@@ -138,7 +138,8 @@ function marketCard() {
   const intro = el('div', 'hint mk-intro',
     'Wholesale rand per kg at Cape Town Market, one figure per species, collected by itself every ' +
     'Monday at 13:30 — or now, with Scan. Weighted by the kilos sold where the market reports them; ' +
-    'otherwise the median of the day’s lines, with the low–high spread across grades and packaging under it. ' +
+    'otherwise the median of the day’s class 1 lines, with the low–high spread across grades and packaging under it. ' +
+    'Johannesburg beside it, where the market reports kilos sold. ' +
     'Buyers’ prices before the agent’s commission, so for comparison: the planner keeps using the book and your own prices.');
   c.append(intro);
 
@@ -165,6 +166,14 @@ function marketCard() {
         return b; } },
     { key: 'previous_week', label: 'Previous week (R/kg)', align: 'right',
       fmt: w => (w ? `R ${num(w.price_kg, 2)} /kg` : '—') },
+    // Johannesburg this week, weighted by kilos sold (Farmazone): the other side of the country
+    { key: 'joburg', label: 'Joburg (R/kg)', align: 'right', fmt: w => {
+        if (!w) return el('span', 'hint', '—');
+        const b = el('div');
+        const v = el('span', null, `R ${num(w.price_kg, 2)} /kg`);
+        v.title = `${w.source}\nweek of ${shortDate(w.week_start)}` + (w.kg_sold ? ` · ${num(w.kg_sold)} kg sold` : '');
+        b.append(v, el('div', 'hint', w.kg_sold ? `${num(w.kg_sold)} kg sold` : `wk ${shortDate(w.week_start)}`));
+        return b; } },
     { key: 'key', label: 'Change', align: 'right', fmt: (_, r) => {
         const a = r.this_week?.price_kg, b = r.previous_week?.price_kg;
         if (a == null || !b) return '—';

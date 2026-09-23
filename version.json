@@ -1,5 +1,5 @@
 {
-  "version": "0.7.86",
+  "version": "0.7.87",
   "released": "2026-09-23",
-  "note": "Every crop has a picture by default: a photo of the plant, kept on the device; a photo put on the crop always wins. The lookups go three at a time and a refused one is asked again."
+  "note": "The microgreens show the shoots themselves — pea shoots, broccoli sprouts, a tray of microgreens — not the Microgreen page's picture of a researcher."
 }

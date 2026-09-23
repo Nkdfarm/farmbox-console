@@ -425,8 +425,12 @@ const CROP_WIKI = {
   'Mâche': 'Valerianella_locusta', 'Watercress': 'Watercress', 'Tatsoi': 'Tatsoi', 'Basil': 'Basil', 'Coriander': 'Coriander',
   'Flat parsley': 'Parsley', 'Curly parsley': 'Parsley', 'Dill': 'Dill', 'Mint': 'Mentha', 'Chives': 'Chives', 'Thyme': 'Thyme',
   'Oregano': 'Oregano', 'Sage': 'Salvia_officinalis',
+  // the microgreens: the Microgreen page's picture is a researcher at the trays, so the
+  // shoots themselves — pea shoots and broccoli sprouts have a page; the rest a tray photo
+  'Pea microgreens': 'Pea_shoots', 'Broccoli microgreens': 'Broccoli_sprouts',
 };
-const wikiTitle = c => CROP_WIKI[c.name] || (c.category === 'microgreens' ? 'Microgreen' : String(c.name || '').split(/[ —(]/)[0]);
+const MICRO_TRAY = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Lufa_Farms_Microgreens_in_Trays.jpg/330px-Lufa_Farms_Microgreens_in_Trays.jpg';
+const wikiTitle = c => CROP_WIKI[c.name] || (c.category === 'microgreens' ? MICRO_TRAY : String(c.name || '').split(/[ —(]/)[0]);
 // The 50 rows of the Crop database would ask Wikipedia 50 times at once, and it
 // answers a burst with empties: the lookups go three at a time, one title asked
 // once (the same promise shared), and only a real answer — a picture, or a page
@@ -439,6 +443,7 @@ const wikiDone = () => { wikiSlots--; setTimeout(pump, 120); };
 const cropDefault = c => {
   const title = wikiTitle(c);
   if (!title) return Promise.resolve('');
+  if (/^https?:/.test(title)) return Promise.resolve(title);   // a picture named outright
   const key = 'fbc_cropimg_' + title;
   try { const hit = localStorage.getItem(key); if (hit !== null) return Promise.resolve(hit); } catch { /* no storage */ }
   if (WIKI_PENDING.has(title)) return WIKI_PENDING.get(title);

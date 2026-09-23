@@ -38,6 +38,7 @@ const EMPTY_FILTERS = { q: '', status: 'open', family: '', category: '', crop: '
 let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
 const manual = { on: false, worker: null, tasks: new Set() };
+let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
 let dragging = null;      // the task being dragged, while it is
 try { filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
 
@@ -236,13 +237,17 @@ function paintPeople() {
     bar.append(fill); txt.append(bar);
     card.append(txt);
     card.title = manual.on ? 'Choose this person' : `${p.name}: ${hrs(p.assigned)} h assigned of ${hrs(p.max)} h possible ${unit}`;
+    if (!manual.on && spotlight === p.id) card.classList.add('chosen');
     card.onclick = () => {
-      if (!manual.on) { filters.worker = filters.worker === p.id ? '' : p.id; remember(); paint(); return; }
+      // outside manual mode a face puts its tasks in the spotlight — the whole plan stays in view
+      if (!manual.on) { spotlight = spotlight === p.id ? null : p.id; paintBody(); return; }
       manual.worker = manual.worker === p.id ? null : p.id; paintPeople();
     };
     peopleCol.append(card);
   });
-  if (!manual.on) peopleCol.append(el('div', 'hint', 'Click a face to see only their tasks. Drag a task to another day or across the line.'));
+  if (!manual.on) peopleCol.append(el('div', 'hint', spotlight
+    ? 'Their tasks stand out; the rest of the plan stays in view. Click the face again to clear.'
+    : 'Click a face to see their tasks in the plan. Drag a task to another day or across the line.'));
 }
 
 async function autoAssign(btn, from, to) {
@@ -470,7 +475,8 @@ function listView(tasks) {
 
 // ── one task as a chip ─────────────────────────────────────────────────────
 function chip(t, opts = {}) {
-  const c = el('div', 'tk' + (t.status === 'done' ? ' done' : '') + (opts.big ? ' big' : ''));
+  const mine = spotlight && (t.workers || []).some(w => w.id === spotlight);
+  const c = el('div', 'tk' + (t.status === 'done' ? ' done' : '') + (opts.big ? ' big' : '') + (spotlight ? (mine ? ' mine' : ' other') : ''));
   c.style.setProperty('--h', subFamilyHue(t.category || t.family));
   c.setAttribute('role', 'button'); c.tabIndex = 0;
   const ic = el('span', 'tk-ic'); ic.append(icon(FAM_ICON[t.family] || 'clipboard'));

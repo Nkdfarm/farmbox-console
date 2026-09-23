@@ -954,6 +954,9 @@ html { zoom: var(--zoom, 1); }
 .tk-person-fill { height: 100%; background: var(--accent); }
 .tk-person-fill.over { background: var(--danger, #e5484d); }
 .tk.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tk.mine { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tk.other { opacity: .38; }
+.tk.other:hover { opacity: .8; }
 .tk.dragging { opacity: .4; }
 .tk-band.over, .tk-mc.over { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .tk[draggable="true"] { cursor: grab; }

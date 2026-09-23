@@ -249,8 +249,11 @@ async function autoAssign(btn, from, to) {
   busy(btn, true, 'Assigning…');
   try {
     const r = await rpc('auto_assign', { p_farm: farm.id, p_from: from, p_to: to });
-    const un = (r.unassigned || []).length;
-    toast(`${r.assigned} of ${r.tasks} tasks assigned` + (un ? ` · ${un} with nobody on site` : '') + ((r.locked_weeks || []).length ? ' · a locked week left alone' : ''), un ? 'warn' : 'ok');
+    const un = r.unassigned || [], ci = r.call_ins || [];
+    toast(`${r.assigned} of ${r.tasks} tasks assigned`
+      + (un.length ? ` · ${un.length} unassigned: ${un[0].reason}` : '')
+      + (ci.length ? ` · ${ci.length} call-in${ci.length > 1 ? 's' : ''} (${[...new Set(ci.map(x => x.worker))].join(', ')}) — a decision for you` : '')
+      + ((r.locked_weeks || []).length ? ' · a locked week left alone' : ''), un.length ? 'bad' : 'ok');
     await load();
   } catch (e) { busy(btn, false, 'Assign automatically'); toast(e.message, 'bad'); }
 }

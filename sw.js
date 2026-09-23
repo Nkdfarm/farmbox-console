@@ -7,14 +7,17 @@
 // office and the container where the signal drops.
 //
 // Bump CACHE when the shell changes; the old one is deleted on activate.
-const CACHE = 'farmbox-console-20260923k';
+// TAG is the ?v= index.html puts on styles.css and app.js: the two must match
+// (the precached URL is the requested URL), so bump both together.
+const TAG = '20260923l';
+const CACHE = 'farmbox-console-' + TAG;
 
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260922o',
+  './styles.css?v=' + TAG,
   './manifest.json',
-  './js/app.js?v=20260922o',
+  './js/app.js?v=' + TAG,
   './js/api.js',
   './js/ui.js',
   './js/people.js',

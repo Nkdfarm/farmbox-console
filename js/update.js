@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.7.87';
+export const VERSION = '0.7.88';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -28,6 +28,8 @@ const set = (store, k, v) => { try { store.setItem(k, v); } catch { /* private w
 
 let updating = false;      // Update now was pressed: the top bar shows progress
 let justUpdated = false;   // this page load is the end of an update
+let seen = null;           // the version version.json said last time: offered only when said twice
+let notYet = 0;            // when the server last had the new number but not the new files
 
 export function watchForUpdates() {
   afterUpdate();
@@ -44,8 +46,16 @@ async function check() {
   if (updating) return;
   const latest = (await checkForUpdate())?.version;
   if (updating) return;
-  offer(latest && latest !== VERSION ? latest : null);
-  if (!latest || latest === VERSION) return;
+  // The server behind version.json is a CDN: right after a deploy it can say
+  // the new number while index.html and the modules are still the old ones,
+  // and even flip between the two for a while. So a new number is offered only
+  // once it has been said twice in a row, and not within five minutes of an
+  // attempt that found the files not there yet.
+  const steady = latest && latest !== VERSION && seen === latest;
+  seen = latest;
+  if (Date.now() - notYet < 5 * 60 * 1000) return;
+  offer(steady ? latest : null);
+  if (!steady) return;
   if (get(sessionStorage, DISMISSED) === latest) return;
 
   // "Update now" was already pressed for this version and here we are, still
@@ -154,6 +164,15 @@ async function update(latest) {
   } catch { /* whatever is left, the new URL still wins */ }
   await step(75, `Downloading ${latest}`);
   await refreshShell();
+  // Reloading into the old files is the loop the owner saw: the new files must
+  // be reachable from here before the page is thrown away.
+  if (!(await arrived(latest))) {
+    updating = false;
+    notYet = Date.now();
+    progress(100, `${latest} is published but has not reached this connection yet — it will be offered again in a few minutes`);
+    hideTimer = setTimeout(() => { const s = slot(); if (s) { s.hidden = true; s.textContent = ''; } }, 8000);
+    return;
+  }
 
   set(sessionStorage, TARGET, latest);
   const params = new URLSearchParams(location.search);
@@ -181,6 +200,14 @@ async function refreshShell() {
   }
   await Promise.all([...urls].map(u =>
     fetch(u, { cache: 'reload', credentials: 'same-origin' }).catch(() => null)));
+}
+
+// The module that carries the number, fetched past every cache: does it say the new one?
+async function arrived(latest) {
+  try {
+    const txt = await (await fetch('js/update.js?probe=' + Date.now(), { cache: 'reload' })).text();
+    return txt.includes(`VERSION = '${latest}'`);
+  } catch { return false; }
 }
 
 // Tidy the address after an update, and confirm the new version once.

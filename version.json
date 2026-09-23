@@ -1,5 +1,5 @@
 {
-  "version": "0.7.89",
+  "version": "0.7.90",
   "released": "2026-09-23",
-  "note": "The Cape Town Market prices say their unit: rand per kg, on every figure and in the column headings."
+  "note": "Cape Town prices: the median of the day's lines instead of a mean across every grade and box, nominal 1 kg bundles set aside, and the low–high spread on the row."
 }

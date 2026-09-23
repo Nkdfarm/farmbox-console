@@ -136,8 +136,9 @@ function marketCard() {
     last ? `Collected ${shortDate(String(last).slice(0, 10))}` : 'Not collected yet'));
 
   const intro = el('div', 'hint mk-intro',
-    'Wholesale rand per kg at Cape Town Market, one average per species, collected by itself every ' +
-    'Monday at 13:30 — or now, with Scan. Weighted by the kilos sold where the market reports them. ' +
+    'Wholesale rand per kg at Cape Town Market, one figure per species, collected by itself every ' +
+    'Monday at 13:30 — or now, with Scan. Weighted by the kilos sold where the market reports them; ' +
+    'otherwise the median of the day’s lines, with the low–high spread across grades and packaging under it. ' +
     'Buyers’ prices before the agent’s commission, so for comparison: the planner keeps using the book and your own prices.');
   c.append(intro);
 
@@ -157,9 +158,10 @@ function marketCard() {
         const b = el('div');
         const v = el('b', null, `R ${num(w.price_kg, 2)} /kg`);
         v.title = `${w.source}\n${w.days} trading day${w.days === 1 ? '' : 's'}` +
-          (w.kg_sold ? ` · ${num(w.kg_sold)} kg sold` : '') +
-          (w.low_kg != null ? ` · R${num(w.low_kg, 2)}–${num(w.high_kg, 2)}/kg` : '');
-        b.append(v, el('div', 'hint', `wk ${shortDate(w.week_start)}${w.weighted ? '' : ' · unweighted'}`));
+          (w.kg_sold ? ` · ${num(w.kg_sold)} kg sold` : '');
+        b.append(v, el('div', 'hint',
+          (w.low_kg != null && w.high_kg != null && w.high_kg !== w.low_kg ? `R ${num(w.low_kg, 0)}–${num(w.high_kg, 0)} · ` : '')
+          + `wk ${shortDate(w.week_start)}${w.weighted ? ' · by kg sold' : ' · median'}`));
         return b; } },
     { key: 'previous_week', label: 'Previous week (R/kg)', align: 'right',
       fmt: w => (w ? `R ${num(w.price_kg, 2)} /kg` : '—') },

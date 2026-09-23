@@ -1,5 +1,5 @@
 {
-  "version": "0.7.80",
+  "version": "0.7.81",
   "released": "2026-09-23",
-  "note": "The working morning is set on Farm setup (08:00 to 13:00 at FarmLab); its length, for every person on site, is the room the anytime tasks fill. Migration 0081."
+  "note": "The Tasks board moves things: drag a task to another day or across the AM|PM line; a people column on the left with faces and assigned / possible hours; Assign manually (a face, the tasks, Validate) and Assign automatically. Migration 0082."
 }

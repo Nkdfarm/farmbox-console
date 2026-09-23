@@ -36,6 +36,9 @@ let body = null;          // the part under the toolbars, repainted on its own
 
 const EMPTY_FILTERS = { q: '', status: 'open', family: '', category: '', crop: '', worker: '', area: '', priority: '' };
 let filters = { ...EMPTY_FILTERS };
+// the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
+const manual = { on: false, worker: null, tasks: new Set() };
+let dragging = null;      // the task being dragged, while it is
 try { filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
 
 // This page works in ISO strings; the date arithmetic is ui.js's, in local parts.
@@ -73,6 +76,11 @@ const focusWeek = () => span === 'day' ? mondayOf(day)
   : span === 'month' ? (today().slice(0, 7) === month.slice(0, 7) ? mondayOf(today()) : mondayOf(month))
   : week;
 const mondaysOnScreen = () => span === 'month' ? monthMondays(month) : [focusWeek()];
+// the days on screen: one, seven, or the month
+const rangeOnScreen = () => span === 'day' ? [day, day]
+  : span === 'month' ? [month, ymd(new Date(parseYmd(month).getFullYear(), parseYmd(month).getMonth() + 1, 0))]
+  : [week, shift(week, 6)];
+const mayPlanNow = () => !!(data?.may_plan) && data?.plan?.status !== 'locked';
 
 async function load() {
   mount.textContent = '';
@@ -142,11 +150,109 @@ function paint() {
   head.append(titles, el('div', 'spacer'), planButton());
   mount.append(head);
 
-  mount.append(filterBar());
-  mount.append(navBar());
+  const layout = el('div', 'tk-layout');
+  peopleCol = el('aside', 'tk-people');
+  const main = el('div', 'tk-main');
+  main.append(filterBar());
+  main.append(navBar());
   body = el('div');
-  mount.append(body);
+  main.append(body);
+  layout.append(peopleCol, main);
+  mount.append(layout);
   paintBody();
+}
+let peopleCol = null;
+
+// ── the people column: faces, hours over the possible, and the two ways to assign ──
+function paintPeople() {
+  if (!peopleCol) return;
+  peopleCol.textContent = '';
+  const [from, to] = rangeOnScreen();
+  const onScreen = tasksOnScreen().filter(t => t.date >= from && t.date <= to && !['cancelled', 'skipped'].includes(t.status));
+  // everyone rostered in any week on screen, with the hours possible in the range
+  const people = new Map();
+  for (const m of mondaysOnScreen()) {
+    (weeks.get(m)?.roster || []).forEach(r => {
+      const p = people.get(r.worker_id) || { id: r.worker_id, name: r.name, employment: r.employment, max: 0, days: 0 };
+      const perDay = (r.days || []).length ? Number(r.minutes) / r.days.length : 0;
+      for (let i = 0; i < 7; i++) {
+        const dte = shift(m, i);
+        if (dte < from || dte > to) continue;
+        if ((r.days || []).includes(i + 1)) { p.max += perDay; p.days += 1; }
+      }
+      people.set(r.worker_id, p);
+    });
+  }
+  const list = [...people.values()].sort((a, b) => (a.employment === 'casual') - (b.employment === 'casual') || a.name.localeCompare(b.name));
+  list.forEach(p => { p.assigned = onScreen.filter(t => (t.workers || []).some(w => w.id === p.id)).reduce((a, t) => a + Number(t.minutes || 0), 0); });
+
+  const may = mayPlanNow();
+  const head = el('div', 'tk-people-head');
+  const bm = el('button', 'btn btn-sm' + (manual.on ? ' btn-accent' : ''), 'Assign manually');
+  bm.disabled = !may;
+  bm.onclick = () => { manual.on = !manual.on; manual.worker = null; manual.tasks.clear(); paintPeople(); paintBody(); };
+  const ba = el('button', 'btn btn-sm btn-primary', 'Assign automatically');
+  ba.disabled = !may;
+  ba.onclick = () => autoAssign(ba, from, to);
+  head.append(bm, ba);
+  peopleCol.append(head);
+  if (!may) peopleCol.append(el('div', 'hint', data?.plan?.status === 'locked' ? 'This week is locked — reopen its plan to change who does what.' : 'Only a manager assigns the work.'));
+  if (manual.on) {
+    peopleCol.append(el('div', 'tk-guide',
+      manual.worker ? `${list.find(p => p.id === manual.worker)?.name || 'Chosen'} · now click the tasks on the board, then Validate.`
+                    : 'Click a face, then the tasks on the board, then Validate.'));
+    const acts = el('div', 'row');
+    const ok = el('button', 'btn btn-sm btn-primary', `Validate${manual.tasks.size ? ' · ' + manual.tasks.size : ''}`);
+    ok.disabled = !manual.worker || !manual.tasks.size;
+    ok.onclick = async () => {
+      busy(ok, true, 'Assigning…');
+      try {
+        const r = await rpc('assign_tasks', { p_tasks: [...manual.tasks], p_worker: manual.worker });
+        toast(`${r.assigned} task${r.assigned === 1 ? '' : 's'} given to ${list.find(p => p.id === manual.worker)?.name || 'them'}`, 'ok');
+        manual.on = false; manual.worker = null; manual.tasks.clear();
+        await load();
+      } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); }
+    };
+    const no = el('button', 'btn btn-sm', 'Discard');
+    no.onclick = () => { manual.on = false; manual.worker = null; manual.tasks.clear(); paintPeople(); paintBody(); };
+    acts.append(ok, no);
+    peopleCol.append(acts);
+  }
+  const unit = span === 'day' ? 'today' : span === 'month' ? 'this month' : 'this week';
+  peopleCol.append(el('div', 'tk-people-sub', `Hours ${unit}: assigned / possible`));
+  if (!list.length) peopleCol.append(el('div', 'empty', 'Nobody is rostered in this period.'));
+  list.forEach(p => {
+    const card = el('button', 'tk-person' + (manual.on && manual.worker === p.id ? ' chosen' : '') + (manual.on ? ' pickable' : ''));
+    card.append(avatar({ worker_id: p.id, name: p.name }, 'md'));
+    const txt = el('div', 'tk-person-txt');
+    txt.append(el('div', 'tk-person-name', p.name + (p.employment === 'casual' ? ' · casual' : '')));
+    const over = p.max > 0 && p.assigned > p.max;
+    const h = el('div', 'tk-person-hours' + (over ? ' over' : '') + (!p.max ? ' off' : ''));
+    h.textContent = p.max ? `${hrs(p.assigned)} / ${hrs(p.max)} h` : (p.assigned ? `${hrs(p.assigned)} h · not rostered` : 'not rostered');
+    txt.append(h);
+    const bar = el('div', 'tk-person-bar');
+    const fill = el('div', 'tk-person-fill' + (over ? ' over' : ''));
+    fill.style.width = (p.max ? Math.min(100, Math.round((p.assigned / p.max) * 100)) : 0) + '%';
+    bar.append(fill); txt.append(bar);
+    card.append(txt);
+    card.title = manual.on ? 'Choose this person' : `${p.name}: ${hrs(p.assigned)} h assigned of ${hrs(p.max)} h possible ${unit}`;
+    card.onclick = () => {
+      if (!manual.on) { filters.worker = filters.worker === p.id ? '' : p.id; remember(); paint(); return; }
+      manual.worker = manual.worker === p.id ? null : p.id; paintPeople();
+    };
+    peopleCol.append(card);
+  });
+  if (!manual.on) peopleCol.append(el('div', 'hint', 'Click a face to see only their tasks. Drag a task to another day or across the line.'));
+}
+
+async function autoAssign(btn, from, to) {
+  busy(btn, true, 'Assigning…');
+  try {
+    const r = await rpc('auto_assign', { p_farm: farm.id, p_from: from, p_to: to });
+    const un = (r.unassigned || []).length;
+    toast(`${r.assigned} of ${r.tasks} tasks assigned` + (un ? ` · ${un} with nobody on site` : '') + ((r.locked_weeks || []).length ? ' · a locked week left alone' : ''), un ? 'warn' : 'ok');
+    await load();
+  } catch (e) { busy(btn, false, 'Assign automatically'); toast(e.message, 'bad'); }
 }
 
 // the plan's state and its window, top right
@@ -254,6 +360,7 @@ function navBar() {
 // ── the body: board, day, month or list ───────────────────────────────────
 function paintBody() {
   body.textContent = '';
+  paintPeople();
   const tasks = visible(tasksOnScreen());
   if (view === 'list') { body.append(listView(tasks)); return; }
   if (span === 'day') body.append(dayView(tasks));
@@ -280,6 +387,7 @@ function weekBoard(tasks) {
       const list = tasks.filter(t => t.date === date && bandOf(t) === slot).sort(byTime);
       if (i === 0 || list.length) cell.append(el('div', 'tk-band-label', SLOT_WORD[slot]));
       list.forEach(t => cell.append(chip(t)));
+      dropTarget(cell, date, slot);
       grid.append(cell);
     }
   });
@@ -297,6 +405,7 @@ function dayView(tasks) {
     const band = el('div', 'tk-band ' + slot);
     band.append(el('div', 'tk-band-label', SLOT_WORD[slot] + (part.length ? '' : ' — nothing')));
     part.forEach(t => band.append(chip(t, { big: true })));
+    dropTarget(band, day, slot);
     box.append(band);
   });
   return box;
@@ -318,6 +427,7 @@ function monthView(tasks) {
     cell.append(n);
     const list = tasks.filter(t => t.date === date).sort(byTime);
     list.slice(0, 3).forEach(t => cell.append(chip(t)));
+    dropTarget(cell, date, null);
     if (list.length > 3) {
       const more = el('button', 'tk-morelink', `+${list.length - 3} more`);
       more.onclick = go;
@@ -384,9 +494,46 @@ function chip(t, opts = {}) {
   more.setAttribute('aria-label', 'Actions for ' + t.title);
   more.onclick = e => { e.stopPropagation(); openTask(t); };
   c.append(more);
-  c.onclick = () => openTask(t);
-  c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTask(t); } };
+  const open = () => {
+    if (manual.on) {
+      if (t.status === 'done') return;
+      if (manual.tasks.has(t.id)) manual.tasks.delete(t.id); else manual.tasks.add(t.id);
+      c.classList.toggle('picked', manual.tasks.has(t.id));
+      paintPeople();
+      return;
+    }
+    openTask(t);
+  };
+  if (manual.on && manual.tasks.has(t.id)) c.classList.add('picked');
+  c.onclick = open;
+  c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  // drag it to another day or across the line (a manager, an open task)
+  if (mayPlanNow() && t.status !== 'done' && !manual.on) {
+    c.draggable = true;
+    c.ondragstart = e => { dragging = t; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', t.id); } catch { /* fine */ } };
+    c.ondragend = () => { dragging = null; c.classList.remove('dragging'); };
+  }
   return c;
+}
+
+// where a dragged chip may land: a day and, on the boards with bands, a half of it
+function dropTarget(cell, date, slot) {
+  if (!mayPlanNow()) return;
+  cell.ondragover = e => { if (!dragging) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; cell.classList.add('over'); };
+  cell.ondragleave = () => cell.classList.remove('over');
+  cell.ondrop = async e => {
+    e.preventDefault(); cell.classList.remove('over');
+    const t = dragging; dragging = null;
+    if (!t) return;
+    const sameDay = t.date === date;
+    const sameSlot = slot === null || bandOf(t) === slot;
+    if (sameDay && sameSlot) return;
+    try {
+      await rpc('move_task', { p_task: t.id, p_date: date, p_slot: slot });
+      toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}`, 'ok');
+      await load();
+    } catch (err) { toast(err.message, 'bad'); }
+  };
 }
 
 const cell = child => { const c = el('td'); c.append(child); return c; };

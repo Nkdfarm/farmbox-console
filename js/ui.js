@@ -427,18 +427,36 @@ const CROP_WIKI = {
   'Oregano': 'Oregano', 'Sage': 'Salvia_officinalis',
 };
 const wikiTitle = c => CROP_WIKI[c.name] || (c.category === 'microgreens' ? 'Microgreen' : String(c.name || '').split(/[ —(]/)[0]);
-const cropDefault = async c => {
+// The 50 rows of the Crop database would ask Wikipedia 50 times at once, and it
+// answers a burst with empties: the lookups go three at a time, one title asked
+// once (the same promise shared), and only a real answer — a picture, or a page
+// with none — is remembered; a refused or failed request is asked again next time.
+const WIKI_PENDING = new Map();
+let wikiSlots = 0; const wikiQueue = [];
+const wikiTurn = () => new Promise(res => { wikiQueue.push(res); pump(); });
+const pump = () => { while (wikiSlots < 3 && wikiQueue.length) { wikiSlots++; wikiQueue.shift()(); } };
+const wikiDone = () => { wikiSlots--; setTimeout(pump, 120); };
+const cropDefault = c => {
   const title = wikiTitle(c);
-  if (!title) return '';
+  if (!title) return Promise.resolve('');
   const key = 'fbc_cropimg_' + title;
-  try { const hit = localStorage.getItem(key); if (hit !== null) return hit; } catch { /* no storage */ }
-  let url = '';
-  try {
-    const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title), { headers: { Accept: 'application/json' } });
-    if (r.ok) { const j = await r.json(); url = j?.thumbnail?.source || ''; }
-  } catch { url = ''; }
-  try { localStorage.setItem(key, url); } catch { /* fine */ }
-  return url;
+  try { const hit = localStorage.getItem(key); if (hit !== null) return Promise.resolve(hit); } catch { /* no storage */ }
+  if (WIKI_PENDING.has(title)) return WIKI_PENDING.get(title);
+  const p = (async () => {
+    await wikiTurn();
+    try {
+      const r = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title), { headers: { Accept: 'application/json' } });
+      if (r.status === 404) { try { localStorage.setItem(key, ''); } catch { /* fine */ } return ''; }
+      if (!r.ok) return '';
+      const j = await r.json();
+      const url = j?.thumbnail?.source || '';
+      try { localStorage.setItem(key, url); } catch { /* fine */ }
+      return url;
+    } catch { return ''; }
+    finally { wikiDone(); WIKI_PENDING.delete(title); }
+  })();
+  WIKI_PENDING.set(title, p);
+  return p;
 };
 export function cropAvatar(c, size = '') {
   const box = el('div', ['avatar', 'crop', size].filter(Boolean).join(' '), initials(c.name || '?'));

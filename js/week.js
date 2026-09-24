@@ -226,7 +226,7 @@ function paintPeople() {
     const card = el('button', 'tk-person' + (manual.on && manual.worker === p.id ? ' chosen' : '') + (manual.on ? ' pickable' : ''));
     card.append(avatar({ worker_id: p.id, name: p.name }, 'md'));
     const txt = el('div', 'tk-person-txt');
-    txt.append(el('div', 'tk-person-name', p.name + (p.employment === 'casual' ? ' · casual' : '')));
+    txt.append(el('div', 'tk-person-name', p.name + (p.employment === 'casual' ? ' · on demand' : p.employment === 'part_time' ? ' · part time' : '')));
     const over = p.max > 0 && p.assigned > p.max;
     const h = el('div', 'tk-person-hours' + (over ? ' over' : '') + (!p.max ? ' off' : ''));
     h.textContent = p.max ? `${hrs(p.assigned)} / ${hrs(p.max)} h` : (p.assigned ? `${hrs(p.assigned)} h · not rostered` : 'not rostered');

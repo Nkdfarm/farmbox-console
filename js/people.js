@@ -15,11 +15,21 @@ export const ROLES = [
   ['farm_admin', 'Admin', 'Runs this FarmBox: settings, people, plans, procedures.'],
   ['farm_manager', 'Farm manager', 'Runs the week: builds and validates the labour plan.'],
   ['farm_assistant', 'Farm assistant', 'Runs tasks and can plan a day. Cannot sign off the week.'],
+  ['agronomist', 'Agronomist', 'Owns the crops: plans and validates the crop plan, edits this farm’s own crops, runs IPM. Cannot sign off the week.'],
   ['worker', 'Worker', 'Does the work: My Week, checklists, evidence.'],
   ['technician', 'Technician', 'Maintenance and repairs.'],
   ['office', 'Office', 'Purchasing, records, reporting.'],
 ];
 export const roleLabel = v => ROLES.find(r => r[0] === v)?.[1] ?? v;
+
+// How somebody is employed, beside what they do (migration 0091). "On demand" is
+// stored as casual: out of the week's capacity, called in only when needed.
+export const EMPLOYMENT = [
+  ['permanent', 'Permanent', 'In the week’s capacity. The planner gives them work freely.'],
+  ['part_time', 'Part time', 'Planned like permanent, on the working days and hours set below.'],
+  ['casual', 'On demand', 'Not in the week’s capacity. Called in only when nobody permanent can take the work, and the plan says so.'],
+];
+export const employmentLabel = v => EMPLOYMENT.find(r => r[0] === v)?.[1] ?? 'Permanent';
 
 const WORKER_SLOTS = Array.from({ length: 10 }, (_, i) => `Worker ${i + 1}`);
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
@@ -197,7 +207,10 @@ function personRow(p) {
   tr.append(td(chips));
 
   const days = (p.working_days || []).map(d => DAYS.find(x => x[0] === d)?.[1][0] ?? '').join('');
-  tr.append(td(el('span', 'mono', `${days} · ${Number(p.hours_per_day)}h`)));
+  const wk = el('div');
+  wk.append(el('span', 'mono', `${days} · ${Number(p.hours_per_day)}h`));
+  if (p.employment && p.employment !== 'permanent') wk.append(el('div', 'hint', employmentLabel(p.employment)));
+  tr.append(td(wk));
 
   const acts = el('div', 'acts');
   const edit = el('button', 'btn btn-sm', 'Edit');
@@ -270,6 +283,12 @@ function openPerson(p) {
   });
   const hours = input({ id: 'p-hours', type: 'number', min: '1', max: '12', step: '0.5',
                         value: String(p?.hours_per_day ?? 8) });
+  const employment = selectBox(EMPLOYMENT.map(r => [r[0], r[1]]), p?.employment ?? 'permanent');
+  employment.id = 'p-employment';
+  const empHint = el('div', 'hint');
+  const setEmpHint = () => { empHint.textContent = EMPLOYMENT.find(r => r[0] === employment.value)?.[2] ?? ''; };
+  employment.onchange = setEmpHint;
+  setEmpHint();
 
   // the account
   const acct = el('div', 'field');
@@ -307,6 +326,7 @@ function openPerson(p) {
       return g;
     })(),
     el('div', 'sec-title', 'Their week'),
+    (() => { const f = field('Employment', employment); f.append(empHint); return f; })(),
     (() => { const f = el('div', 'field');
              f.append(el('label', null, 'Working days'), dayRow); return f; })(),
     field('Hours per day', hours),
@@ -338,6 +358,7 @@ function openPerson(p) {
       phone: phone.value.trim() || null,
       working_days: [...chosen].sort((a, b) => a - b),
       hours_per_day: Number(hours.value) || 8,
+      employment: employment.value,
       responsibilities: resp.value(),
     };
     if (!body.name) { toast('A name is needed', 'bad'); name.focus(); return; }

@@ -731,27 +731,30 @@ function succession() {
   d.footer.append(cancel, go);
 }
 
-// ── how many growing positions a zone has: its places shared equally (0.7.116) ──
-// The menu offers only the numbers that divide the zone's places exactly, so every
-// position is the same size (Zone 2: 4 140 places → 10 × 414, 12 × 345, 20 × 207…).
-function divisors(total) {
+// ── how many growing positions a zone has (0.7.116; 0.7.117: along what was built) ──
+// A position is a whole number of the rows or tables built in the zone (base_units),
+// so the menu offers the divisors of that number only — Zone 2's 10 rows give
+// 10, 5, 2 and 1 — each with the places it makes.
+function divisors(n) {
   const out = [];
-  for (let n = 1; n <= Math.min(total, 60); n++) if (total % n === 0) out.push(n);
+  for (let k = 1; k <= n; k++) if (n % k === 0) out.push(k);
   return out;
 }
 function splitMenu(sys) {
   const total = Math.round((sys.positions || []).reduce((a, p) => a + Number(p.capacity || 0), 0));
   const cur = (sys.positions || []).length;
+  const base = Number(sys.base_units) || cur;
   const wrap = el('label', 'tl-split');
   const sel = el('select', 'input');
-  const opts = divisors(total);
+  const opts = divisors(base).filter(n => total % n === 0);
   if (!opts.includes(cur)) opts.push(cur);
-  opts.sort((a, b) => a - b).forEach(n => {
-    const o = el('option', null, `${n} × ${total % n === 0 ? (total / n).toLocaleString() : '…'}`);
+  opts.sort((a, b) => b - a).forEach(n => {
+    const each = base % n === 0 ? base / n : null;
+    const o = el('option', null, `${n} × ${(total / n).toLocaleString()}` + (each && each > 1 ? ` · ${each} rows each` : ''));
     o.value = String(n); sel.append(o);
   });
   sel.value = String(cur);
-  sel.title = `Growing positions in ${sys.name}: its ${total.toLocaleString()} places shared equally`;
+  sel.title = `Growing positions in ${sys.name}: ${base} rows or tables built, ${total.toLocaleString()} places — a position is a whole number of rows`;
   sel.onchange = async () => {
     const n = Number(sel.value);
     if (n === cur) return;

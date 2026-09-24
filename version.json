@@ -1,5 +1,5 @@
 {
-  "version": "0.7.116",
+  "version": "0.7.117",
   "released": "2026-09-25",
-  "note": "Crop planner: each zone chooses how many equal growing positions it has, from the numbers that divide its places. Zone 2 is 10 rows of 414. Migration 0108."
+  "note": "The zone Positions menu offers only whole groups of the rows or tables built (Zone 2: 10, 5, 2, 1); the built count is on Farm setup. Migration 0109."
 }

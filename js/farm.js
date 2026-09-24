@@ -432,6 +432,8 @@ function editZone(z) {
   const status = selectBox(STATUS, z.status || 'active'); status.id = 'z-status';
   const area = input({ id: 'z-area', type: 'number', min: 0, step: '0.1',
                        value: z.area_m2 == null ? '' : Number(z.area_m2) });
+  // the rows or tables physically built: the planner splits the zone along them (0109)
+  const built = input({ id: 'z-built', type: 'number', min: 1, step: '1', value: z.base_units ?? '' });
   const media = toggles(mediaList(z.media || []), z.media);
   const cats = toggles(CATS, z.crop_categories);
 
@@ -442,7 +444,9 @@ function editZone(z) {
     'Decides which crops fit: a crop grows here when its medium is one of these.'));
   d.body.append(field('Kept for (optional)', cats,
     'Leave empty unless the farm has chosen to keep this zone for some crops only.'));
-  d.body.append(field('Area (m²)', area));
+  const g2 = el('div', 'grid2');
+  g2.append(field('Area (m²)', area), field('Rows or tables built', built, 'A growing position is a whole number of them; the Crop planner offers only those splits.'));
+  d.body.append(g2);
 
   // the positions, edited in place and sent together on save
   const rows = (z.position_list || []).map(p => ({ ...p, orig: { ...p } }));
@@ -559,6 +563,7 @@ function editZone(z) {
         name: name.value.trim(), system_type: type.value, status: status.value,
         media: m, crop_categories: cats.value(),
         area_m2: area.value === '' ? null : Number(area.value),
+        base_units: built.value === '' ? null : Number(built.value),
         positions } });
       toast(`${name.value.trim()} saved · ${r.positions} positions · `
         + `${Number(r.places).toLocaleString()} places`, 'ok');

@@ -156,6 +156,7 @@ function paint() {
       ((sys.categories || []).length ? ' · kept for ' + sys.categories.join(', ').replace(/_/g, ' ') : '');
     zh.append(lab);
     const zt = el('div', 'tl-zone-track');
+    if (may) zt.append(splitMenu(sys));
     if (may) {
       const pb = el('button', 'btn btn-sm btn-ghost', 'Plan this bay');
       pb.title = 'Fill the free positions of this bay only';
@@ -728,4 +729,42 @@ function succession() {
     } catch (e) { busy(go, false, 'Propose the series'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, go);
+}
+
+// ── how many growing positions a zone has: its places shared equally (0.7.116) ──
+// The menu offers only the numbers that divide the zone's places exactly, so every
+// position is the same size (Zone 2: 4 140 places → 10 × 414, 12 × 345, 20 × 207…).
+function divisors(total) {
+  const out = [];
+  for (let n = 1; n <= Math.min(total, 60); n++) if (total % n === 0) out.push(n);
+  return out;
+}
+function splitMenu(sys) {
+  const total = Math.round((sys.positions || []).reduce((a, p) => a + Number(p.capacity || 0), 0));
+  const cur = (sys.positions || []).length;
+  const wrap = el('label', 'tl-split');
+  const sel = el('select', 'input');
+  const opts = divisors(total);
+  if (!opts.includes(cur)) opts.push(cur);
+  opts.sort((a, b) => a - b).forEach(n => {
+    const o = el('option', null, `${n} × ${total % n === 0 ? (total / n).toLocaleString() : '…'}`);
+    o.value = String(n); sel.append(o);
+  });
+  sel.value = String(cur);
+  sel.title = `Growing positions in ${sys.name}: its ${total.toLocaleString()} places shared equally`;
+  sel.onchange = async () => {
+    const n = Number(sel.value);
+    if (n === cur) return;
+    const ok = await confirmDrawer(`${n} positions in ${sys.name}?`,
+      `${n} positions of ${(total / n).toLocaleString()} places each, instead of ${cur}. The positions already there keep their history and ` +
+      `are named again A, B, C…; the zone's proposals are removed. It is refused while a crop is validated or growing in the zone.`, 'Split it');
+    if (!ok) { sel.value = String(cur); return; }
+    try {
+      const r = await rpc('split_zone', { p_system: sys.id, p_n: n });
+      toast(`${r.zone}: ${r.positions} positions of ${Math.round(Number(r.places_each)).toLocaleString()} places`, 'ok');
+      await reload();
+    } catch (e) { sel.value = String(cur); toast(e.message, 'bad'); }
+  };
+  wrap.append(el('span', 'hint', 'Positions'), sel);
+  return wrap;
 }

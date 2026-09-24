@@ -1,5 +1,5 @@
 {
-  "version": "0.7.115",
+  "version": "0.7.116",
   "released": "2026-09-25",
-  "note": "Office › Orders: a customer order planned backwards from its delivery, checked first (yes / tight / no and why, with what would work). Crop rotation in the planner. Migration 0107."
+  "note": "Crop planner: each zone chooses how many equal growing positions it has, from the numbers that divide its places. Zone 2 is 10 rows of 414. Migration 0108."
 }

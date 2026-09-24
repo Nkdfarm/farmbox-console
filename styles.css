@@ -1050,3 +1050,63 @@ tr.off { opacity: .6; }
   color: var(--warning); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-band.holiday, .tk-mc.holiday {
   background-image: repeating-linear-gradient(135deg, transparent 0 7px, var(--warning-bg) 7px 9px); }
+
+/* ── Pest & diseases: the day by zone (0096) ─────────────────────────────── */
+.sc-zone { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: var(--space-3); }
+.sc-zone > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4); }
+.sc-zone > summary::-webkit-details-marker { display: none; }
+.sc-zone > summary::before { content: '›'; color: var(--text-muted); font-weight: 700; transition: transform var(--transition); width: 10px; }
+.sc-zone[open] > summary::before { transform: rotate(90deg); }
+.sc-zone-title { display: flex; align-items: center; gap: var(--space-2); }
+.sc-crops { display: inline-flex; align-items: center; }
+.sc-crops .avatar + .avatar { margin-left: -8px; }
+.sc-zone-facts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.sc-body { padding: 0 var(--space-4) var(--space-4); border-top: 1px solid var(--border); }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--space-3); padding-top: var(--space-3); }
+.sc-fig { margin: 0; cursor: zoom-in; }
+.sc-fig img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: #000; }
+.sc-fig figcaption { font-size: var(--text-xs); color: var(--text-muted); margin-top: 4px; display: grid; gap: 3px; }
+.sc-fig figcaption b { color: var(--text); }
+.sc-answers { margin-top: var(--space-3); display: grid; gap: 4px; }
+.sc-answer { display: flex; gap: var(--space-2); align-items: baseline; font-size: var(--text-sm); }
+.vw-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.vw-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-offset); color: var(--text); border: 1px solid var(--border); }
+.vw-tag.pest { background: rgba(251,191,36,0.14); color: var(--warning); }
+.vw-tag.disease { background: var(--error-bg); color: var(--error); }
+.vw-tag.disorder { background: var(--info-bg); color: var(--info); }
+.vw-tag.beneficial { background: var(--success-bg); color: var(--success); }
+.vw-tag.ai { border-style: dashed; }
+.vw-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
+
+/* ── the photo viewer (0096) ─────────────────────────────────────────────── */
+.viewer { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-columns: 1fr 360px; background: #000; color: var(--text); }
+.vw-stage { display: grid; grid-template-columns: 1fr; min-width: 0; min-height: 0; }
+.viewer.cmp .vw-stage { grid-template-columns: 1fr 1fr; }
+.vw-pane { position: relative; overflow: hidden; touch-action: none; cursor: grab; border-right: 1px solid #222; }
+.vw-pane:active { cursor: grabbing; }
+.vw-pane img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; user-select: none; -webkit-user-drag: none; }
+.vw-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; font-size: var(--text-xs); color: #eee;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7)); pointer-events: none; }
+.vw-state { color: #aaa; }
+.vw-panel { background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-4); }
+.vw-head { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: var(--space-2); }
+.vw-head h2 { font-size: var(--text-lg); font-weight: 650; grid-column: 1; }
+.vw-head .hint { grid-column: 1; }
+.vw-head .btn { grid-column: 2; grid-row: 1 / span 2; }
+.vw-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vw-zoom { min-width: 48px; text-align: center; font-family: var(--font-mono, monospace); font-size: var(--text-xs); color: var(--text-muted); }
+.vw-ai-line { font-size: var(--text-sm); padding: 4px 0; border-bottom: 1px solid var(--border); }
+.vw-ai-notes { font-size: var(--text-sm); color: var(--text-muted); margin: 6px 0 0; }
+.vw-cmp { margin-top: var(--space-2); display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
+.vw-cmp-day { font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; letter-spacing: .04em; }
+.vw-cmp-row { display: flex; align-items: center; gap: var(--space-2); background: transparent; border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px; color: var(--text); cursor: pointer; text-align: left; font: inherit; font-size: var(--text-sm); }
+.vw-cmp-row:hover { border-color: var(--border-strong); }
+.vw-cmp-row img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+@media (max-width: 900px) {
+  .viewer { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
+  .vw-panel { border-left: 0; border-top: 1px solid var(--border); }
+}

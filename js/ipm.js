@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
 import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
+import { openViewer } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PESTS = [['', '—'], ['whitefly', 'Whitefly'], ['thrips', 'Thrips'], ['fungus_gnat', 'Fungus gnats'],
@@ -29,7 +30,7 @@ export async function renderIpm(container, currentFarm) {
 async function load() {
   mount.textContent = '';
   mount.append(el('div', 'empty', 'Reading the traps…'));
-  try { data = await rpc('ipm', { p_farm: farm.id }); }
+  try { const [d, cat] = await Promise.all([rpc('ipm', { p_farm: farm.id }), rpc('pest_catalog')]); data = d; data.catalog = cat; }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();
 }
@@ -50,9 +51,9 @@ function paint() {
   if (add) add.onclick = () => editTrap(null);
   const thr = data.may_edit ? el('button', 'btn', `Thresholds ${th.watch} / ${th.over}`) : el('span', 'pill', `watch ${th.watch} · over ${th.over}`);
   if (data.may_edit) thr.onclick = () => editThreshold(th);
-  mount.append(pageHead('IPM',
-    'Sticky traps, counted every round. A trap over the threshold has raised an issue; ' +
-    'the round itself is the procedure "IPM: sticky trap round", one task per zone every Monday.', thr, add));
+  mount.append(pageHead('Traps',
+    'The sticky traps and their counts. They are counted during the daily scouting when the person opens the trap cards; ' +
+    'a trap over the threshold has raised an issue. The curves are drawn by date, so a gap is a gap.', thr, add));
 
   // ── the numbers ──
   const tiles = el('div', 'tiles ipm-tiles');
@@ -75,14 +76,14 @@ function paint() {
     const c = el('div', 'card');
     const head = el('div', 'row'); head.style.padding = 'var(--space-3) var(--space-4)';
     head.append(el('b', null, 'Species on the traps'),
-      el('span', 'hint', ' · named by the AI from the last four weeks of photos' +
+      el('span', 'hint', ' · from the trap photos somebody asked the AI about, last four weeks' +
         (data.ai_pending ? ` · ${data.ai_pending} photo${data.ai_pending > 1 ? 's' : ''} waiting` : '')));
     c.append(head);
     if (sp.length) c.append(speciesTable(sp, true));
     else c.append(el('div', 'empty', 'No photo named yet.'));
     mount.append(c);
   } else if (!data.ai_ready) {
-    mount.append(el('div', 'note', 'Species detection is off: paste an Anthropic API key in Settings › Integrations and every new trap photo is sent to the AI, which names what it sees.'));
+    mount.append(el('div', 'note', 'The AI is off: paste an Anthropic API key in Settings › Integrations, then open any trap photo and press Ask the AI.'));
   }
 
   // ── week by week ──
@@ -131,17 +132,18 @@ function paint() {
           const s = el('span', d > 0 ? 'up' : d < 0 ? 'down' : 'hint', (d > 0 ? '+' : '') + d);
           s.title = `previous ${v}`;
           return s; } },
-      { key: 'trend', label: 'Trend', fmt: (v, t) => sparkline(v || [], th) },
+      { key: 'trend', label: 'Trend', fmt: (v, t) => sparkline(v || [], th, t.installed_at) },
       { key: 'last', label: 'Mostly', fmt: v => {
           if (!v) return '—';
-          if (v.pest) return pestLabel(v.pest) + (v.corrected ? '' : v.algo_total != null ? ' · phone count' : '');
+          const tag = (v.tags || [])[0];
+          if (tag) return tag.label || tag.code;
           if (v.ai_status === 'done' && v.ai_pest) return el('span', 'hint', pestLabel(v.ai_pest) + ' · AI');
-          if (v.ai_status === 'queued') return el('span', 'hint', 'AI looking…');
-          return '—'; } },
+          if (v.pest) return pestLabel(v.pest);
+          return el('span', 'hint', 'not named yet'); } },
       { key: 'last', label: 'Photo', fmt: (v, t) => {
           if (!v?.photo_data) return '—';
           const im = el('img', 'ipm-thumb'); im.src = v.photo_data; im.alt = `trap ${t.code}`;
-          im.onclick = e => { e.stopPropagation(); openReading(t, v); };
+          im.onclick = e => { e.stopPropagation(); viewReading(t, v, z); };
           return im; } },
       { key: 'active', label: 'Status', fmt: (v, t) => el('span', 'pill' + (v ? (level(t.last?.total, th) === 'over' ? ' bad' : level(t.last?.total, th) === 'watch' ? ' warn' : ' ok') : ''),
                                                         v ? (level(t.last?.total, th) || 'no reading') : 'taken down') },
@@ -158,7 +160,7 @@ function paint() {
   // ── the rounds ──
   const rc = el('div', 'card');
   const rh = el('div', 'row'); rh.style.padding = 'var(--space-3) var(--space-4)';
-  rh.append(el('b', null, 'Trap rounds'), el('span', 'hint', ' · the last two weeks and the next two'));
+  rh.append(el('b', null, 'Scouting rounds'), el('span', 'hint', ' · the last two weeks and the next two, zone by zone'));
   rc.append(rh);
   rc.append(table([
     { key: 'date', label: 'Day', fmt: shortDate },
@@ -167,7 +169,7 @@ function paint() {
                                                        v === 'done' ? `done ${when(r.done_at)}` : new Date(r.date) < new Date(data.today) ? 'overdue' : v) },
     { key: 'readings', label: 'Traps read', align: 'right', fmt: (v, r) => `${v} / ${r.traps}` },
     { key: 'workers', label: 'Who', fmt: v => (v || []).join(', ') || '—' },
-  ], data.rounds, { empty: 'No round scheduled — is the procedure "IPM: sticky trap round" approved, and the zones active?' }));
+  ], data.rounds, { empty: 'No scouting scheduled — is the procedure "Daily scouting: traps and plants" approved?' }));
   mount.append(rc);
 
   // ── the latest photos ──
@@ -182,7 +184,7 @@ function paint() {
       const im = el('img'); im.src = r.photo_data; im.alt = `trap ${r.trap}`;
       fig.append(im, el('figcaption', null, `${r.trap} · ${num(r.total, 0)} · ${when(r.read_at)}` +
         (r.ai_status === 'done' && r.ai_pest ? ` · ${pestLabel(r.ai_pest)}` : '')));
-      fig.onclick = () => openReading({ code: r.trap }, r);
+      fig.onclick = () => viewReading({ code: r.trap }, r, null);
       grid.append(fig);
     });
     gc.append(grid);
@@ -190,29 +192,36 @@ function paint() {
   }
 }
 
-// last ten readings as a small line, the threshold as a dotted rule
-function sparkline(points, th) {
+// the last readings as a small line drawn by date — a gap over a weekend or a
+// holiday shows as a gap (0096) — the threshold as a dotted rule
+function sparkline(points, th, since) {
   if (points.length < 2) return el('span', 'hint', points.length ? 'one reading' : '—');
-  const w = 110, h = 28, pad = 3;
+  const w = 120, h = 28, pad = 3;
+  const ts = points.map(p => new Date(p.read_at).getTime());
+  const t0 = Math.min(...ts, since ? new Date(since).getTime() : Infinity), t1 = Math.max(...ts);
+  const span = (t1 - t0) || 1;
   const ys = points.map(p => Number(p.total));
-  const max = Math.max(...ys, th.over), min = 0, span = max - min || 1;
-  const xy = ys.map((y, i) => [pad + i * (w - 2 * pad) / (ys.length - 1), h - pad - (y - min) * (h - 2 * pad) / span]);
+  const max = Math.max(...ys, th.over), yspan = max || 1;
+  const xy = points.map((p, i) => [pad + (ts[i] - t0) * (w - 2 * pad) / span, h - pad - ys[i] * (h - 2 * pad) / yspan]);
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.setAttribute('width', w); svg.setAttribute('height', h);
   svg.setAttribute('class', 'ipm-spark'); svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', `${ys.join(', ')} insects over ${ys.length} readings`);
+  const days = Math.round(span / 864e5);
+  svg.setAttribute('aria-label', `${ys.join(', ')} insects over ${days} day${days === 1 ? '' : 's'}`);
   const title = document.createElementNS(SVG_NS, 'title');
   title.textContent = points.map(p => `${when(p.read_at)}: ${p.total}`).join('\n');
   const rule = document.createElementNS(SVG_NS, 'line');
-  const ry = h - pad - (th.over - min) * (h - 2 * pad) / span;
+  const ry = h - pad - th.over * (h - 2 * pad) / yspan;
   rule.setAttribute('x1', pad); rule.setAttribute('x2', w - pad); rule.setAttribute('y1', ry); rule.setAttribute('y2', ry);
   rule.setAttribute('class', 'ipm-rule');
   const line = document.createElementNS(SVG_NS, 'polyline');
   line.setAttribute('points', xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '));
-  const dot = document.createElementNS(SVG_NS, 'circle');
-  const [lx, ly] = xy[xy.length - 1];
-  dot.setAttribute('cx', lx.toFixed(1)); dot.setAttribute('cy', ly.toFixed(1)); dot.setAttribute('r', '2.4');
-  svg.append(title, rule, line, dot);
+  svg.append(title, rule, line);
+  xy.forEach(([x, y], i) => {
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('cx', x.toFixed(1)); dot.setAttribute('cy', y.toFixed(1)); dot.setAttribute('r', i === xy.length - 1 ? '2.4' : '1.4');
+    svg.append(dot);
+  });
   return svg;
 }
 
@@ -405,4 +414,15 @@ function editThreshold(th) {
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);
+}
+
+// a reading in the viewer (0096): zoom, tags, the AI on request, compare with the zone's photos
+function viewReading(t, r, zone) {
+  const zoneId = zone?.id || t.zone_id;
+  openViewer({
+    farm, photo: { ...r, kind: 'trap', code: t.code, colour: t.colour, installed_at: t.installed_at, zone: zone?.name, taken_at: r.read_at },
+    catalog: data.catalog || [], aiReady: data.ai_ready, mayWrite: data.may_write !== false,
+    zonePhotos: zoneId ? () => rpc('zone_photos', { p_farm: farm.id, p_zone: zoneId }) : null,
+    onChange: () => load(),
+  });
 }

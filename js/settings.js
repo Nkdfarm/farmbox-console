@@ -168,11 +168,11 @@ const INTEGRATIONS = [
           '(free: 100 requests a day; one market scan uses 7). ',
     link: ['Farmazone API page', 'https://farmazone.co.za/api/v1/docs/'] },
   { name: 'anthropic', label: 'Anthropic API key', placeholder: 'sk-ant-…',
-    setText: 'Every new sticky-trap photo is sent to Claude, which names the species.',
-    unsetText: 'Not set — trap photos are counted on the phone only; no species detection.',
-    savedToast: 'Anthropic key saved — the next trap photo is identified',
-    help: 'IPM species detection needs it: the trap round’s photos go to Claude (Anthropic), which names and counts ' +
-          'the insects on each trap. Create a key in the Anthropic Console (a small image costs a few cents). ',
+    setText: 'A photo goes to Claude when somebody presses Ask the AI on it, in Pest & diseases.',
+    unsetText: 'Not set — photos are counted and tagged by people only; the AI cannot be asked.',
+    savedToast: 'Anthropic key saved — Ask the AI works on any photo now',
+    help: 'Pest & diseases needs it: a trap or plant photo goes to Claude (Anthropic) only when somebody asks, photo by ' +
+          'photo; it names the insects or the disease against the catalogue. Create a key in the Anthropic Console (a photo costs a few cents). ',
     link: ['Anthropic Console', 'https://console.anthropic.com/settings/keys'] },
 ];
 
@@ -257,7 +257,7 @@ function layout(ctx, touched) {
 
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
-  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'IPM'], ['office', 'Office'],
+  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'Pest & diseases'], ['office', 'Office'],
    ['maintenance', 'Maintenance'], ['farm', 'Farm setup']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;

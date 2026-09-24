@@ -153,7 +153,7 @@ function table() {
   const t = el('table', 'people');
   const thead = el('thead');
   const hr = el('tr');
-  ['Person', 'Role', 'Account', 'Responsible for', 'Week', ''].forEach(h => {
+  ['Person', 'Role', 'Employment', 'Account', 'Responsible for', 'Week', ''].forEach(h => {
     const th = el('th', null, h);
     if (h === '') th.style.width = '1%';
     hr.append(th);
@@ -165,7 +165,7 @@ function table() {
   if (!people.length) {
     const tr = el('tr');
     const td = el('td');
-    td.colSpan = 6;
+    td.colSpan = 7;
     const e = el('div', 'empty');
     e.append(el('h3', null, 'Nobody here yet'));
     e.append(el('p', null, 'Add the manager first, then the workers who run the week.'));
@@ -191,6 +191,7 @@ function personRow(p) {
   tr.append(td(who));
 
   tr.append(td(el('span', null, roleLabel(p.role))));
+  tr.append(td(el('span', p.employment === 'casual' ? 'pill warn' : 'pill', employmentLabel(p.employment))));
 
   const acct = p.has_login
     ? el('span', 'pill ok', 'Can sign in')
@@ -207,10 +208,7 @@ function personRow(p) {
   tr.append(td(chips));
 
   const days = (p.working_days || []).map(d => DAYS.find(x => x[0] === d)?.[1][0] ?? '').join('');
-  const wk = el('div');
-  wk.append(el('span', 'mono', `${days} · ${Number(p.hours_per_day)}h`));
-  if (p.employment && p.employment !== 'permanent') wk.append(el('div', 'hint', employmentLabel(p.employment)));
-  tr.append(td(wk));
+  tr.append(td(el('span', 'mono', `${days} · ${Number(p.hours_per_day)}h`)));
 
   const acts = el('div', 'acts');
   const edit = el('button', 'btn btn-sm', 'Edit');

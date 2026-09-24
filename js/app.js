@@ -132,6 +132,18 @@ const SECTIONS = {
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm], ['people', 'People', renderPeople]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
 };
+// Tabs only some people may open (0092): People is for the unit's Admin and Farm manager,
+// the franchisee's admin and the franchisor. The database asks the same question
+// (app.may_manage_people), so hiding the tab is a courtesy, not the lock.
+function mayManagePeople() {
+  if (!farm) return false;
+  return myRoles.some(r => r.role === 'franchisor_admin'
+    || (r.role === 'franchisee_admin' && r.org_id && r.org_id === farm.org_id)
+    || (r.farm_id === farm.id && (r.role === 'farm_admin' || r.role === 'farm_manager')));
+}
+const TAB_GATE = { 'farm/people': mayManagePeople };
+const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${key}`] || TAB_GATE[`${sec}/${key}`]());
+
 const MOVED = {
   crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/routines',
   prices: 'office/sell', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
@@ -204,7 +216,7 @@ async function loadFarms() {
   // minutes ago cannot be configured: it is exactly the farm somebody needs
   // to open. Its state is shown beside the name rather than hidden.
   farms = await select('farm',
-    'select=id,name,code,status&status=in.(active,setup)&order=name');
+    'select=id,name,code,status,org_id&status=in.(active,setup)&order=name');
   const pick = $('farmPick');
   pick.textContent = '';
   farms.forEach(f => {
@@ -225,7 +237,7 @@ async function paintMyRole() {
   const pill = $('envPill');
   try {
     const rows = await select('membership',
-      `select=role,farm_id&user_id=eq.${myUserId}&active=is.true`);
+      `select=role,farm_id,org_id&user_id=eq.${myUserId}&active=is.true`);
     myRoles = rows;
     const franchisor = rows.some(r => r.role === 'franchisor_admin');
     const here = rows.find(r => r.farm_id === farm?.id);
@@ -243,18 +255,14 @@ function switchFarm(id) {
   farm = next;
   $('farmPick').value = farm.id;
   pref.set(FARM_KEY, farm.id);
-  paintMyRole();
   location.hash = '#/dashboard/overview';
-  route();
-  warm();
+  paintMyRole().then(() => { route(); warm(); });
 }
 
 $('farmPick').addEventListener('change', e => {
   farm = farms.find(f => f.id === e.target.value) || farm;
   pref.set(FARM_KEY, farm.id);
-  paintMyRole();
-  route();
-  warm();
+  paintMyRole().then(() => { route(); warm(); });
 });
 
 // ── connected / offline ────────────────────────────────────────────────────
@@ -339,8 +347,9 @@ async function warm() {
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
-    ['people', p], ['family_tree', p], ['farm_market', p],
+    ['farm_market', p],
   ];
+  if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
   let done = 0;
   for (const [name, args] of calls) {
@@ -359,7 +368,7 @@ function currentRoute() {
   let sec = parts[0] || 'dashboard', tab = parts[1] || '';
   if (MOVED[sec]) { [sec, tab] = MOVED[sec].split('/'); }
   if (!SECTIONS[sec]) { sec = 'dashboard'; tab = ''; }
-  const tabs = SECTIONS[sec].tabs;
+  const tabs = tabsOf(sec);
   const t = tabs.find(x => x[0] === tab) || tabs[0];
   return { sec, tab: t };
 }
@@ -367,7 +376,7 @@ function currentRoute() {
 function paintTabs(sec, active) {
   const nav = $('secTabs');
   nav.textContent = '';
-  const tabs = SECTIONS[sec].tabs;
+  const tabs = tabsOf(sec);
   nav.hidden = tabs.length < 2;
   nav.setAttribute('aria-label', SECTIONS[sec].title);
   tabs.forEach(([key, label]) => {

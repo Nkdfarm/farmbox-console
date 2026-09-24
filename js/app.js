@@ -109,9 +109,10 @@ applyTheme();
 const LIB = {
   // the recurring pest rounds (sticky traps, scouting) are crop routines too (owner, 24 Sept 2026);
   // a Pest & disease treatment started by a person stays under IPM programs only
-  routines: { title: 'Routines', keep: p => p.family === 'Agriculture' && p.trigger !== 'crop_plan'
+  // Grow › Procedures (0.7.109): the routines and the crop-plan procedures in one list, filtered by how they repeat
+  grow: { title: 'Procedures', keep: p => p.family === 'Agriculture'
       && (p.category !== 'Pest & disease' || p.frequency === 'Routine'),
-    blurb: 'The growing work that is not tied to one crop — irrigation, nutrients and water, climate, sanitation, the sticky-trap round and scouting, the daily and weekly rounds. The crop-specific procedures are in the Crop library.' },
+    blurb: 'All the growing work: the rounds on a schedule (irrigation, nutrients and water, climate, sanitation, scouting), what each crop needs with the crop plan (sowing, transplanting, harvesting, clearing), and what is done when needed.' },
   ipm: { title: 'Pest & disease procedures', keep: p => p.category === 'Pest & disease',
     blurb: 'Scouting, the sticky-trap round, treatments: every Pest & disease procedure.' },
   office: { title: 'Farm management', keep: p => p.family === 'Office',
@@ -126,7 +127,7 @@ const SECTIONS = {
     ['overview', 'Overview', renderDashboard], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek]] },
   grow: { title: 'Grow', tabs: [
-    ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')],
+    ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
     ['harvest', 'Harvest', renderHarvest]] },
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
   // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
@@ -152,7 +153,7 @@ const TAB_GATE = { 'farm/people': mayManagePeople };
 const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${key}`] || TAB_GATE[`${sec}/${key}`]());
 
 const MOVED = {
-  crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/routines',
+  crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/procedures',
   prices: 'office/sell', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
   people: 'farm/people', harvest: 'grow/harvest',
 };
@@ -382,6 +383,7 @@ function currentRoute() {
   const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
   let sec = parts[0] || 'dashboard', tab = parts[1] || '';
   if (MOVED[sec]) { [sec, tab] = MOVED[sec].split('/'); }
+  if (sec === 'grow' && tab === 'routines') tab = 'procedures';   // Routines became Procedures (0.7.109)
   if (!SECTIONS[sec]) { sec = 'dashboard'; tab = ''; }
   const tabs = tabsOf(sec);
   const t = tabs.find(x => x[0] === tab) || tabs[0];

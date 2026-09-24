@@ -17,10 +17,16 @@ let farm = null, data = null, mount = null, filter = { family: '', q: '' };
 // Routines, IPM › Programs, Office › Farm management, Maintenance › Preventive.
 // `keep` says which procedures belong; "Every procedure" widens it on demand.
 let lib = null, showAll = false;
+// how a procedure repeats — the editor's own three words (0.7.109)
+const REPEATS = [['schedule', 'On a schedule'], ['crop', 'With the crop plan'], ['needed', 'When needed']];
+// the same reading as the editor's Repeats menu (repeatsOf in procedure-edit.js), so a chip and the form never disagree
+const repeatsOf = p => p.frequency === 'Routine' ? 'schedule'
+  : (p.frequency === 'Per batch' || p.frequency === 'Per crop template') ? 'crop' : 'needed';
+let repeats = '';
 
 export async function renderProcedures(container, currentFarm, library = null) {
   farm = currentFarm; mount = container;
-  if (library !== lib) { showAll = false; filter = { family: '', q: '' }; }
+  if (library !== lib) { showAll = false; filter = { family: '', q: '' }; repeats = ''; }
   lib = library;
   await load();
 }
@@ -40,6 +46,7 @@ function paint() {
   mount.textContent = '';
   const all = lib && !showAll ? data.procedures.filter(lib.keep) : data.procedures;
   const shown = all.filter(p =>
+    (!repeats || repeatsOf(p) === repeats) &&
     (!filter.family || p.family === filter.family) &&
     (!filter.q || (p.title + ' ' + (p.category || '')).toLowerCase().includes(filter.q)));
 
@@ -52,11 +59,24 @@ function paint() {
 
   const widen = lib ? el('button', 'btn btn-sm btn-ghost', showAll ? `Back to ${lib.title}` : 'Every procedure') : null;
   if (widen) widen.onclick = () => { showAll = !showAll; filter.family = ''; paint(); };
-  mount.append(pageHead(lib && !showAll ? lib.title : 'Procedures',
+  // the section's tab names the library; the page says what is in it
+  mount.append(pageHead(lib && !showAll ? null : 'Every procedure',
     (lib && !showAll ? lib.blurb + ' ' : '') +
     `${all.length} in force. Open one and press Edit to change it; a changed checklist ` +
     'becomes a new approved version, and the phone runs that one from the next task.',
     search, widen));
+
+  // Repeats: the same three choices as the editor, with how many of each
+  const rchips = el('div', 'chips');
+  rchips.style.marginBottom = 'var(--space-3)';
+  const rAdd = (label, value, n) => {
+    const c = el('button', 'chip' + (repeats === value ? ' on' : ''), `${label} · ${n}`);
+    c.onclick = () => { repeats = value; paint(); };
+    rchips.append(c);
+  };
+  rAdd('All', '', all.length);
+  REPEATS.forEach(([k, label]) => { const n = all.filter(p => repeatsOf(p) === k).length; if (n) rAdd(label, k, n); });
+  mount.append(rchips);
 
   if (!lib || showAll) {
     const chips = el('div', 'chips');

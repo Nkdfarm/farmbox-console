@@ -166,10 +166,11 @@ export function table(columns, rows, opts = {}) {
 
 // Head of a page: title, one sentence saying what it is for, and whatever
 // buttons belong to the whole screen.
+// title null: the section's tab already names the page (0.7.109), so only the blurb and the buttons
 export function pageHead(title, blurb, ...right) {
   const head = el('div', 'page-head');
   const titles = el('div');
-  titles.append(el('h1', null, title));
+  if (title) titles.append(el('h1', null, title));
   if (blurb) titles.append(el('p', null, blurb));
   head.append(titles, el('div', 'spacer'));
   right.filter(Boolean).forEach(n => head.append(n));

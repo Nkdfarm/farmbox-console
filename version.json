@@ -1,5 +1,5 @@
 {
-  "version": "0.7.108",
+  "version": "0.7.109",
   "released": "2026-09-24",
-  "note": "Every page opens at once from its last copy and refreshes behind: dashboard and its calendar, tasks, crop planner, crop library, routines and procedures, maintenance, purchasing, issues, harvest, reports, farm setup, people, traps, all FarmBoxes."
+  "note": "Grow: one Procedures tab (routines and crop-plan procedures) filtered by Repeats; the crop library shows crops only; no title repeating the tab."
 }

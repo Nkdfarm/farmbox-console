@@ -44,7 +44,6 @@ function paint() {
 
   const head = el('div', 'page-head');
   const titles = el('div');
-  titles.append(el('h1', null, 'Crops & plan'));
   titles.append(el('p', null,
     'One tile per growing position. The planner fills the empty ones with whatever ' +
     'earns most per day the position is tied up, priced at the season it will be ' +

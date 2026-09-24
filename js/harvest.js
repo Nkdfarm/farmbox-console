@@ -58,7 +58,7 @@ function paint() {
   });
   const rec = data.may_record ? el('button', 'btn btn-primary', 'Record a cut') : null;
   if (rec) rec.onclick = () => recordCut(null);
-  mount.append(pageHead('Harvest',
+  mount.append(pageHead(null,
     `${shortDate(data.from)} – ${shortDate(data.to)}. The weight is typed on the phone in the harvest task; ` +
     'this is what came in, what is still standing, and what the finished batches taught the planner.', seg, rec));
 

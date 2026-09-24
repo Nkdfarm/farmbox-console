@@ -15,7 +15,7 @@
 // trap on watch, green a case improving under treatment or resolved in 14 days.
 // The trap setup (add, move, thresholds) is behind "Traps…".
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, pageHead, drawer, num, cropAvatar } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
@@ -42,22 +42,28 @@ export async function renderScouting(container, currentFarm) {
   await load();
 }
 
-async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the farm…'));
-  try {
-    [over, cases, dates, catalog] = await Promise.all([
-      rpc('pest_overview', { p_farm: farm.id }),
-      rpc('cases', { p_farm: farm.id, p_include_closed: showClosed }),
-      rpc('scouting_dates', { p_farm: farm.id, p_before: null, p_limit: 21 }),
-      catalog || rpc('pest_catalog')]);
-  } catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  useFarm(farm, catalog);
-  moreDone = dates.length < 21;
-  dayData.clear();
-  paint();
+async function load(fresh = false) {
+  const here = mount, a = { p_farm: farm.id };
+  // last time's copy at once, the server's answer behind it (0.7.107)
+  await openFast([
+    ['pest_overview', a],
+    ['cases', { ...a, p_include_closed: showClosed }],
+    ['scouting_dates', { ...a, p_before: null, p_limit: 21 }],
+    ['pest_catalog', {}],
+  ], {
+    show: ([o, c, d, cat]) => {
+      over = o; cases = c; dates = d; catalog = cat;
+      useFarm(farm, catalog);
+      moreDone = dates.length < 21;
+      dayData.clear();
+      paint();
+    },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the farm…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here, fresh,
+  });
 }
-const reload = () => load();
+const reload = () => load(true);   // after a change: the server's answer, not the old copy
 
 function paint() {
   mount.textContent = '';

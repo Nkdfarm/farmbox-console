@@ -345,7 +345,7 @@ async function warm() {
   if (!farm || !connection().online || warmed.has(farm.id)) { finishUpdate(); return; }
   const id = farm.id;
   warmed.add(id);
-  await new Promise(r => setTimeout(r, 2500));      // after the page itself
+  await new Promise(r => setTimeout(r, 1200));      // after the page itself
   const p = { p_farm: id };
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
@@ -359,12 +359,19 @@ async function warm() {
   ];
   if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
-  let done = 0;
-  for (const [name, args] of calls) {
-    if (!connection().online) { warmed.delete(id); finishUpdate(); return; }
-    try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
-    updateProgress(++done, calls.length);
-  }
+  // four at a time (0.7.107): one by one, 25 reads at ~0.2 s each from Cape Town to
+  // Frankfurt took five seconds, and a page opened meanwhile had no copy to open from
+  let done = 0, next = 0, lost = false;
+  const worker = async () => {
+    while (next < calls.length && !lost) {
+      const [name, args] = calls[next++];
+      if (!connection().online) { lost = true; return; }
+      try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
+      updateProgress(++done, calls.length);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (lost) warmed.delete(id);
   finishUpdate();
 }
 

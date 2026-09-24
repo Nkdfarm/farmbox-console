@@ -268,6 +268,26 @@ export async function cachedRpc(name, args) {
   return hit ? hit.body : null;
 }
 
+// A page that opens at once (0.7.107). reads = [[name, args, optional?], …].
+// With a kept copy of every required read, show(values) draws it straight away;
+// then the server is asked, and show(values) runs again only when the answer
+// differs — nothing redraws under somebody for no reason. Without a copy,
+// waiting() draws the loading state first. failed(e) only when nothing could be
+// shown. stillHere() false (the person moved on) drops the late answer.
+// fresh: after a change the kept copy is out of date — skip it, keep the screen until the answer.
+export async function openFast(reads, { show, waiting, failed, stillHere, fresh = false }) {
+  const old = fresh ? reads.map(() => null) : await Promise.all(reads.map(([n, a]) => cachedRpc(n, a)));
+  const had = reads.every(([, , optional], i) => optional || old[i] != null) ? JSON.stringify(old) : null;
+  if (had) show(old, false); else if (!fresh) waiting?.();
+  let now;
+  try {
+    now = await Promise.all(reads.map(([n, a, optional]) => optional ? rpc(n, a).catch(() => null) : rpc(n, a)));
+  } catch (e) { if (!had) failed?.(e); return; }
+  if (stillHere && !stillHere()) return;
+  if (had && JSON.stringify(now) === had) return;
+  show(now, true);
+}
+
 export const fn = (name, body) =>
   api('/functions/v1/' + name, { method: 'POST', body: JSON.stringify(body ?? {}) });
 

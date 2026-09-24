@@ -1,5 +1,5 @@
 {
-  "version": "0.7.106",
+  "version": "0.7.107",
   "released": "2026-09-24",
-  "note": "Prices & market opens at once from the last copy and refreshes behind; the market card reads in a tenth of the time. Migration 0102."
+  "note": "Pest & diseases opens at once from the last copy like Prices & market; the offline copies are made four at a time, so every page has one within two seconds of opening the console."
 }

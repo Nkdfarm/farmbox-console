@@ -14,7 +14,7 @@
 // until then. A wholesale price is shown for comparison and never replaces the
 // book or the farm's own prices in the planner.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, cachedRpc, fn } from './api.js';
+import { rpc, fn, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num, shortDate } from './ui.js';
 
@@ -31,28 +31,15 @@ export async function renderPrices(container, currentFarm) {
   await load();
 }
 
-async function load() {
+async function load(fresh = false) {
   const here = mount, a = { p_farm: farm.id };
-  // last time's copy first (0.7.106): the page appears at once, the fresh one replaces it
-  const [oldBook, oldTrends] = await Promise.all([cachedRpc('price_table', a), cachedRpc('market_trends', a)]);
-  const shown = oldBook ? JSON.stringify([oldBook, oldTrends]) : null;
-  if (oldBook) { data = oldBook; trends = oldTrends; paint(); }
-  else { mount.textContent = ''; mount.append(loading('Reading the price book…')); }
-  let book, tr;
-  try {
-    [book, tr] = await Promise.all([
-      rpc('price_table', a),
-      // the market card is extra: a database without it still shows the book
-      rpc('market_trends', a).catch(() => null),
-    ]);
-  } catch (e) {
-    if (!oldBook) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); }
-    return;
-  }
-  if (!here.isConnected || mount !== here) return;          // the person has gone to another page
-  if (shown && JSON.stringify([book, tr]) === shown) return;  // nothing changed: do not redraw under them
-  data = book; trends = tr;
-  paint();
+  // last time's copy at once, the server's answer behind it (0.7.106–0.7.107)
+  await openFast([['price_table', a], ['market_trends', a, true]], {   // the market card is extra
+    show: ([book, tr]) => { data = book; trends = tr; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the price book…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here, fresh,
+  });
 }
 
 function paint() {
@@ -255,7 +242,7 @@ async function scanMarket(button) {
     if (r.problems?.length) setTimeout(() => toast(`Partly: ${r.problems.join(' · ')}`, 'bad'), 3400);
     // information, not a failure (e.g. Farmazone skipped until its API key is set)
     else if (r.notes?.length) setTimeout(() => toast(r.notes.join(' · ')), 3400);
-    await load();
+    await load(true);
   } catch (e) {
     busy(button, false, 'Scan Cape Town now');
     toast(e.message, 'bad');
@@ -298,7 +285,7 @@ function record() {
         year: on ? Number(on.slice(0, 4)) : null } });
       d.close();
       toast('Recorded', 'ok');
-      await load();
+      await load(true);
     } catch (e) { busy(save, false); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);

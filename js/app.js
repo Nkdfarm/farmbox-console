@@ -1,7 +1,7 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select, rpc,
          connection, onConnection, newPage, reconnect } from './api.js';
-import { el, toast, icon, avatar, pref, setPhotos } from './ui.js';
+import { el, toast, icon, avatar, pref, setPhotos, loading } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek, nextWeek } from './week.js';
 import { renderFarm, holidayRange } from './farm.js';
@@ -425,7 +425,7 @@ async function route() {
   const page = $('page');
   if (!booted) {
     if (startError) showStartError();
-    else { page.textContent = ''; page.append(el('div', 'empty', 'Starting…')); }
+    else { page.textContent = ''; page.append(bootBar || loading('Starting…', 5)); }
     return;
   }
   if (!farm) {
@@ -454,11 +454,18 @@ watchForUpdates();
 
 // ── boot ───────────────────────────────────────────────────────────────────
 let booted = false;
+// The start-up, step by step (0.7.105): signing in, the FarmBoxes, the role, then the
+// page, which carries on with its own bar while it reads.
+let bootBar = null;
 async function start() {
   $('signin').hidden = true;
   $('shell').hidden = false;
+  bootBar = loading('Signing in…', 8);
+  $('page').textContent = '';
+  $('page').append(bootBar);
   try {
     const user = await me();
+    bootBar.set(25, 'Reading who you are…');
     myUserId = user.id;
     myUser = user;
     const name = user.user_metadata?.name || user.user_metadata?.full_name ||
@@ -475,6 +482,7 @@ async function start() {
     // everyone's own picture, for every avatar on every page (ui.js setPhotos)
     try { setPhotos(await select('worker', 'select=id,photo_url&photo_url=not.is.null')); } catch { /* demo faces */ }
     // Available systems and media, before any page draws a system or a medium
+    bootBar.set(40, 'Reading the systems and task families…');
     await Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
@@ -482,10 +490,14 @@ async function start() {
     if (v) v.textContent = 'v' + VERSION;
     const tv = document.getElementById('topVersion');
     if (tv) tv.textContent = 'v' + VERSION;
+    bootBar.set(55, 'Reading your FarmBoxes…');
     await loadFarms();
+    bootBar.set(70, 'Checking your role…');
     await paintMyRole();
+    bootBar.set(85, 'Opening the page…');
     if (!location.hash) location.hash = '#/' + startPage();
     booted = true;
+    bootBar = null;
     await route();
     warm();
   } catch (err) {
@@ -523,7 +535,7 @@ function showStartError(retrying = false) {
   e.append(el('p', null, startError || 'Unknown error.'));
   if (retrying) e.append(el('p', 'hint', 'It will try again by itself in a few seconds.'));
   const again = el('button', 'btn btn-primary', 'Try again');
-  again.onclick = () => { startError = null; page.textContent = ''; page.append(el('div', 'empty', 'Starting…')); start(); };
+  again.onclick = () => { startError = null; start(); };
   e.append(again);
   page.append(e);
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.104",
+  "version": "0.7.105",
   "released": "2026-09-24",
-  "note": "Internal or external nursery for each batch: an external one is ordered by an Office task in time, with 10 % spare, and received the working day before the transplant. Migration 0101."
+  "note": "Every page and window being read shows a moving bar; the start-up fills a bar step by step; the update bar moves while the new version opens."
 }

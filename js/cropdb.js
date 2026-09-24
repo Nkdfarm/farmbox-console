@@ -10,7 +10,7 @@
 // Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
+import { loading, el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
          systemLabel, mediumLabel, systemsFor, nurseryField } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
@@ -38,7 +38,7 @@ export async function renderCropDb(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the crop library…'));
+  mount.append(loading('Reading the crop library…'));
   try { data = await rpc('crop_library', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();
@@ -334,7 +334,7 @@ function procedureView() {
 // ── a procedure, read only ─────────────────────────────────────────────────
 async function openProcedure(pr) {
   const d = drawer(pr.title, 'Read only — edit it on Procedures');
-  d.body.append(el('div', 'empty', 'Reading…'));
+  d.body.append(loading('Reading…'));
   let p;
   try { p = await rpc('procedure', { p_sop: pr.sop_id, p_farm: farm.id }); }
   catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
@@ -361,7 +361,7 @@ async function openProcedure(pr) {
 // ── plan a crop: pick a zone and its free positions ────────────────────────
 async function openPlan(full) {
   const d = drawer(full ? `Plan ${full.name}` : 'Plan a crop', 'A batch on each position you tick; the tasks follow from the cycle.');
-  d.body.append(el('div', 'empty', 'Reading the farm…'));
+  d.body.append(loading('Reading the farm…'));
   let map;
   try { map = await rpc('crop_map', { p_farm: farm.id }); }
   catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
@@ -442,7 +442,7 @@ async function openPlan(full) {
 // ── everything else about a crop ───────────────────────────────────────────
 async function openCrop(row) {
   const d = drawer(row.name, `${catLabel(row.category)} · ${row.code}`);
-  d.body.append(el('div', 'empty', 'Reading…'));
+  d.body.append(loading('Reading…'));
 
   let c;
   try { c = await rpc('crop_detail', { p_crop: row.id, p_farm: farm.id }); }

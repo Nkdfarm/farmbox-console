@@ -14,7 +14,7 @@
 // on Procedures and People, so Irrigation is the same blue everywhere.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
+import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
          mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine } from './ui.js';
 import { roleLabel } from './people.js';
 
@@ -96,7 +96,7 @@ const mayPlanNow = () => !!(data?.may_plan) && data?.plan?.status !== 'locked';
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the tasks…'));
+  mount.append(loading('Reading the tasks…'));
   try {
     const mondays = mondaysOnScreen();
     const got = await Promise.all(mondays.map(m => rpc('labour_week', { p_farm: farm.id, p_week: m })));

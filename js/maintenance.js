@@ -7,7 +7,7 @@
 // week instead of being remembered on a good day.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, card, drawer, field, input, selectBox,
+import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, shortDate } from './ui.js';
 
 const TYPES = [['pump', 'Pump'], ['filter', 'Filter'], ['dosing_unit', 'Dosing unit'],
@@ -23,7 +23,7 @@ export async function renderMaintenance(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the asset register…'));
+  mount.append(loading('Reading the asset register…'));
   try { data = await rpc('maintenance', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

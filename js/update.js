@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.7.104';
+export const VERSION = '0.7.105';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -107,7 +107,7 @@ function offer(latest) {
   s.append(b);
 }
 
-function progress(pct, label) {
+function progress(pct, label, busy = false) {
   const s = slot();
   if (!s) return;
   clearTimeout(hideTimer);
@@ -121,6 +121,7 @@ function progress(pct, label) {
     bar.append(el('i'));
     s.append(bar, el('small'));
   }
+  bar.classList.toggle('busy', busy);
   bar.setAttribute('aria-valuenow', String(Math.round(pct)));
   bar.setAttribute('aria-label', label);
   bar.firstChild.style.width = pct + '%';
@@ -232,7 +233,7 @@ function afterUpdate() {
   // network-first worker is the usual way and used to show only a note in the
   // corner for four seconds. The bar picks up here either way.
   justUpdated = true;
-  progress(85, `Opening ${VERSION}`);
+  progress(85, `Opening ${VERSION}`, true);
   // app.js finishes it; if it never can (signed out, offline), do not leave it up
   setTimeout(finishUpdate, 30_000);
 

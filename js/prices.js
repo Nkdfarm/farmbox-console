@@ -15,7 +15,7 @@
 // book or the farm's own prices in the planner.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, table, pageHead, card, drawer, field, input, selectBox,
+import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num, shortDate } from './ui.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
@@ -33,7 +33,7 @@ export async function renderPrices(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the price book…'));
+  mount.append(loading('Reading the price book…'));
   try {
     [data, trends] = await Promise.all([
       rpc('price_table', { p_farm: farm.id }),

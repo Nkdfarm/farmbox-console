@@ -8,7 +8,7 @@
 // the phone can still be recorded here.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
+import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
          mondayOf, subFamilyTag } from './ui.js';
 
 const PERIOD_KEY = 'fbc_harvest_period';
@@ -34,7 +34,7 @@ export async function renderHarvest(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the harvests…'));
+  mount.append(loading('Reading the harvests…'));
   try { data = await rpc('harvest_overview', { p_farm: farm.id, ...harvestRange() }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

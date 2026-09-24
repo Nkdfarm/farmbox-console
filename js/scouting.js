@@ -16,7 +16,7 @@
 // The trap setup (add, move, thresholds) is behind "Traps…".
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, pageHead, drawer, num, cropAvatar } from './ui.js';
+import { loading, el, pageHead, drawer, num, cropAvatar } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { renderIpm } from './ipm.js';
@@ -44,7 +44,7 @@ export async function renderScouting(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the farm…'));
+  mount.append(loading('Reading the farm…'));
   try {
     [over, cases, dates, catalog] = await Promise.all([
       rpc('pest_overview', { p_farm: farm.id }),

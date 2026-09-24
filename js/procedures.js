@@ -7,7 +7,7 @@
 // runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel, scheduleText } from './ui.js';
+import { loading, el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel, scheduleText } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -27,7 +27,7 @@ export async function renderProcedures(container, currentFarm, library = null) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the procedures…'));
+  mount.append(loading('Reading the procedures…'));
   try { data = await rpc('procedures', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();
@@ -98,7 +98,7 @@ function paint() {
 
 async function openProcedure(row) {
   const d = drawer(row.title, `${row.family}${row.category ? ' · ' + row.category : ''}`);
-  d.body.append(el('div', 'empty', 'Reading…'));
+  d.body.append(loading('Reading…'));
 
   let p;
   try { p = await rpc('procedure', { p_sop: row.id, p_farm: farm.id }); }

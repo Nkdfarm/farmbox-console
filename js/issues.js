@@ -7,7 +7,7 @@
 // a manager closes it, and the dashboard counts it while it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, confirmDrawer,
+import { loading, el, table, pageHead, drawer, field, input, selectBox, confirmDrawer,
          toast, busy, shortDate } from './ui.js';
 
 const SEVERITY = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
@@ -22,7 +22,7 @@ export async function renderIssues(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the issues…'));
+  mount.append(loading('Reading the issues…'));
   try { data = await rpc('issues', { p_farm: farm.id, p_include_closed: showClosed }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

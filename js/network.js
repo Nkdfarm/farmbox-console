@@ -11,7 +11,7 @@
 // them for the franchisor. Clicking a farm switches the whole console to it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, card, drawer, field, input, selectBox,
+import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num } from './ui.js';
 
 let data = null, mount = null, onPick = null, reloadFarms = null;
@@ -25,7 +25,7 @@ export async function renderNetwork(container, currentFarm, ctx) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading every FarmBox…'));
+  mount.append(loading('Reading every FarmBox…'));
   try { data = await rpc('farm_network', {}); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

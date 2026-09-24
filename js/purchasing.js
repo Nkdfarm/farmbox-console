@@ -11,7 +11,7 @@
 // would hide that.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, card, drawer, field, input, toast, busy,
+import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
          num, shortDate } from './ui.js';
 
 let farm = null, data = null, mount = null, chosen = new Set(), tab = 'requests';
@@ -23,7 +23,7 @@ export async function renderPurchasing(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading purchasing…'));
+  mount.append(loading('Reading purchasing…'));
   try { data = await rpc('purchasing', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

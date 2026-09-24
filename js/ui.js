@@ -398,6 +398,30 @@ export function subFamilyTag(name, cls = 'tag') {
   return t;
 }
 
+// A page or a window being read (0.7.105): the words and a bar under them. Without a
+// number the bar runs back and forth, so a slow connection never looks like a page
+// that has stopped; .set(pct, words) turns it into a bar that fills (the start-up).
+export function loading(text = 'Reading…', pct = null) {
+  const w = el('div', 'loading');
+  w.setAttribute('role', 'status');
+  w.setAttribute('aria-live', 'polite');
+  const words = el('span', null, text);
+  const bar = el('div', 'loading-bar' + (pct == null ? ' busy' : ''));
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-label', text);
+  const fill = el('i');
+  if (pct != null) { fill.style.width = pct + '%'; bar.setAttribute('aria-valuenow', String(pct)); }
+  bar.append(fill);
+  w.append(words, bar);
+  w.set = (p, t) => {
+    bar.classList.remove('busy');
+    fill.style.width = p + '%';
+    bar.setAttribute('aria-valuenow', String(Math.round(p)));
+    if (t) { words.textContent = t; bar.setAttribute('aria-label', t); }
+  };
+  return w;
+}
+
 // Internal or external nursery for a batch (0101). The field hides itself for a
 // crop that starts in place (no nursery phase: microgreens, strawberry runners).
 export const NURSERY = [['internal', 'Internal nursery — we sow them'], ['external', 'External nursery — we order them']];

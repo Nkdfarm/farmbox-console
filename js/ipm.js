@@ -11,7 +11,7 @@
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
+import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
 import { openViewer } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -29,7 +29,7 @@ export async function renderIpm(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the traps…'));
+  mount.append(loading('Reading the traps…'));
   try { const [d, cat] = await Promise.all([rpc('ipm', { p_farm: farm.id }), rpc('pest_catalog')]); data = d; data.catalog = cat; }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

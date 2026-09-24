@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { weatherTile } from './weather.js';
-import { el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
+import { loading, el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -27,7 +27,7 @@ export async function renderDashboard(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the farm…'));
+  mount.append(loading('Reading the farm…'));
   try { data = await rpc('dashboard', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

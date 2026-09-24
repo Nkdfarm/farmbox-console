@@ -8,7 +8,7 @@
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
+import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
          systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
@@ -26,7 +26,7 @@ export async function renderFarm(container, currentFarm) {
 
 async function load() {
   mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the setup…'));
+  mount.append(loading('Reading the setup…'));
   try { data = await rpc('farm_market', { p_farm: farm.id }); }
   catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
   paint();

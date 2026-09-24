@@ -1044,3 +1044,9 @@ tr.off { opacity: .6; }
 .sec-tabs a[aria-current="page"] { background: var(--surface-offset); color: var(--text); border-color: var(--border); }
 .sec-tabs + .page { padding-top: var(--space-4); }
 @media (max-width: 900px) { .sec-tabs { padding-left: var(--space-4); padding-right: var(--space-4); } }
+
+/* a holiday on the Tasks board (0094): its name under the date, the day hatched */
+.tk-hol { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--warning); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-band.holiday, .tk-mc.holiday {
+  background-image: repeating-linear-gradient(135deg, transparent 0 7px, var(--warning-bg) 7px 9px); }

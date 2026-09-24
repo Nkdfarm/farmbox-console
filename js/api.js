@@ -111,6 +111,7 @@ const READ_RPCS = new Set([
   'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvest_overview',
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
   'procedures', 'purchasing', 'reports', 'system_catalog', 'integration_status', 'task_families',
+  'farm_holidays',
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
 

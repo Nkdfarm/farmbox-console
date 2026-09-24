@@ -99,6 +99,12 @@ async function load() {
   paint();
 }
 
+// a holiday's name on a day, from the weeks on screen (labour_week, 0094)
+function holidayOn(date) {
+  for (const w of weeks.values()) for (const h of (w?.holidays || [])) if (h.day === date) return h.name;
+  return null;
+}
+
 // every task on screen, once
 function tasksOnScreen() {
   const seen = new Set(), out = [];
@@ -384,14 +390,16 @@ function weekBoard(tasks) {
   for (let i = 0; i < 7; i++) {
     const date = shift(week, i);
     const n = tasks.filter(t => t.date === date).length;
-    const head = el('div', 'tk-col-head tk-cell' + (date === tod ? ' today' : ''));
+    const hol = holidayOn(date);
+    const head = el('div', 'tk-col-head tk-cell' + (date === tod ? ' today' : '') + (hol ? ' holiday' : ''));
     head.append(el('span', null, shortDay(date)), el('span', 'tk-count', n ? String(n) : ''));
+    if (hol) head.append(el('span', 'tk-hol', hol));
     grid.append(head);
   }
   BANDS.forEach(slot => {
     for (let i = 0; i < 7; i++) {
       const date = shift(week, i);
-      const cell = el('div', 'tk-band ' + slot + (date === tod ? ' today' : ''));
+      const cell = el('div', 'tk-band ' + slot + (date === tod ? ' today' : '') + (holidayOn(date) ? ' holiday' : ''));
       const list = tasks.filter(t => t.date === date && bandOf(t) === slot).sort(byTime);
       if (i === 0 || list.length) cell.append(el('div', 'tk-band-label', SLOT_WORD[slot]));
       list.forEach(t => cell.append(chip(t)));
@@ -404,6 +412,8 @@ function weekBoard(tasks) {
 
 function dayView(tasks) {
   const box = el('div', 'tk-day');
+  const hol = holidayOn(day);
+  if (hol) box.append(el('div', 'note', `${hol} — a holiday: its work has moved to the next working day.`));
   const list = tasks.filter(t => t.date === day).sort(byTime);
   if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
@@ -427,12 +437,14 @@ function monthView(tasks) {
   const end = shift(mondayOf(ymd(new Date(first.getFullYear(), first.getMonth() + 1, 0))), 6);
   const tod = today();
   for (let date = start; date <= end; date = shift(date, 1)) {
-    const cell = el('div', 'tk-mc' + (date.slice(0, 7) !== month.slice(0, 7) ? ' out' : '') + (date === tod ? ' today' : ''));
+    const hol = holidayOn(date);
+    const cell = el('div', 'tk-mc' + (date.slice(0, 7) !== month.slice(0, 7) ? ' out' : '') + (date === tod ? ' today' : '') + (hol ? ' holiday' : ''));
     const n = el('button', 'tk-mn', String(parseYmd(date).getDate()));
     n.title = 'Open the day';
     const go = () => { day = date; week = mondayOf(date); span = 'day'; pref.set(SPAN_KEY, span); load(); };
     n.onclick = go;
     cell.append(n);
+    if (hol) cell.append(el('div', 'tk-hol', hol));
     const list = tasks.filter(t => t.date === date).sort(byTime);
     list.slice(0, 3).forEach(t => cell.append(chip(t)));
     dropTarget(cell, date, null);

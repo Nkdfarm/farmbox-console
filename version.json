@@ -1,5 +1,5 @@
 {
-  "version": "0.7.96",
+  "version": "0.7.97",
   "released": "2026-09-24",
-  "note": "Routines: pick the weekdays and every n weeks; work always falls on a working day. The sticky-trap round and scouting are in Grow \u203a Routines. Migration 0093."
+  "note": "Public holidays, downloaded for five years from the farm's country; work moves off them. Repeats: on a schedule, with the crop plan, when needed. Migration 0094."
 }

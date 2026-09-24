@@ -10,9 +10,10 @@ import { rpc } from './api.js';
 import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList, scheduleText } from './ui.js';
 import { familyOptions, subFamiliesOf } from './families.js';
 
-// Daily / Weekly / Monthly are one choice since 0093: Routine, then its days and every n weeks
-const FREQ = [['', '—'], ['Routine', 'Routine'],
-              ['Per batch', 'Per batch'], ['Per crop template', 'Per crop template'], ['On demand', 'On demand']];
+// Repeats (0094): three choices. On a schedule = a routine with its days and every n weeks;
+// with the crop plan = the batches' phases; when needed = a person starts it. The trigger follows.
+const REPEATS = [['Routine', 'On a schedule'], ['Per batch', 'With the crop plan'], ['On demand', 'When needed']];
+const repeatsOf = f => f === 'Routine' ? 'Routine' : (f === 'Per batch' || f === 'Per crop template') ? 'Per batch' : 'On demand';
 const WEEKDAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
 const TARGETS = [['system', 'Each bay (per system)'], ['area', 'Each area'], ['farm', 'The whole FarmBox']];
 // a crop-plan procedure may also make one task per crop (the harvests) or per batch
@@ -96,10 +97,9 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
   fillSubs(p.category || '');
   family.onchange = () => fillSubs(category.value);
   const dl = el('span');
-  const freq = selectBox(FREQ, p.frequency || '');
+  const freq = selectBox(REPEATS, repeatsOf(p.frequency));
   // morning, afternoon or anytime: how the day is planned (0079); a rule's hour stays a detail
   const slot = selectBox([['any', 'Anytime'], ['am', 'Morning'], ['pm', 'Afternoon']], p.slot || 'any');
-  const rule = input({ value: p.frequency_rule || '', placeholder: 'Anything the schedule cannot say' });
   const sched = schedulePicker(p, farm, freq);
   const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
   const target = selectBox(p.trigger_kind === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS, p.target || 'farm');
@@ -147,17 +147,27 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     dl,
     grid('grid3', field('Title', title), field('Family', family),
          field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
-    grid('grid3', field('When', freq), field('Note', rule, 'Not read by the planner. An hour written here becomes the task\u2019s time.'),
-         field('Repeats over', target)),
+    grid('grid2', field('Repeats', freq), field('One task for', target)),
     sched.node,
     areasF, variantF, systemsF, oneTaskF,
-    grid('grid3', field('Trigger', trigger), field('Validation', validation), field('Status', status)),
-    grid('grid3', field('Minutes', minutes), field('People', people), field('Phone', appReady)),
-    grid('grid3', field('Time of day', slot, 'Morning, afternoon or anytime — the boards order by it; open tasks follow a change.')),
+    grid('grid3', field('Validation', validation), field('Status', status), field('Phone', appReady)),
+    grid('grid3', field('Minutes', minutes), field('People', people),
+         field('Time of day', slot, 'Morning, afternoon or anytime — the boards order by it; open tasks follow a change.')),
     field('Purpose', purpose),
     grid('grid2', field('PPE', ppe), field('Tools', tools)),
   );
   showTarget();
+  // the trigger follows Repeats, so the two cannot disagree (0094); corrective,
+  // commissioning and maintenance-rule procedures keep theirs
+  const syncTrigger = () => {
+    const t = trigger.value;
+    const want = freq.value === 'Per batch' ? 'crop_plan'
+      : freq.value === 'Routine' ? (['crop_plan', 'on_demand'].includes(t) ? 'routine' : t)
+      : (['routine', 'crop_plan'].includes(t) ? 'on_demand' : t);
+    if (want !== t) { trigger.value = want; fillTargets(); showTarget(); }
+  };
+  freq.addEventListener('change', syncTrigger);
+  syncTrigger();
 
   // ── checklist ──
   const steps = (p.steps || []).map(s => ({ ...s, from_seq: s.seq }));
@@ -255,9 +265,9 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     const measure = s => s.type === 'measure';
     const payload = {
       title: title.value.trim(), family: family.value, category: category.value.trim(),
-      frequency: freq.value, frequency_rule: rule.value.trim(), slot: slot.value,
+      frequency: freq.value, slot: slot.value,
       ...(freq.value === 'Routine'
-        ? { repeat_days: sched.days(), repeat_weeks: sched.weeks(), on_closed_days: sched.closed() } : {}),
+        ? { repeat_days: sched.days(), repeat_weeks: sched.weeks(), on_holidays: sched.holidays() } : {}),
       target_kind: target.value, area_kinds: areas.value(), systems: systems.value(),
       variant_of: trigger.value === 'crop_plan' ? variantOf.value : '',
       trigger_kind: trigger.value, validation: validation.value,
@@ -289,21 +299,22 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
   d.footer.append(cancel, save);
 }
 
-// ── the schedule of a routine (0093) ──────────────────────────────────────
-// The weekdays it falls on, every n weeks. A day the farm is closed is done on
-// the next working day, unless the work may be done on a closed day (remote or
-// on-call). The line under it says when the next ones fall at this farm.
+// ── the schedule of a routine (0093, 0094) ────────────────────────────────
+// The weekdays it is done on, every n weeks. A ticked day is done that day; all
+// seven = every working day. The Holidays day: also on every holiday (remote or
+// on-call work) — anything else on a holiday moves to the next working day. The
+// line under it says when the next ones fall at this farm, holidays included.
 function schedulePicker(p, farm, freq) {
   const node = el('div', 'field');
   const open = new Set(farm?.operating_days?.length ? farm.operating_days : [1, 2, 3, 4, 5, 6, 7]);
   const days = new Set(p.frequency === 'Routine' ? (p.repeat_days || []) : [1]);
+  let onHol = p.frequency === 'Routine' && !!p.on_holidays;
+  let hols = new Map();                       // closed days ahead: ymd → name
+  const ymdOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const monday = d => { const x = new Date(d); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
   const anchor = p.repeat_anchor ? monday(p.repeat_anchor + 'T12:00:00') : monday(new Date());
-
-  const closedBox = el('input'); closedBox.type = 'checkbox'; closedBox.checked = !!p.on_closed_days;
-  closedBox.style.width = 'auto';
-  const closedL = el('label', 'row'); closedL.style.gap = '6px'; closedL.style.cursor = 'pointer';
-  closedL.append(closedBox, el('span', null, 'May fall on a closed day (remote or on-call work)'));
+  const iso = d => ((d.getDay() + 6) % 7) + 1;
+  const farmName = farm?.name || 'this FarmBox';
 
   const row = el('div', 'row'); row.style.flexWrap = 'wrap'; row.style.alignItems = 'center';
   const buttons = WEEKDAYS.map(([n, label]) => {
@@ -311,6 +322,9 @@ function schedulePicker(p, farm, freq) {
     b.onclick = () => { days.has(n) ? days.delete(n) : days.add(n); paint(); };
     return [n, b];
   });
+  const holB = el('button', 'toggle', 'Holidays'); holB.type = 'button';
+  holB.title = 'Also done on every public holiday and closure — remote or on-call work. Anything else on a holiday moves to the next working day.';
+  holB.onclick = () => { onHol = !onHol; paint(); };
   const all = el('button', 'btn btn-sm btn-ghost', 'Every working day'); all.type = 'button';
   all.onclick = () => { WEEKDAYS.forEach(([n]) => days.add(n)); paint(); };
   const weeks = input({ type: 'number', min: 1, max: 52, step: 1, value: p.frequency === 'Routine' ? (p.repeat_weeks || 1) : 1 });
@@ -319,46 +333,66 @@ function schedulePicker(p, farm, freq) {
   const every = el('span', 'row'); every.style.gap = '6px'; every.style.alignItems = 'center';
   every.append(el('span', null, 'Every'), weeks, unit);
   const spacer = el('span'); spacer.style.width = '12px';
-  row.append(...buttons.map(x => x[1]), all, spacer, every);
+  row.append(...buttons.map(x => x[1]), holB, all, spacer, every);
   const next = el('div', 'hint');
-  node.append(el('label', null, 'Days'), row, closedL, next);
+  const warn = el('div', 'hint');
+  node.append(el('label', null, 'Days'), row, next, warn);
 
   const n = () => Math.max(1, Math.min(52, parseInt(weeks.value, 10) || 1));
-  const iso = d => ((d.getDay() + 6) % 7) + 1;
+  const openDay = d => open.has(iso(d)) && !hols.has(ymdOf(d));
+  // the same rule as app.routine_due
+  const dueFor = d => {
+    const isHol = hols.has(ymdOf(d));
+    if (onHol && isHol) return new Date(d);
+    const wk = Math.round((monday(d) - anchor) / (7 * 864e5));
+    if (((wk % n()) + n()) % n() !== 0) return null;
+    if (days.size === 7) return !isHol && open.has(iso(d)) ? new Date(d) : null;
+    if (!days.has(iso(d))) return null;
+    if (!isHol) return new Date(d);
+    const x = new Date(d); let k = 0;
+    while (!openDay(x) && k++ < 21) x.setDate(x.getDate() + 1);
+    return x;
+  };
   const paint = () => {
     buttons.forEach(([d, b]) => {
       b.setAttribute('aria-pressed', String(days.has(d)));
-      const closed = !open.has(d) && !closedBox.checked;
-      b.style.opacity = closed ? '.55' : '';
-      b.title = closed ? `${farm?.name || 'This FarmBox'} is closed that day: the work is done on the next working day` : '';
+      b.style.opacity = !open.has(d) && !days.has(d) ? '.55' : '';
+      b.title = open.has(d) ? '' : `${farmName} is closed that day`;
     });
+    holB.setAttribute('aria-pressed', String(onHol));
     unit.textContent = n() === 1 ? 'week' : 'weeks';
-    // the next few dates at this farm
     const out = [];
     const d = new Date(); d.setHours(12, 0, 0, 0);
     for (let i = 0; i < 400 && out.length < 3; i++, d.setDate(d.getDate() + 1)) {
-      if (!days.has(iso(d))) continue;
-      const wk = Math.round((monday(d) - anchor) / (7 * 864e5));
-      if (((wk % n()) + n()) % n() !== 0) continue;
-      const due = new Date(d);
-      if (!closedBox.checked) { let k = 0; while (!open.has(iso(due)) && k++ < 7) due.setDate(due.getDate() + 1); }
-      const t = due.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const due = dueFor(d);
+      if (!due) continue;
+      const t = due.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+              + (hols.has(ymdOf(due)) ? ` (${hols.get(ymdOf(due))})` : '');
       if (!out.includes(t)) out.push(t);
     }
-    next.textContent = days.size
-      ? `${scheduleText({ frequency: 'Routine', repeat_days: [...days], repeat_weeks: n(), on_closed_days: closedBox.checked })}. `
-        + `Next at ${farm?.name || 'this FarmBox'}: ${out.join(' · ') || '—'}`
+    next.textContent = days.size || onHol
+      ? `${scheduleText({ frequency: 'Routine', repeat_days: [...days], repeat_weeks: n(), on_holidays: onHol })}. `
+        + `Next at ${farmName}: ${out.join(' · ') || '—'}`
       : 'Pick at least one day.';
+    const closedTicked = days.size < 7 ? WEEKDAYS.filter(([d]) => days.has(d) && !open.has(d)).map(x => x[1]) : [];
+    warn.textContent = closedTicked.length
+      ? `${closedTicked.join(', ')}: ${farmName} is closed — the task is still made on ${closedTicked.length === 1 ? 'that day' : 'those days'}.` : '';
     node.style.display = freq.value === 'Routine' ? '' : 'none';
   };
   weeks.oninput = paint;
-  closedBox.onchange = paint;
   freq.addEventListener('change', paint);
   paint();
+  // this farm's holidays, for the dates under the buttons
+  if (farm?.id) {
+    const from = new Date(), to = new Date(); to.setDate(to.getDate() + 420);
+    rpc('farm_holidays', { p_farm: farm.id, p_from: ymdOf(from), p_to: ymdOf(to) })
+      .then(r => { hols = new Map((r.holidays || []).filter(h => h.closed).map(h => [h.day, h.name])); paint(); })
+      .catch(() => {});
+  }
   return {
     node,
     days: () => [...days].sort((a, b) => a - b),
     weeks: n,
-    closed: () => closedBox.checked,
+    holidays: () => onHol,
   };
 }

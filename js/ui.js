@@ -481,15 +481,16 @@ export function cropAvatar(c, size = '') {
   return box;
 }
 
-// When a procedure repeats, in words (0093): "Every working day", "Mon, Thu",
-// "Wed · every 2 weeks". Anything that is not a routine says its own word.
+// How a procedure repeats, in words (0093, 0094): "Every working day",
+// "Mon, Thu · every 2 weeks", "Sat, Sun · holidays too", "With the crop plan",
+// "When needed". The same words as the Repeats menu in the editor.
 const DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export function scheduleText(p) {
-  if (!p || p.frequency !== 'Routine') return p?.frequency || '—';
+  const f = p?.frequency;
+  if (f === 'Per batch' || f === 'Per crop template') return 'With the crop plan';
+  if (f !== 'Routine') return 'When needed';
   const days = [...(p.repeat_days || [])].sort((a, b) => a - b);
   const n = Number(p.repeat_weeks) || 1;
-  const which = days.length === 7 ? (p.on_closed_days ? 'Every day' : 'Every working day')
-              : days.map(d => DAY_ABBR[d - 1]).join(', ');
-  return which + (n > 1 ? ` · every ${n} weeks` : '')
-       + (p.on_closed_days && days.length < 7 ? ' · closed days too' : '');
+  const which = days.length === 7 ? 'Every working day' : days.map(d => DAY_ABBR[d - 1]).join(', ');
+  return which + (n > 1 ? ` · every ${n} weeks` : '') + (p.on_holidays ? ' · holidays too' : '');
 }

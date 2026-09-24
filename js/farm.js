@@ -7,7 +7,7 @@
 // reads these — the price book picks a country and a hemisphere from here, and
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, fn } from './api.js';
 import { el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
          systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
 import { catalogCard } from './catalog.js';
@@ -214,7 +214,111 @@ function weekCard() {
     + ' at ' + String(data.planning_time || '14:00').slice(0, 5)));
   p.append(el('span', 'pill', data.timezone || ''));
   card.append(p);
+  card.append(holidaysBlock());
   return card;
+}
+
+// ── the holidays (0094) ────────────────────────────────────────────────────
+// The country's public holidays, downloaded from Nager.Date the moment the
+// country is set (five years ahead, refreshed once a year), and the farm's own
+// closures. Nothing is planned on them: the work moves to the next working day.
+const ymdOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const holidayRange = () => {
+  const d = new Date(); const from = ymdOf(d); d.setDate(d.getDate() + 365);
+  return { p_from: from, p_to: ymdOf(d) };
+};
+const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+function holidaysBlock() {
+  const box = el('div');
+  box.style.marginTop = 'var(--space-4)';
+  box.append(el('div', 'sec-title', 'Holidays'));
+  const body = el('div');
+  box.append(body);
+  let polls = 0;
+  const draw = async () => {
+    let r;
+    try { r = await rpc('farm_holidays', { p_farm: farm.id, ...holidayRange() }); }
+    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); return; }
+    body.textContent = '';
+    const imp = r.import;
+    const waiting = r.country && imp && !imp.done_at && !imp.error;
+    body.append(el('div', 'hint',
+      !r.country ? 'Choose the country above: its public holidays are downloaded at once.'
+      : !imp ? `The public holidays of ${r.country} have not been downloaded yet.`
+      : imp.error ? `The last download failed: ${imp.error}`
+      : waiting ? `Downloading the public holidays of ${r.country}…`
+      : `${r.country} public holidays from Nager.Date, five years ahead (${imp.days} days) — downloaded `
+        + new Date(imp.done_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        + ', refreshed once a year.'));
+    body.append(el('div', 'hint',
+      'Nothing is planned on a holiday: routine, crop and maintenance work moves to the next working day and nobody is ' +
+      'rostered. Only a routine ticked for Holidays (the remote check) stays on the day.'));
+
+    const list = el('div');
+    list.style.marginTop = 'var(--space-2)';
+    if (!r.holidays.length) list.append(el('div', 'hint', 'No holiday in the next twelve months.'));
+    r.holidays.forEach(h => {
+      const row = el('div', 'row');
+      row.style.alignItems = 'center'; row.style.padding = '4px 0';
+      row.style.borderBottom = '1px solid var(--border)';
+      const d = el('span', 'mono', longDate(h.day)); d.style.minWidth = '150px';
+      const name = el('span', null, h.name); name.style.flex = '1';
+      if (!h.closed) name.style.textDecoration = 'line-through';
+      row.append(d, name, el('span', 'pill' + (h.source === 'farm' ? ' warn' : ''), h.source === 'farm' ? 'this farm' : 'public'));
+      if (!h.closed) row.append(el('span', 'pill ok', 'we work'));
+      if (r.may_edit) {
+        const b = el('button', 'btn btn-sm btn-ghost',
+          h.source === 'farm' ? 'Remove' : h.closed ? 'We work this day' : 'Closed after all');
+        b.onclick = async () => {
+          busy(b, true, '…');
+          try {
+            if (h.source === 'farm') await rpc('remove_farm_holiday', { p_farm: farm.id, p_day: h.day });
+            else await rpc('save_farm_holiday', { p_farm: farm.id, p_day: h.day, p_name: h.name, p_closed: !h.closed });
+            toast('Saved — the work has moved with it', 'ok');
+            draw();
+          } catch (e) { busy(b, false, 'Try again'); toast(e.message, 'bad'); }
+        };
+        row.append(b);
+      }
+      list.append(row);
+    });
+    body.append(list);
+
+    if (r.may_edit) {
+      const add = el('div', 'row');
+      add.style.marginTop = 'var(--space-3)'; add.style.alignItems = 'center';
+      const day = el('input', 'input'); day.type = 'date';
+      const nm = el('input', 'input'); nm.placeholder = 'Why, e.g. Staff day'; nm.style.flex = '1';
+      const go = el('button', 'btn btn-sm', 'Add a closed day');
+      go.onclick = async () => {
+        if (!day.value) { toast('Pick a day', 'bad'); return; }
+        busy(go, true, 'Adding…');
+        try {
+          await rpc('save_farm_holiday', { p_farm: farm.id, p_day: day.value, p_name: nm.value.trim(), p_closed: true });
+          toast('Closed day added — its work moved to the next working day', 'ok');
+          draw();
+        } catch (e) { busy(go, false, 'Add a closed day'); toast(e.message, 'bad'); }
+      };
+      const refresh = el('button', 'btn btn-sm btn-ghost', 'Download again');
+      refresh.title = 'Fetch the public holidays again now (it happens by itself once a year)';
+      refresh.disabled = !r.country;
+      refresh.onclick = async () => {
+        busy(refresh, true, 'Downloading…');
+        try {
+          const x = await fn('holidays', { farm_id: farm.id });
+          toast(x.error ? x.error : `${x.days} public holidays, five years ahead`, x.error ? 'bad' : 'ok');
+        } catch (e) { toast(e.message, 'bad'); }
+        draw();
+      };
+      add.append(day, nm, go, refresh);
+      body.append(add);
+    }
+    if (waiting && polls++ < 5) setTimeout(draw, 3000);
+  };
+  body.append(el('div', 'hint', 'Reading the holidays…'));
+  draw();
+  return box;
 }
 
 // ── what it is made of ─────────────────────────────────────────────────────

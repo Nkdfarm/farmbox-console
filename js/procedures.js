@@ -79,7 +79,7 @@ function paint() {
         return s; } },
     // the same sub-family People › Responsible for and the planner use
     { key: 'category', label: 'Sub-family', fmt: v => subFamilyTag(v) },
-    { key: 'frequency', label: 'When', fmt: (v, r) =>
+    { key: 'frequency', label: 'Repeats', fmt: (v, r) =>
         [scheduleText(r), r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area'
               : r.target === 'crop' ? 'per crop' : r.target === 'position' ? 'per batch' : null]
           .filter(Boolean).join(' · ') },
@@ -113,8 +113,7 @@ async function openProcedure(row) {
   };
   fact('Version', p.version);
   fact('Status', p.status + (p.app_ready ? ' · app ready' : ''));
-  fact('When', scheduleText(p));
-  if (p.frequency_rule) fact('Note', p.frequency_rule);
+  fact('Repeats', scheduleText(p));
   fact('Time of day', { am: 'Morning', pm: 'Afternoon' }[p.slot] || 'Anytime');
   fact('Repeats over', p.target === 'system' ? 'each bay'
                      : p.target === 'area' ? (p.area_kinds || []).join(', ') || 'each area'

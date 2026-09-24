@@ -4,7 +4,7 @@ import { getSession, signIn, signOut, me, select, rpc,
 import { el, toast, icon, avatar, pref, setPhotos } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek, nextWeek } from './week.js';
-import { renderFarm } from './farm.js';
+import { renderFarm, holidayRange } from './farm.js';
 import { renderCrops } from './crops.js';
 import { renderDashboard, calendarRange } from './dashboard.js';
 import { renderProcedures } from './procedures.js';
@@ -350,7 +350,7 @@ async function warm() {
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
-    ['farm_market', p],
+    ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];
   if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);

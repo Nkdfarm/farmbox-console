@@ -6,8 +6,8 @@
 // to plan the next one. The planner proposes; a person validates; only then
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine } from './ui.js';
+import { rpc, openFast } from './api.js';
+import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine } from './ui.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
@@ -23,12 +23,15 @@ export async function renderCrops(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(el('div', 'empty', 'Drawing the farm…'));
-  try { map = await rpc('crop_map', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['crop_map', { p_farm: farm.id }]], {
+    show: ([d]) => { map = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Drawing the farm…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 const allBatches = () => (map.systems || [])

@@ -13,7 +13,7 @@
 // together. Colour is the sub-family's hue (ui.js subFamilyHue), the same as
 // on Procedures and People, so Irrigation is the same blue everywhere.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
          mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine } from './ui.js';
 import { roleLabel } from './people.js';
@@ -94,20 +94,19 @@ const rangeOnScreen = () => span === 'day' ? [day, day]
   : [week, shift(week, 6)];
 const mayPlanNow = () => !!(data?.may_plan) && data?.plan?.status !== 'locked';
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the tasks…'));
-  try {
-    const mondays = mondaysOnScreen();
-    const got = await Promise.all(mondays.map(m => rpc('labour_week', { p_farm: farm.id, p_week: m })));
-    mondays.forEach((m, i) => weeks.set(m, got[i]));
-  } catch (e) {
-    mount.textContent = '';
-    mount.append(el('div', 'note bad', e.message));
-    return;
-  }
-  data = weeks.get(focusWeek());
-  paint();
+  const here = mount, mondays = mondaysOnScreen(), onScreen = mondays.join();
+  await openFast(mondays.map(m => ['labour_week', { p_farm: farm.id, p_week: m }]), {
+    show: got => {
+      mondays.forEach((m, i) => weeks.set(m, got[i]));
+      data = weeks.get(focusWeek());
+      paint();
+    },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the tasks…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here && mondaysOnScreen().join() === onScreen,
+  });
 }
 
 // a holiday's name on a day, from the weeks on screen (labour_week, 0094)

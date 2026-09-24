@@ -10,7 +10,7 @@
 // than silently moved to today: the plan is at risk, and moving the date
 // would hide that.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
          num, shortDate } from './ui.js';
 
@@ -21,12 +21,15 @@ export async function renderPurchasing(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading purchasing…'));
-  try { data = await rpc('purchasing', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['purchasing', { p_farm: farm.id }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading purchasing…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

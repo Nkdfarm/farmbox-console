@@ -10,7 +10,7 @@
 // come next because they are the farm's output; next week's plan comes last
 // because it is the one thing that has not happened yet.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
 import { loading, el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
 
@@ -25,12 +25,15 @@ export async function renderDashboard(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the farm…'));
-  try { data = await rpc('dashboard', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['dashboard', { p_farm: farm.id }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the farm…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 // Dates are parsed from their local parts. Never through Date(string) alone
@@ -354,14 +357,18 @@ async function loadCalendar(parts) {
   paintControls(parts);
   const w = windowOf(cal.view, cal.anchor);
   summary.textContent = periodLabel(cal.view, cal.anchor);
-  body.textContent = '';
-  body.append(el('div', 'empty cal-loading', 'Reading the calendar…'));
+  const args = { p_farm: farm.id, p_from: ymd(w.from), p_to: ymd(w.to) };
+  // the period's copy from last time at once, then the server's (0.7.108)
+  const kept = await cachedRpc('crop_calendar', args);
+  if (seq !== calSeq) return;
+  if (kept) drawCalendar(parts, w, kept);
+  else { body.textContent = ''; body.append(loading('Reading the calendar…')); }
 
   let res;
   try {
-    res = await rpc('crop_calendar', { p_farm: farm.id, p_from: ymd(w.from), p_to: ymd(w.to) });
+    res = await rpc('crop_calendar', args);
   } catch (e) {
-    if (seq !== calSeq) return;
+    if (seq !== calSeq || kept) return;
     body.textContent = '';
     // A console published ahead of its database migration: this week still
     // comes from the dashboard's own copy, and the note says what is missing.
@@ -375,7 +382,12 @@ async function loadCalendar(parts) {
     return;
   }
   if (seq !== calSeq) return;   // a newer choice is already on its way
+  if (kept && JSON.stringify(kept) === JSON.stringify(res)) return;
+  drawCalendar(parts, w, res);
+}
 
+function drawCalendar(parts, w, res) {
+  const { body, summary } = parts;
   body.textContent = '';
   summary.textContent = periodLabel(cal.view, cal.anchor) + ' · ' + totals(res, w);
   body.append(cal.view === 'week' ? weekView(res, w.from)

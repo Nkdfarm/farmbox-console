@@ -6,7 +6,7 @@
 // a changed checklist becomes a new approved version (the one a phone already
 // runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel, scheduleText } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
 
@@ -25,12 +25,15 @@ export async function renderProcedures(container, currentFarm, library = null) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the procedures…'));
-  try { data = await rpc('procedures', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['procedures', { p_farm: farm.id }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the procedures…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

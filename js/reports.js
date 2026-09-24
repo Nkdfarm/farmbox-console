@@ -9,8 +9,8 @@
 // Labour is deliberately manager-only, as the spec asks: task completion per
 // person is a management tool, not a leaderboard.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
-import { el, table, pageHead, card, toast, num, shortDate } from './ui.js';
+import { rpc, openFast } from './api.js';
+import { loading, el, table, pageHead, card, toast, num, shortDate } from './ui.js';
 
 const RANGES = [[27, 'Last 4 weeks'], [6, 'Last week'], [90, 'Last quarter'],
                 [364, 'Last year']];
@@ -33,15 +33,15 @@ export function reportRange() {
   return { p_from: ymd(from), p_to: ymd(new Date()) };
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(el('div', 'empty', 'Counting…'));
-  try {
-    data = await rpc('reports', { p_farm: farm.id, ...reportRange() });
-  } catch (e) {
-    mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return;
-  }
-  paint();
+  const here = mount;
+  await openFast([['reports', { p_farm: farm.id, ...reportRange() }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Counting…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

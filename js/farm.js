@@ -7,7 +7,7 @@
 // reads these — the price book picks a country and a hemisphere from here, and
 // the task generator picks its working days.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn } from './api.js';
+import { rpc, fn, openFast } from './api.js';
 import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
          systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
 import { catalogCard } from './catalog.js';
@@ -24,12 +24,15 @@ export async function renderFarm(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the setup…'));
-  try { data = await rpc('farm_market', { p_farm: farm.id }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['farm_market', { p_farm: farm.id }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the setup…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

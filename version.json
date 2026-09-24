@@ -1,5 +1,5 @@
 {
-  "version": "0.7.107",
+  "version": "0.7.108",
   "released": "2026-09-24",
-  "note": "Pest & diseases opens at once from the last copy like Prices & market; the offline copies are made four at a time, so every page has one within two seconds of opening the console."
+  "note": "Every page opens at once from its last copy and refreshes behind: dashboard and its calendar, tasks, crop planner, crop library, routines and procedures, maintenance, purchasing, issues, harvest, reports, farm setup, people, traps, all FarmBoxes."
 }

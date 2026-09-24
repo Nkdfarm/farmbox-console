@@ -10,7 +10,7 @@
 // security decides how many rows come back: one for a farm manager, all of
 // them for the franchisor. Clicking a farm switches the whole console to it.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num } from './ui.js';
 
@@ -23,12 +23,15 @@ export async function renderNetwork(container, currentFarm, ctx) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading every FarmBox…'));
-  try { data = await rpc('farm_network', {}); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['farm_network', {}]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading every FarmBox…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

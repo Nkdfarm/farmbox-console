@@ -7,7 +7,7 @@
 // learned so far beside the library figure (§10.7). A cut nobody typed on
 // the phone can still be recorded here.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
          mondayOf, subFamilyTag } from './ui.js';
 
@@ -32,12 +32,15 @@ export async function renderHarvest(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the harvests…'));
-  try { data = await rpc('harvest_overview', { p_farm: farm.id, ...harvestRange() }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['harvest_overview', { p_farm: farm.id, ...harvestRange() }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the harvests…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 const kg = v => v == null ? '—' : `${num(v, Number(v) < 10 ? 2 : 1)} kg`;

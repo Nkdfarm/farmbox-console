@@ -10,7 +10,7 @@
 // and set the watch / over thresholds. A count over the threshold has
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, api, URL_BASE } from './api.js';
+import { rpc, fn, api, URL_BASE, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
 import { openViewer } from './viewer.js';
 
@@ -27,12 +27,15 @@ export async function renderIpm(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the traps…'));
-  try { const [d, cat] = await Promise.all([rpc('ipm', { p_farm: farm.id }), rpc('pest_catalog')]); data = d; data.catalog = cat; }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['ipm', { p_farm: farm.id }], ['pest_catalog', {}]], {
+    show: ([d, cat]) => { data = d; data.catalog = cat; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the traps…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 const when = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';

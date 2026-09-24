@@ -6,8 +6,8 @@
 // responsible for. Adding someone is one form; the weekly plan reads the
 // responsibilities set at the bottom of it.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, select } from './api.js';
-import { el, field, input, selectBox, toast, drawer, confirmDrawer,
+import { rpc, fn, select, openFast } from './api.js';
+import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer,
          avatar, suggestPassword, busy, setPhotos, subFamilyTag, faceIcon } from './ui.js';
 
 // The words on screen are the job, not the database value.
@@ -45,21 +45,19 @@ export async function renderPeople(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(el('div', 'empty', 'Loading the people of ' + farm.name + '…'));
-  try {
-    [people, tree] = await Promise.all([
-      rpc('people', { p_farm: farm.id }),
-      rpc('family_tree', { p_farm: farm.id }),
-    ]);
-  } catch (e) {
-    mount.textContent = '';
-    mount.append(el('div', 'note bad', e.message));
-    return;
-  }
-  setPhotos(people);   // a picture saved here shows on every page at once
-  paint();
+  const here = mount;
+  await openFast([['people', { p_farm: farm.id }], ['family_tree', { p_farm: farm.id }]], {
+    show: ([p, t]) => {
+      people = p; tree = t;
+      setPhotos(people);   // a picture saved here shows on every page at once
+      paint();
+    },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the people of ' + farm.name + '…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 // ── the families offered by the picker ─────────────────────────────────────

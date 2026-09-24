@@ -6,7 +6,7 @@
 // are typed by somebody who saw something. Either way an issue is open until
 // a manager closes it, and the dashboard counts it while it is.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, confirmDrawer,
          toast, busy, shortDate } from './ui.js';
 
@@ -20,12 +20,15 @@ export async function renderIssues(container, currentFarm) {
   await load();
 }
 
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the issues…'));
-  try { data = await rpc('issues', { p_farm: farm.id, p_include_closed: showClosed }); }
-  catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
+  const here = mount;
+  await openFast([['issues', { p_farm: farm.id, p_include_closed: showClosed }]], {
+    show: ([d]) => { data = d; paint(); },
+    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the issues…')); },
+    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    stillHere: () => here.isConnected && mount === here,
+  });
 }
 
 function paint() {

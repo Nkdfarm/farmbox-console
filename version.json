@@ -1,5 +1,5 @@
 {
-  "version": "0.7.102",
+  "version": "0.7.103",
   "released": "2026-09-24",
-  "note": "A console that could not start says why and tries again, instead of an empty page reading No FarmBox yet."
+  "note": "Tasks show planned, done or not done at a glance; Not done with a reason; a procedure may be closed with a swipe on the phone. Migration 0100."
 }

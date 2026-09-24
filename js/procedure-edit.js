@@ -125,12 +125,14 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     areasF.style.display = target.value === 'area' || (target.value === 'farm' && cropPlan) ? '' : 'none';
     variantF.style.display = cropPlan ? '' : 'none';
     oneTaskF.style.display = !cropPlan && ['system', 'area'].includes(target.value) ? '' : 'none';
+    swipeF.style.display = !['harvest', 'scouting', 'ipm_traps'].includes(p.attributes?.module) && validation.value !== 'tick' ? '' : 'none';
     systemsF.style.display = (target.value === 'system' && !cropPlan) || (cropPlan && variantOf.value) ? '' : 'none';
   };
   target.onchange = showTarget;
   variantOf.onchange = showTarget;
   trigger.onchange = () => { fillTargets(); showTarget(); };
   const validation = selectBox(VALIDATION, p.validation || 'checklist');
+  validation.addEventListener('change', () => showTarget());
   const minutes = input({ type: 'number', min: 1, step: '1', value: p.minutes ?? 5 });
   const people = input({ type: 'number', min: 1, step: '1', value: p.min_workers ?? 1 });
   const status = selectBox(STATUS, p.status || 'approved');
@@ -138,6 +140,9 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
   // a routine over systems or areas: one task a day with the targets listed (0076)
   const oneTask = checkbox('One task a day, the systems listed on it', p.one_task);
   const oneTaskF = field('Grouping', oneTask, 'For a checklist of ticks. A checklist that measures per system keeps one task per system.');
+  // a simple checklist the phone may close with a swipe, without running it (0100)
+  const swipe = checkbox('May be closed with a swipe on the phone', p.swipe_done);
+  const swipeF = field('Phone', swipe, 'For a checklist of plain ticks only. A tick-only procedure may always; a harvest, a scouting or a trap round never.');
   const purpose = textarea(p.purpose, 'Why this procedure exists');
   const ppe = input({ value: Array.isArray(p.ppe) ? p.ppe.join(', ') : (p.ppe || '') });
   const tools = input({ value: Array.isArray(p.tools) ? p.tools.join(', ') : (p.tools || '') });
@@ -149,7 +154,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
          field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
     grid('grid2', field('Repeats', freq), field('One task for', target)),
     sched.node,
-    areasF, variantF, systemsF, oneTaskF,
+    areasF, variantF, systemsF, oneTaskF, swipeF,
     grid('grid3', field('Validation', validation), field('Status', status), field('Phone', appReady)),
     grid('grid3', field('Minutes', minutes), field('People', people),
          field('Time of day', slot, 'Morning, afternoon or anytime — the boards order by it; open tasks follow a change.')),
@@ -273,7 +278,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
       trigger_kind: trigger.value, validation: validation.value,
       estimated_minutes: Number(minutes.value) || 5, min_workers: Number(people.value) || 1,
       purpose: purpose.value, safety_ppe: ppe.value, tools: tools.value,
-      status: status.value, app_ready: appReady.value(), one_task: oneTask.value(),
+      status: status.value, app_ready: appReady.value(), one_task: oneTask.value(), swipe_done: swipe.value(),
       change_note: note.value.trim(),
       steps: steps.map(s => ({
         from_seq: s.from_seq ?? null,

@@ -1229,3 +1229,11 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .sc-fig.red img { outline: 2px solid var(--error); } .sc-fig.orange img { outline: 2px solid var(--warning); } .sc-fig.green img { outline: 2px solid var(--success); }
 .pd-fig-title { display: flex; align-items: center; gap: 6px; }
 @media (max-width: 900px) { .pd-dash { grid-template-columns: 1fr; } }
+
+/* ── the status of a task at a glance (0.7.103) ─────────────────────────────── */
+.tk-state { flex: none; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
+  font-size: 10px; font-weight: 900; line-height: 1; border: 2px solid var(--text-faint); color: transparent; }
+.tk-state.done { background: var(--success); border-color: var(--success); color: #fff; }
+.tk-state.skipped { background: var(--error); border-color: var(--error); color: #fff; }
+.tk.skipped .tk-title { text-decoration: line-through; text-decoration-color: var(--error); }
+.tk-list-time { display: inline-flex; align-items: center; gap: 6px; }

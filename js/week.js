@@ -21,7 +21,18 @@ import { roleLabel } from './people.js';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const FAM_ICON = { Agriculture: 'sprout', Maintenance: 'wrench', Office: 'clipboard' };
 const PRIO = { critical: ['‼', 'Critical'], high: ['▲', 'High'], normal: ['', 'Normal'], low: ['▽', 'Low'] };
-const STATUS = [['open', 'Open tasks'], ['done', 'Done'], ['all', 'All']];
+const STATUS = [['open', 'Open tasks'], ['done', 'Done'], ['skipped', 'Not done'], ['all', 'All']];
+// the status of a task at a glance (0.7.103): planned · done · not done
+const STATE = { done: ['done', '✓', 'Done'], skipped: ['skipped', '✕', 'Not done'] };
+const stateOf = t => STATE[t.status] || ['planned', '', 'Planned'];
+const REASON_WORD = { no_time: 'No time', not_needed: 'Not needed today', blocked: 'Weather or equipment' };
+function stateMark(t) {
+  const [k, glyph, word] = stateOf(t);
+  const s = el('span', 'tk-state ' + k, glyph);
+  s.title = word + (t.skip_reason ? ' — ' + (REASON_WORD[t.skip_reason] || t.skip_reason) + (t.skip_note ? ': ' + t.skip_note : '') : '')
+          + (t.closed_by ? ' · ' + t.closed_by : '');
+  return s;
+}
 const VIEW_KEY = 'fbc_tasks_view', SPAN_KEY = 'fbc_tasks_span', FILTER_KEY = 'fbc_tasks_filters';
 
 let farm = null, mount = null;
@@ -121,7 +132,7 @@ function visible(tasks) {
   const q = filters.q.trim().toLowerCase();
   const isOpen = t => !['done', 'skipped'].includes(t.status);
   return tasks.filter(t =>
-    (filters.status === 'all' || (filters.status === 'done' ? t.status === 'done' : isOpen(t)))
+    (filters.status === 'all' || (filters.status === 'done' ? t.status === 'done' : filters.status === 'skipped' ? t.status === 'skipped' : isOpen(t)))
     && (!filters.family || t.family === filters.family)
     && (!filters.category || (t.category || '') === filters.category)
     && (!filters.crop || (t.crops?.length ? t.crops : [t.crop || '']).includes(filters.crop))
@@ -488,7 +499,7 @@ function listView(tasks) {
 // ── one task as a chip ─────────────────────────────────────────────────────
 function chip(t, opts = {}) {
   const mine = spotlight && (t.workers || []).some(w => w.id === spotlight);
-  const c = el('div', 'tk' + (t.status === 'done' ? ' done' : '') + (opts.big ? ' big' : '') + (spotlight ? (mine ? ' mine' : ' other') : ''));
+  const c = el('div', 'tk' + (t.status === 'done' ? ' done' : t.status === 'skipped' ? ' done skipped' : '') + (opts.big ? ' big' : '') + (spotlight ? (mine ? ' mine' : ' other') : ''));
   c.style.setProperty('--h', subFamilyHue(t.category || t.family));
   c.setAttribute('role', 'button'); c.tabIndex = 0;
   const ic = el('span', 'tk-ic'); ic.append(icon(FAM_ICON[t.family] || 'clipboard'));
@@ -500,7 +511,7 @@ function chip(t, opts = {}) {
     text.append(el('span', 'tk-sub', [hhmm(t.due_time) || SLOT_WORD[slotOf(t)], t.area, t.crop, t.category, hrs(t.minutes) + ' h',
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
   }
-  c.append(ic, text);
+  c.append(stateMark(t), ic, text);
   // a harvest under a treatment's withholding period (0098)
   if (t.withholding_until && t.status !== 'done') {
     const w = el('span', 'tk-hold', '⛔'); w.title = `Do not harvest before ${longDate(t.withholding_until)} — a treatment's withholding period`;
@@ -509,7 +520,7 @@ function chip(t, opts = {}) {
   const p = PRIO[t.priority];
   if (p && p[0]) { const s = el('span', 'tk-prio ' + t.priority, p[0]); s.title = p[1] + ' priority'; c.append(s); }
   const who = el('span', 'tk-who');
-  if (t.status === 'done') who.append(el('span', 'tk-done', '✓'));
+  if (t.status === 'done' || t.status === 'skipped') { /* the mark at the start says it */ }
   else if (!t.workers.length) { const n = el('span', 'tk-nobody', '?'); n.title = 'Nobody yet'; who.append(n); }
   else {
     t.workers.slice(0, 2).forEach(w => { const a = avatar({ worker_id: w.id, name: w.name }, 'sm'); a.title = w.name; who.append(a); });
@@ -522,7 +533,7 @@ function chip(t, opts = {}) {
   c.append(more);
   const open = () => {
     if (manual.on) {
-      if (t.status === 'done') return;
+      if (t.status === 'done' || t.status === 'skipped') return;
       if (manual.tasks.has(t.id)) manual.tasks.delete(t.id); else manual.tasks.add(t.id);
       c.classList.toggle('picked', manual.tasks.has(t.id));
       paintPeople();
@@ -534,7 +545,7 @@ function chip(t, opts = {}) {
   c.onclick = open;
   c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   // drag it to another day or across the line (a manager, an open task)
-  if (mayPlanNow() && t.status !== 'done' && !manual.on) {
+  if (mayPlanNow() && t.status !== 'done' && t.status !== 'skipped' && !manual.on) {
     c.draggable = true;
     c.ondragstart = e => { dragging = t; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', t.id); } catch { /* fine */ } };
     c.ondragend = () => { dragging = null; c.classList.remove('dragging'); };
@@ -588,8 +599,9 @@ function positionsLine(task) {
 // a row of the list view
 function taskRow(task) {
   const tr = el('tr');
-  if (task.status === 'done') tr.className = 'off';
-  tr.append(cell(el('span', 'mono', hhmm(task.due_time) || SLOT_SHORT[slotOf(task)])));
+  if (task.status === 'done' || task.status === 'skipped') tr.className = 'off';
+  const st = el('span', 'tk-list-time'); st.append(stateMark(task), el('span', 'mono', hhmm(task.due_time) || SLOT_SHORT[slotOf(task)]));
+  tr.append(cell(st));
   const what = el('div');
   what.append(el('b', null, task.title));
   what.append(el('div', 'hint', [task.area, task.crop, hrs(task.minutes) + ' h', task.harvest_kg != null ? `${Number(task.harvest_kg)} kg harvested` : null].filter(Boolean).join(' · ')));
@@ -598,6 +610,7 @@ function taskRow(task) {
   tr.append(cell(subFamilyTag(task.category || task.family)));
   const who = el('div', 'assignees');
   if (task.status === 'done') who.append(el('span', 'pill ok', 'done'));
+  else if (task.status === 'skipped') who.append(el('span', 'pill bad', 'not done · ' + (REASON_WORD[task.skip_reason] || task.skip_reason || '').toLowerCase()));
   else if (!task.workers.length) who.append(el('span', 'pill bad', 'nobody'));
   else {
     const stack = el('div', 'avatars');
@@ -627,7 +640,9 @@ function openTask(t) {
   fact('When', SLOT_WORD[slotOf(t)] + (slotOf(t) === 'any' ? ' · drawn in the ' + SLOT_WORD[bandOf(t)].toLowerCase() : ''));
   fact('Takes', hrs(t.minutes) + ' h');
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
-  fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') : t.status.replace('_', ' '));
+  fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
+    : t.status === 'skipped' ? 'Not done · ' + (REASON_WORD[t.skip_reason] || t.skip_reason || '') + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')
+    : 'Planned · ' + t.status.replace('_', ' '));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') : 'nobody yet');
   if (t.harvest_kg != null) fact('Harvested', `${Number(t.harvest_kg)} kg`);
   d.body.append(facts);
@@ -648,7 +663,7 @@ function openTask(t) {
   }
 
   const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
-  if (t.status !== 'done' && mayPlan) {
+  if (t.status !== 'done' && t.status !== 'skipped' && mayPlan) {
     // move this one task to the other half of the day (the procedure sets the default)
     const mv = el('div', 'acts');
     SLOTS.filter(x => x !== slotOf(t)).forEach(x => {
@@ -662,7 +677,23 @@ function openTask(t) {
     });
     d.body.append(mv);
   }
-  if (t.status !== 'done') {
+  if (t.status === 'done' || t.status === 'skipped') {
+    // back to planned: the task's people, or a manager
+    const re = el('button', 'btn', 'Reopen');
+    re.onclick = async () => {
+      busy(re, true, 'Reopening…');
+      try { await rpc('reopen_task', { p_task: t.id }); d.close(); toast('Reopened', 'ok'); await load(); }
+      catch (e) { busy(re, false, 'Reopen'); toast(e.message, 'bad'); }
+    };
+    d.footer.append(re);
+  }
+  if (t.status !== 'done' && t.status !== 'skipped') {
+    // not done, with one of three reasons and a note — the Admin or the task's own people (0100)
+    const nd = el('button', 'btn', 'Not done…');
+    nd.onclick = () => notDone(t, d);
+    d.footer.append(nd);
+  }
+  if (t.status !== 'done' && t.status !== 'skipped') {
     if (mayPlan) {
       const ch = el('button', 'btn', 'Change who');
       ch.onclick = () => { d.close(); reassign(t, wk); };
@@ -682,6 +713,32 @@ function openTask(t) {
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
+}
+
+function notDone(t, parent) {
+  const d = drawer('Not done', t.title);
+  let reason = 'no_time';
+  const row = el('div', 'row');
+  const btns = Object.entries(REASON_WORD).map(([v, l]) => {
+    const b = el('button', 'toggle', l); b.type = 'button';
+    b.setAttribute('aria-pressed', String(v === reason));
+    b.onclick = () => { reason = v; btns.forEach(([vv, bb]) => bb.setAttribute('aria-pressed', String(vv === reason))); };
+    row.append(b);
+    return [v, b];
+  });
+  const note = el('input', 'input'); note.placeholder = 'Note (optional)';
+  d.body.append(el('div', 'sec-title', 'Why'), row, note,
+    el('div', 'hint', 'Marked on the board as not done, with this reason. Only the Admin or the person the task is assigned to may do it.'));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-danger', 'Mark not done');
+  ok.onclick = async () => {
+    busy(ok, true, 'Saving…');
+    try {
+      await rpc('skip_task', { p_task: t.id, p_reason: reason, p_note: note.value.trim() || null });
+      d.close(); parent?.close(); toast('Marked not done', 'ok'); await load();
+    } catch (e) { busy(ok, false, 'Mark not done'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, ok);
 }
 
 function reassign(task, wk) {

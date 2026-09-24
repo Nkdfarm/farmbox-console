@@ -1,5 +1,5 @@
 {
-  "version": "0.7.93",
+  "version": "0.7.94",
   "released": "2026-09-24",
-  "note": "People is for the Admin and the Farm manager only; the list has an Employment column. Migration 0092."
+  "note": "A drawn face in the console's style for anyone without a picture, instead of stock portraits."
 }

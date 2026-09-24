@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, select } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer,
-         avatar, suggestPassword, busy, setPhotos, subFamilyTag } from './ui.js';
+         avatar, suggestPassword, busy, setPhotos, subFamilyTag, faceIcon } from './ui.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -450,7 +450,7 @@ function photoPicker(p, nameInput, linkedinInput) {
       preview.classList.add('has-photo');
     } else {
       preview.classList.remove('has-photo');
-      preview.textContent = (nameInput.value.trim()[0] || '?').toUpperCase();
+      preview.append(faceIcon());
     }
     remove.hidden = !value;
     hint.textContent = msg ?? '';

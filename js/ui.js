@@ -283,23 +283,20 @@ export function icon(name) {
 }
 
 // ── faces ──────────────────────────────────────────────────────────────────
-// Demo portraits until people have photos of their own: men, Black and brown,
-// hand-picked from randomuser.me's set so the demo looks like the people who
-// work in a FarmBox. The face is picked by a hash of the person's id, so
-// somebody keeps the same one on every page and every reload. A real
-// photo_url, when there is one, always wins; with no signal the initials stay
-// where the photo would have been.
-const FACES = [5, 12, 16, 25, 30, 38, 39, 48, 49, 50, 53, 54, 55, 56, 58, 59,
-               65, 69, 80, 83, 91, 95];
-const hash = s => {
-  let h = 2166136261;
-  for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); }
-  return h >>> 0;
-};
-export const demoFace = key => {
-  const h = hash(key);
-  return `https://randomuser.me/api/portraits/men/${FACES[h % FACES.length]}.jpg`;
-};
+// A person with no picture in the database gets a face drawn in the console's
+// own line style (owner, 24 Sept 2026): the round avatar is the head, two eyes
+// and a smile in the avatar's colour, which is the role's. Drawn inline, so it
+// needs no network and looks the same offline. A stored photo_url always wins.
+// (Until 0.7.94 these were stock portraits from randomuser.me.)
+const FACE_SVG = '<svg viewBox="5 5 14 14" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M9.3 9.4v1.3M14.7 9.4v1.3"/><path d="M8.6 13.6c1.9 2.2 4.9 2.2 6.8 0"/></svg>';
+export function faceIcon() {
+  const s = document.createElement('span');
+  s.className = 'face';
+  s.innerHTML = FACE_SVG;
+  return s;
+}
 
 // One list of everyone's own pictures, keyed by worker id. Every avatar on
 // every page reads it, and setPhotos() — called at sign-in and whenever People
@@ -317,9 +314,13 @@ export function setPhotos(rows) {
 }
 
 function paintPhoto(box) {
-  const src = PHOTOS.get(box.dataset.wid) || box.dataset.own || demoFace(box.dataset.key);
-  if (box.dataset.src === src) return;
+  const src = PHOTOS.get(box.dataset.wid) || box.dataset.own || '';
+  if (box.dataset.src === src && box.firstChild) return;
   box.dataset.src = src;
+  if (!src) {                                        // no picture in the database: the drawn face
+    box.textContent = ''; box.append(faceIcon()); box.classList.remove('has-photo');
+    return;
+  }
   const img = new Image();
   img.alt = '';
   img.decoding = 'async';
@@ -337,7 +338,8 @@ function paintPhoto(box) {
 // person's worker row up for that reason. size is '', 'sm' or 'lg'.
 export function avatar(p, size = '') {
   const cls = ['avatar', size, p.role && 'r-' + p.role].filter(Boolean).join(' ');
-  const box = el('div', cls, initials(p.name));
+  const box = el('div', cls);
+  box.title = p.name || '';
   box.dataset.wid = p.worker_id ?? '';
   box.dataset.key = p.worker_id ?? p.id ?? p.name;
   if (p.photo_url) box.dataset.own = p.photo_url;

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.124",
+  "version": "0.7.125",
   "released": "2026-09-25",
-  "note": "Steady harvest: a different crop in each zone, and every split listed - evenest first or fewest positions first. Migration 0115."
+  "note": "Steady harvest as a weekly rhythm: the positions you choose, a crop on each, replanted every few weeks on the same weekday - a harvest every week. Migration 0116."
 }

@@ -79,15 +79,8 @@ function paint() {
   const width = Math.max(mount.clientWidth || 1000, 700) - LABEL_W - 2;
   const px = Math.max(span() > 200 ? 2.2 : 4, width / days);
 
-  // head: the view switch, the window, planning
-  const head = el('div', 'page-head tl-head');
-  const titles = el('div');
-  titles.append(el('p', null, 'One row per position. Drag a crop from the list onto a row to plan it; drag a bar to move it, ' +
-    'its right edge to change the harvest. Click a bar for the batch, an empty day to plan one there. Nothing is planted until it is validated.'));
-  head.append(titles, el('div', 'spacer'));
-  if (onSwitch) head.append(onSwitch);
-  mount.append(head);
-
+  // no page head (0.7.119): the explanation is behind ⓘ and the view switch sits with the calendar options,
+  // so the rows get the height
   const bar = el('div', 'tl-nav');
   const seg = el('div', 'seg');
   SPANS.forEach(([v, label]) => {
@@ -103,8 +96,19 @@ function paint() {
   back.onclick = () => { offset -= stepDays; load(); };
   fwd.onclick = () => { offset += stepDays; load(); };
   now.onclick = () => { offset = 0; load(); };
+  const info = el('button', 'btn btn-sm btn-ghost tl-info', 'ⓘ');
+  info.title = 'How the planner works';
+  info.setAttribute('aria-expanded', 'false');
+  const help = el('div', 'note tl-help');
+  help.hidden = true;
+  help.textContent = 'One row per position. Drag a crop from the list onto a row to plan it; drag a bar to move it, its right edge ' +
+    'to change the harvest. Click a bar for the batch, an empty day to plan one there; Shift-click to select several. ' +
+    'Each zone has its kg per week (forecast green, harvested orange) and its number of positions. Nothing is planted until it is validated.';
+  info.onclick = () => { help.hidden = !help.hidden; info.setAttribute('aria-expanded', String(!help.hidden)); };
   bar.append(now, back, fwd, el('b', 'tl-range', `${nice(data.from)} – ${nice(data.to)}`), el('div', 'spacer'), seg);
-  mount.append(bar);
+  if (onSwitch) bar.append(onSwitch);
+  bar.append(info);
+  mount.append(bar, help);
 
   // proposals and a selection: the decisions in one place
   const proposed = (data.batches || []).filter(b => b.status === 'proposed');

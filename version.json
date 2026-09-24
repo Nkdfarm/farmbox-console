@@ -1,5 +1,5 @@
 {
-  "version": "0.7.118",
+  "version": "0.7.119",
   "released": "2026-09-25",
-  "note": "Crop planner timeline: kg per week forecast and harvested for every zone and the whole farm; a scroll bar on top; the head stays in view while the zones scroll. Migration 0111."
+  "note": "Crop planner: the explanation is behind an ⓘ button and Timeline | Map sits with the calendar options, so the rows get more height."
 }

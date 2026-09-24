@@ -1,5 +1,5 @@
 {
-  "version": "0.7.109",
+  "version": "0.7.110",
   "released": "2026-09-24",
-  "note": "Grow: one Procedures tab (routines and crop-plan procedures) filtered by Repeats; the crop library shows crops only; no title repeating the tab."
+  "note": "Assign manually: a task clicked on the board shows as picked at once, not only after the pointer leaves it."
 }

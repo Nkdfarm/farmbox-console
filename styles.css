@@ -1258,3 +1258,12 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 @media (prefers-reduced-motion: reduce) {
   .loading-bar.busy i, .upd-bar.busy i { animation: none; width: 100%; opacity: .45; }
 }
+
+/* ── a task picked for "Assign manually" shows at once (0.7.110) ──────────────
+   .tk:hover sets outline: none further up, and wins over .tk.picked at the same
+   specificity — the pick only appeared once the pointer left the chip. */
+.tk.picked, .tk.picked:hover, .tk.picked:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+  background: color-mix(in srgb, var(--accent) 24%, hsl(var(--h) 70% 50% / 0.16));
+}
+.tk.mine:hover, .tk.mine:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

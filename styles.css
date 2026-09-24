@@ -1110,3 +1110,32 @@ tr.off { opacity: .6; }
   .viewer { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
   .vw-panel { border-left: 0; border-top: 1px solid var(--border); }
 }
+
+/* ── Pest & diseases: cases (0097) ─────────────────────────────────────────── */
+.drawer.case-drawer { width: min(980px, 100vw); }
+.case-chart-wrap { overflow-x: auto; }
+.case-chart { width: 100%; min-width: 620px; height: auto; display: block; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.case-chart .cc-grid { stroke: var(--border); stroke-width: 1; }
+.case-chart .cc-axis { stroke: var(--border-strong); stroke-width: 1; }
+.case-chart .cc-label { font-size: 10px; fill: var(--text-muted); }
+.case-chart .cc-sev { fill: none; stroke: var(--error); stroke-width: 2; }
+.case-chart .cc-sev-dot { fill: var(--error); stroke: var(--surface); stroke-width: 1.5; }
+.case-chart .cc-trap { fill: none; stroke-width: 1.6; }
+.case-chart circle.cc-trap { stroke: none; }
+.case-chart .cc-trap.t0 { stroke: var(--warning); fill: var(--warning); }
+.case-chart polyline.cc-trap.t0, .case-chart polyline.cc-trap.t1, .case-chart polyline.cc-trap.t2, .case-chart polyline.cc-trap.t3 { fill: none; }
+.case-chart .cc-trap.t1 { stroke: var(--info); fill: var(--info); }
+.case-chart .cc-trap.t2 { stroke: var(--success); fill: var(--success); }
+.case-chart .cc-trap.t3 { stroke: var(--accent); fill: var(--accent); }
+.case-chart text.cc-trap { stroke: none !important; font-weight: 600; }
+.case-chart .cc-reset { font-size: 11px; fill: var(--text-muted); }
+.case-chart .cc-app { stroke: var(--success); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.case-chart .cc-app.done { stroke-dasharray: none; }
+.case-chart .cc-withhold { fill: var(--warning-bg); }
+.case-chart .cc-open { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.case-chart .cc-today { stroke: var(--accent); stroke-width: 1; }
+.case-prog { display: grid; gap: 4px; }
+.vw-case { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.vw-case .linkish { flex: 1; text-align: left; }
+.sc-zone-facts .pill { cursor: default; }
+.sc-zone-facts button.pill { cursor: pointer; border: 0; font: inherit; }

@@ -13,9 +13,12 @@
 //     catalog     the pest catalogue (rpc pest_catalog)
 //     zonePhotos  async () → the zone's photos, newest first (rpc zone_photos)
 //     onChange    called after a tag or an AI answer, so the page repaints
+//     zoneId, cropId, crops   where the photo was taken, for the case section (0097)
+//     openCases   async () → the open cases of the zone (rpc cases, filtered)
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
 import { el, toast, busy, num, selectBox } from './ui.js';
+import { newCase, openCase } from './cases.js';
 
 const when = ts => ts ? new Date(ts).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
@@ -272,6 +275,44 @@ export function openViewer(ctx) {
   };
   paintAI();
   panel.append(secAI);
+
+  // the cases (0097): add this photo to an open case of the zone, or open one from it
+  const secCase = el('div');
+  const paintCases = async () => {
+    secCase.textContent = '';
+    secCase.append(el('div', 'sec-title', 'Cases'));
+    let list = [];
+    try { list = ctx.openCases ? await ctx.openCases() : []; } catch { list = []; }
+    const firstCode = (photo.tags || [])[0]?.code || (photo.ai?.findings || [])[0]?.code || null;
+    const firstSev = (photo.tags || [])[0]?.severity ?? (photo.ai?.findings || [])[0]?.severity ?? 1;
+    if (!list.length) secCase.append(el('div', 'hint', 'No open case in this zone.'));
+    list.forEach(c => {
+      const row = el('div', 'vw-case');
+      const name = el('button', 'linkish', c.title); name.onclick = () => openCase(c.id, ctx.onChange);
+      row.append(name);
+      if (mayWrite) {
+        const sev = selectBox([[1, 'slight'], [2, 'clear'], [3, 'severe'], [0, 'none left']], firstSev || 1);
+        const add = el('button', 'btn btn-sm', 'Add to this case');
+        add.onclick = async () => {
+          busy(add, true, '…');
+          try {
+            await rpc('add_case_point', { p_case: c.id, p_kind: photo.kind, p_ref: photo.id, p_severity: Number(sev.value), p_count: null, p_note: null });
+            busy(add, false, 'Added ✓'); toast('Added to the case — it is on its curve', 'ok'); ctx.onChange?.(photo);
+          } catch (e) { busy(add, false, 'Add to this case'); toast(e.message, 'bad'); }
+        };
+        row.append(sev, add);
+      }
+      secCase.append(row);
+    });
+    if (mayWrite) {
+      const open = el('button', 'btn btn-sm', 'Open a case from this photo…');
+      open.onclick = () => newCase({ zone_id: ctx.zoneId || null, crop_id: photo.crop_id || ctx.cropId || null, crops: ctx.crops || [],
+        from_kind: photo.kind, from_id: photo.id, code: firstCode, severity: firstSev || 1,
+        onDone: () => { paintCases(); ctx.onChange?.(photo); } });
+      secCase.append(open);
+    }
+  };
+  if (photo.id) { paintCases(); panel.append(secCase); }
 
   // compare with another photo of the same zone
   const secCmp = el('div');

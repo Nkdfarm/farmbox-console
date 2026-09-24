@@ -423,6 +423,8 @@ function viewReading(t, r, zone) {
     farm, photo: { ...r, kind: 'trap', code: t.code, colour: t.colour, installed_at: t.installed_at, zone: zone?.name, taken_at: r.read_at },
     catalog: data.catalog || [], aiReady: data.ai_ready, mayWrite: data.may_write !== false,
     zonePhotos: zoneId ? () => rpc('zone_photos', { p_farm: farm.id, p_zone: zoneId }) : null,
+    zoneId,
+    openCases: async () => ((await rpc('cases', { p_farm: farm.id, p_include_closed: false })).cases || []).filter(c => !zoneId || c.zone_id === zoneId),
     onChange: () => load(),
   });
 }

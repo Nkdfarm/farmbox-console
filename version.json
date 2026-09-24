@@ -1,5 +1,5 @@
 {
-  "version": "0.7.98",
+  "version": "0.7.99",
   "released": "2026-09-24",
-  "note": "Pest & diseases: the daily scouting report by zone, a photo viewer with zoom, tags and the AI on request, compare with any photo of the zone. Migration 0096."
+  "note": "Pest & diseases: cases followed until they are over, with their curve by date, and treatment programmes. Migration 0097."
 }

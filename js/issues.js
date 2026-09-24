@@ -56,6 +56,12 @@ function paint() {
         b.append(el('b', null, v));
         const where = [r.asset, r.system, r.position].filter(Boolean).join(' · ');
         if (where) b.append(el('div', 'hint', where));
+        // a pest case is followed in Pest & diseases › Cases (0097)
+        if (r.kind === 'pest_case') {
+          const a = el('a', 'linkish', 'pest case — open it in Pest & diseases');
+          a.href = '#/ipm/cases';
+          b.append(el('div', 'hint')).append(a);
+        }
         return b; } },
     { key: 'severity', label: 'Severity', fmt: v =>
         el('span', 'pill' + (v === 'critical' || v === 'high' ? ' bad'

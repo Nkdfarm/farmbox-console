@@ -11,6 +11,7 @@
 import { rpc } from './api.js';
 import { el, pageHead, num, cropAvatar, toast } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
+import { openCase } from './cases.js';
 
 let farm = null, data = null, mount = null, day = null, catalog = null;
 
@@ -103,6 +104,12 @@ function zoneBand(z) {
     (p.ai?.findings || []).forEach(x => seen.set('ai:' + x.code, 'AI: ' + (x.name || x.code)));
   });
   [...seen.values()].slice(0, 4).forEach(l => right.append(el('span', 'vw-tag', l)));
+  (z.cases || []).forEach(c => {
+    const b = el('button', 'pill ' + (c.severity === 'high' ? 'bad' : c.severity === 'medium' ? 'warn' : 'info'), 'Case: ' + c.title.replace(/ in .*$/, ''));
+    b.title = 'Open the case';
+    b.onclick = e => { e.preventDefault(); e.stopPropagation(); openCase(c.id, () => load()); };
+    right.append(b);
+  });
   if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
   else if (z.item) right.append(el('span', 'hint', 'not done'));
   sum.append(right);
@@ -146,6 +153,8 @@ function figure(p, z) {
   fig.onclick = () => openViewer({
     farm, photo: p, catalog, aiReady: data.ai_ready, mayWrite: data.may_write !== false,
     zonePhotos: () => rpc('zone_photos', { p_farm: farm.id, p_zone: z.zone_id, p_from: shift(day, -120), p_to: day }),
+    zoneId: z.zone_id, crops: z.crops || [],
+    openCases: async () => ((await rpc('cases', { p_farm: farm.id, p_include_closed: false })).cases || []).filter(c => c.zone_id === z.zone_id),
     onChange: () => load(),
   });
   return fig;

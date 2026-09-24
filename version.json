@@ -1,5 +1,5 @@
 {
-  "version": "0.7.110",
+  "version": "0.7.111",
   "released": "2026-09-24",
-  "note": "Assign manually: a task clicked on the board shows as picked at once, not only after the pointer leaves it."
+  "note": "Assign manually: click an assigned task to take the name off; a chosen person's tasks are outlined and come off them with a click. Migration 0103."
 }

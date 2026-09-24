@@ -48,7 +48,10 @@ let body = null;          // the part under the toolbars, repainted on its own
 const EMPTY_FILTERS = { q: '', status: 'open', family: '', category: '', crop: '', worker: '', area: '', priority: '' };
 let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
-const manual = { on: false, worker: null, tasks: new Set() };
+// 0.7.111: `drop` = the tasks to take a name off — the chosen person's, or everybody's when no face is chosen
+const manual = { on: false, worker: null, tasks: new Set(), drop: new Set() };
+const onTask = (t, w) => (t.workers || []).some(x => x.id === w);
+const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); };
 let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
 let dragging = null;      // the task being dragged, while it is
 try { filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
@@ -207,7 +210,7 @@ function paintPeople() {
   const head = el('div', 'tk-people-head');
   const bm = el('button', 'btn btn-sm' + (manual.on ? ' btn-accent' : ''), 'Assign manually');
   bm.disabled = !may;
-  bm.onclick = () => { manual.on = !manual.on; manual.worker = null; manual.tasks.clear(); paintPeople(); paintBody(); };
+  bm.onclick = () => { resetManual(!manual.on); paintPeople(); paintBody(); };
   const ba = el('button', 'btn btn-sm btn-primary', 'Assign automatically');
   ba.disabled = !may;
   ba.onclick = () => autoAssign(ba, from, to);
@@ -215,23 +218,35 @@ function paintPeople() {
   peopleCol.append(head);
   if (!may) peopleCol.append(el('div', 'hint', data?.plan?.status === 'locked' ? 'This week is locked — reopen its plan to change who does what.' : 'Only a manager assigns the work.'));
   if (manual.on) {
-    peopleCol.append(el('div', 'tk-guide',
-      manual.worker ? `${list.find(p => p.id === manual.worker)?.name || 'Chosen'} · now click the tasks on the board, then Validate.`
-                    : 'Click a face, then the tasks on the board, then Validate.'));
+    const who = manual.worker ? (list.find(p => p.id === manual.worker)?.name || 'Chosen') : null;
+    peopleCol.append(el('div', 'tk-guide', who
+      ? `${who} · their tasks are outlined. Click a task to give it to ${who}, or one of theirs to take it off them. Then Validate.`
+      : 'Click a task to take its names off, or a face to give tasks to that person. Then Validate.'));
     const acts = el('div', 'row');
-    const ok = el('button', 'btn btn-sm btn-primary', `Validate${manual.tasks.size ? ' · ' + manual.tasks.size : ''}`);
-    ok.disabled = !manual.worker || !manual.tasks.size;
+    const count = [manual.tasks.size ? '+' + manual.tasks.size : null, manual.drop.size ? '−' + manual.drop.size : null].filter(Boolean).join(' ');
+    const ok = el('button', 'btn btn-sm btn-primary', `Validate${count ? ' · ' + count : ''}`);
+    ok.disabled = !(manual.worker && manual.tasks.size) && !manual.drop.size;
+    ok.title = [manual.tasks.size ? `${manual.tasks.size} to give to ${who}` : null,
+                manual.drop.size ? `${manual.drop.size} to take ${who ? who + ' off' : 'everybody off'}` : null].filter(Boolean).join(' · ');
     ok.onclick = async () => {
-      busy(ok, true, 'Assigning…');
+      busy(ok, true, 'Saving…');
       try {
-        const r = await rpc('assign_tasks', { p_tasks: [...manual.tasks], p_worker: manual.worker });
-        toast(`${r.assigned} task${r.assigned === 1 ? '' : 's'} given to ${list.find(p => p.id === manual.worker)?.name || 'them'}`, 'ok');
-        manual.on = false; manual.worker = null; manual.tasks.clear();
+        const said = [];
+        if (manual.worker && manual.tasks.size) {
+          const r = await rpc('assign_tasks', { p_tasks: [...manual.tasks], p_worker: manual.worker });
+          said.push(`${r.assigned} given to ${who}`);
+        }
+        if (manual.drop.size) {
+          const r = await rpc('unassign_tasks', { p_tasks: [...manual.drop], p_worker: manual.worker });
+          said.push(`${r.unassigned} taken off ${who || 'everybody'}`);
+        }
+        toast(said.join(' · '), 'ok');
+        resetManual(false);
         await load();
       } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); }
     };
     const no = el('button', 'btn btn-sm', 'Discard');
-    no.onclick = () => { manual.on = false; manual.worker = null; manual.tasks.clear(); paintPeople(); paintBody(); };
+    no.onclick = () => { resetManual(false); paintPeople(); paintBody(); };
     acts.append(ok, no);
     peopleCol.append(acts);
   }
@@ -257,7 +272,8 @@ function paintPeople() {
     card.onclick = () => {
       // outside manual mode a face puts its tasks in the spotlight — the whole plan stays in view
       if (!manual.on) { spotlight = spotlight === p.id ? null : p.id; paintBody(); return; }
-      manual.worker = manual.worker === p.id ? null : p.id; paintPeople();
+      manual.worker = manual.worker === p.id ? null : p.id; manual.tasks.clear(); manual.drop.clear();
+      paintPeople(); paintBody();
     };
     peopleCol.append(card);
   });
@@ -533,14 +549,17 @@ function chip(t, opts = {}) {
   const open = () => {
     if (manual.on) {
       if (t.status === 'done' || t.status === 'skipped') return;
-      if (manual.tasks.has(t.id)) manual.tasks.delete(t.id); else manual.tasks.add(t.id);
-      c.classList.toggle('picked', manual.tasks.has(t.id));
+      const flip = set => { if (set.has(t.id)) set.delete(t.id); else set.add(t.id); };
+      if (manual.worker) flip(onTask(t, manual.worker) ? manual.drop : manual.tasks);   // theirs: off; anyone else's: to them
+      else if ((t.workers || []).length) flip(manual.drop);                               // no face chosen: names off
+      else { toast('Nobody on this task yet — click a face first to give it to someone'); return; }
+      markManual(c, t);
       paintPeople();
       return;
     }
     openTask(t);
   };
-  if (manual.on && manual.tasks.has(t.id)) c.classList.add('picked');
+  if (manual.on) markManual(c, t);
   c.onclick = open;
   c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   // drag it to another day or across the line (a manager, an open task)
@@ -712,6 +731,16 @@ function openTask(t) {
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
+}
+
+// how a chip looks in Assign manually: picked = theirs after Validate, dropping = a name coming off
+function markManual(c, t) {
+  const kept = manual.worker && ((onTask(t, manual.worker) && !manual.drop.has(t.id)) || manual.tasks.has(t.id));
+  c.classList.toggle('picked', !!kept);
+  c.classList.toggle('dropping', manual.drop.has(t.id));
+  c.title = manual.drop.has(t.id) ? `Comes off ${manual.worker ? 'this person' : 'everybody'} on Validate — click again to keep`
+          : kept ? (onTask(t, manual.worker) ? 'Theirs — click to take it off them' : 'Given to them on Validate — click again to undo')
+          : (t.workers || []).length ? (manual.worker ? 'Click to give it to them instead' : 'Click to take the names off') : '';
 }
 
 function notDone(t, parent) {

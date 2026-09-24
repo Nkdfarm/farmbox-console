@@ -1267,3 +1267,10 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
   background: color-mix(in srgb, var(--accent) 24%, hsl(var(--h) 70% 50% / 0.16));
 }
 .tk.mine:hover, .tk.mine:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* a name coming off a task in Assign manually (0.7.111) */
+.tk.dropping, .tk.dropping:hover, .tk.dropping:focus-visible {
+  outline: 2px dashed var(--danger, #e5484d); outline-offset: 1px;
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, hsl(var(--h) 70% 50% / 0.10));
+}
+.tk.dropping .avatar { opacity: .35; filter: grayscale(1); }

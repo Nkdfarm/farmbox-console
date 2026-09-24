@@ -1,5 +1,5 @@
 {
-  "version": "0.7.122",
+  "version": "0.7.123",
   "released": "2026-09-25",
-  "note": "The assistant: a side panel that answers about the farm, plans, imports Excel or a photo and writes reports; every change it proposes waits for Do it."
+  "note": "Steady harvest over several zones: + Add a zone in the window; the zones are split and staggered together for an even total every week. Migration 0114."
 }

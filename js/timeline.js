@@ -837,45 +837,116 @@ function steadyDrop(sys) {
     const crop = dragCrop;
     dragCrop = null; clearGhost(); unmarkRows(); document.body.classList.remove('tl-dragging'); reset();
     if (!fits(crop, sys)) { toast(`${crop.name} does not grow in ${sys.name}`, 'bad'); return; }
-    openSteady(sys, crop);
+    openSteady([sys], crop);
   });
   z.onclick = () => toast('Drag a crop from the list above onto this box');
   return z;
 }
 
-async function openSteady(sys, crop, horizon = 182) {
-  const d = drawer(`Steady harvest · ${crop.name}`, `${sys.name}: split along its rows and staggered, for an even harvest every week`);
+// one zone or several (0.7.123): the zones chosen are shown as chips; "+ Add a zone" offers the
+// others the crop grows in. With several, the options are the combinations of their splits,
+// staggered as one sequence so that the TOTAL is even — the five flattest, best first.
+const ZONE_COLOURS = ['#2e7d32', '#3b82f6', '#f59e0b', '#a855f7'];
+async function openSteady(zones, crop, horizon = 182) {
+  if (!Array.isArray(zones)) zones = [zones];
+  const multi = zones.length > 1;
+  const d = drawer(`Steady harvest · ${crop.name}`, multi
+    ? `${zones.map(z => z.name).join(' + ')}: split and staggered together, for an even total every week`
+    : `${zones[0].name}: split along its rows and staggered, for an even harvest every week`);
+  // the zones, and adding one
+  const zrow = el('div', 'row tl-steady-zones');
+  zones.forEach((z, i) => {
+    const chip = el('span', 'tl-zone-chip', z.name);
+    chip.style.setProperty('--zc', ZONE_COLOURS[i % ZONE_COLOURS.length]);
+    if (multi) {
+      const x = el('button', 'btn btn-sm btn-ghost', '✕'); x.title = `Leave ${z.name} out`;
+      x.onclick = () => { d.close(); openSteady(zones.filter(y => y.id !== z.id), crop, horizon); };
+      chip.append(x);
+    }
+    zrow.append(chip);
+  });
+  const others = (data.systems || []).filter(s => fits(crop, s) && !zones.some(z => z.id === s.id));
+  if (others.length && zones.length < 4) {
+    const busy = s => (data.batches || []).some(b => b.status === 'validated' || b.status === 'active'
+      ? (s.positions || []).some(p => p.id === b.position_id) : false);
+    const add = selectBox([['', '+ Add a zone'], ...others.map(s => [s.id, `${s.name} · ${systemLabel(s.type)}` + (busy(s) ? ' — busy, clear it first' : '')])], '');
+    add.classList.add('tl-add-zone');
+    add.onchange = () => { const s = others.find(o => o.id === add.value); if (!s) return; d.close(); openSteady([...zones, s], crop, horizon); };
+    zrow.append(add);
+  }
+  d.body.append(zrow);
   d.body.append(loading('Working out the splits…'));
   let o;
-  try { o = await rpc('steady_options', { p_system: sys.id, p_crop: crop.id, p_from: null, p_horizon: horizon }); }
-  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
-  d.body.textContent = '';
-  d.body.append(el('div', 'hint', `A ${crop.name} stays ${o.stay} days in a position (${o.grow_days} growing, ${o.harvest_days} harvesting, then cleaning); ` +
-    `the zone gives about ${Math.round(o.kg_cycle).toLocaleString()} kg a cycle. First planting ${nice(o.start)}.`));
+  try {
+    o = multi
+      ? await rpc('steady_group_options', { p_systems: zones.map(z => z.id), p_crop: crop.id, p_from: null, p_horizon: horizon })
+      : await rpc('steady_options', { p_system: zones[0].id, p_crop: crop.id, p_from: null, p_horizon: horizon });
+  } catch (e) { d.body.lastChild.remove(); d.body.append(el('div', 'note bad', e.message)); return; }
+  d.body.lastChild.remove();
+
+  const kgCycle = multi ? o.zones.reduce((a, z) => a + Number(z.kg_cycle || 0), 0) : o.kg_cycle;
+  d.body.append(el('div', 'hint', multi
+    ? `The zones give about ${Math.round(kgCycle).toLocaleString()} kg a cycle together. First planting ${nice(o.start)}.`
+    : `A ${crop.name} stays ${o.stay} days in a position (${o.grow_days} growing, ${o.harvest_days} harvesting, then cleaning); ` +
+      `the zone gives about ${Math.round(o.kg_cycle).toLocaleString()} kg a cycle. First planting ${nice(o.start)}.`));
   const hz = selectBox([['91', '13 weeks'], ['182', '26 weeks'], ['364', '52 weeks']], String(horizon));
-  hz.onchange = () => { d.close(); openSteady(sys, crop, Number(hz.value)); };
+  hz.onchange = () => { d.close(); openSteady(zones, crop, Number(hz.value)); };
   d.body.append(field('Plan ahead for', hz));
-  if (o.blocked) {
+
+  const blockedZones = multi ? o.zones.filter(z => Number(z.blocked) > 0) : (o.blocked ? [{ system_id: zones[0].id, zone: zones[0].name, blocked: o.blocked }] : []);
+  blockedZones.forEach(bz => {
     const w = el('div', 'note warn');
-    w.append(`${sys.name} has ${o.blocked} batch${o.blocked === 1 ? '' : 'es'} validated or growing: clear the zone first. `);
-    const cl = el('button', 'btn btn-sm', 'Clear the zone…');
-    cl.onclick = () => { d.close(); openClear(sys); };
+    w.append(`${bz.zone} has ${bz.blocked} batch${bz.blocked == 1 ? '' : 'es'} validated or growing: clear it first. `);
+    const cl = el('button', 'btn btn-sm', `Clear ${bz.zone}…`);
+    cl.onclick = () => { d.close(); openClear((data.systems || []).find(s => s.id === bz.system_id)); };
     w.append(cl);
     d.body.append(w);
-  }
-  let pick = (o.options.find(x => x.best) || o.options[0]).n;
+  });
+
+  const opts = o.options || [];
+  if (!opts.length) { d.body.append(el('div', 'note warn', 'No split works for this crop here.')); return; }
+  let pick = opts.findIndex(x => x.best); if (pick < 0) pick = 0;
   const list = el('div', 'tl-steady-list');
+  const chart = el('div', 'tl-steady-chart');
+  const paintChart = () => {
+    chart.textContent = '';
+    const x = opts[pick];
+    if (!multi || !(x.weeks || []).length) { chart.hidden = true; return; }
+    chart.hidden = false;
+    const max = Math.max(1, ...x.weeks.map(w => Number(w.kg)));
+    const bars = el('div', 'tl-steady-bars');
+    x.weeks.forEach(w => {
+      const col = el('div', 'tl-steady-col');
+      col.title = `Week of ${nice(w.w)}: ${Math.round(w.kg)} kg` + (w.z || []).map((k, i) => `\n${o.zones[i]?.zone}: ${Math.round(k)} kg`).join('');
+      (w.z || []).forEach((k, i) => { const s = el('span'); s.style.height = (60 * Number(k) / max) + 'px'; s.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length]; col.append(s); });
+      bars.append(col);
+    });
+    const leg = el('div', 'row tl-steady-legend');
+    o.zones.forEach((z, i) => { const s = el('span'); const dot = el('i'); dot.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length]; s.append(dot, z.zone); leg.append(s); });
+    chart.append(el('div', 'hint', 'kg a week, each zone its colour'), bars, leg);
+  };
   const paintList = () => {
     list.textContent = '';
-    o.options.forEach(x => {
-      const r = el('label', 'tl-steady-opt' + (x.best ? ' best' : '') + (x.n === pick ? ' on' : ''));
-      const radio = el('input'); radio.type = 'radio'; radio.name = 'steady-n'; radio.checked = x.n === pick;
-      radio.onchange = () => { pick = x.n; paintList(); };
+    opts.forEach((x, idx) => {
+      const r = el('label', 'tl-steady-opt' + (x.best ? ' best' : '') + (idx === pick ? ' on' : ''));
+      const radio = el('input'); radio.type = 'radio'; radio.name = 'steady-n'; radio.checked = idx === pick;
+      radio.onchange = () => { pick = idx; paintList(); paintChart(); };
       const t = el('div');
-      t.append(el('b', null, `${x.n} position${x.n === 1 ? '' : 's'} × ${Number(x.places_each).toLocaleString()}` + (x.rows_each > 1 ? ` · ${x.rows_each} rows each` : '')));
-      if (x.best) t.append(el('span', 'pill ok', 'Best'));
-      if (x.current) t.append(el('span', 'pill', 'now'));
-      t.append(el('div', 'hint', `a planting every ${Number(x.interval).toLocaleString()} days (${x.pattern === 'weekly' ? 'on the same weekday' : 'evenly'}) · ${Math.round(x.kg_batch).toLocaleString()} kg a batch`));
+      if (multi) {
+        x.zones.forEach((z, i) => {
+          const line = el('div', 'tl-steady-zline');
+          const dot = el('i'); dot.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length];
+          line.append(dot, el('b', null, `${z.zone}: ${z.n} × ${Number(z.places_each).toLocaleString()}`), el('span', 'hint', (z.rows_each > 1 ? ` · ${z.rows_each} rows each` : '') + (z.current ? ' · now' : '')));
+          t.append(line);
+        });
+        if (x.best) t.append(el('span', 'pill ok', 'Best'));
+      } else {
+        t.append(el('b', null, `${x.n} position${x.n === 1 ? '' : 's'} × ${Number(x.places_each).toLocaleString()}` + (x.rows_each > 1 ? ` · ${x.rows_each} rows each` : '')));
+        if (x.best) t.append(el('span', 'pill ok', 'Best'));
+        if (x.current) t.append(el('span', 'pill', 'now'));
+      }
+      t.append(el('div', 'hint', `a planting every ${Number(x.interval).toLocaleString()} days (${x.pattern === 'weekly' ? 'on the same weekday' : 'evenly'})` +
+        (multi ? '' : ` · ${Math.round(x.kg_batch).toLocaleString()} kg a batch`)));
       const w = el('div', 'tl-steady-kg');
       const cv = x.cv == null ? null : Math.round(Number(x.cv) * 100);
       w.append(el('b', null, `≈ ${Math.round(x.mean || 0).toLocaleString()} kg / week`),
@@ -886,19 +957,21 @@ async function openSteady(sys, crop, horizon = 182) {
       list.append(r);
     });
   };
-  paintList();
-  d.body.append(el('div', 'sec-title', 'How to split the zone'), list,
+  paintList(); paintChart();
+  d.body.append(el('div', 'sec-title', multi ? 'How to split the zones' : 'How to split the zone'), list, chart,
     el('div', 'hint', 'Changing the number of positions renames them from their rows (ABC, DEF…) and is a farm manager’s decision. Everything lands as proposals to validate.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Plan it');
-  go.disabled = !!o.blocked;
+  go.disabled = blockedZones.length > 0;
   go.onclick = async () => {
-    const x = o.options.find(y => y.n === pick);
+    const x = opts[pick];
     busy(go, true, 'Planning…');
     try {
-      const r = await rpc('plan_steady', { p_system: sys.id, p_crop: crop.id, p_n: pick, p_pattern: x.pattern, p_from: null, p_horizon: horizon });
+      const r = multi
+        ? await rpc('plan_steady_group', { p_systems: zones.map(z => z.id), p_crop: crop.id, p_ns: x.zones.map(z => z.n), p_pattern: x.pattern, p_from: null, p_horizon: horizon })
+        : await rpc('plan_steady', { p_system: zones[0].id, p_crop: crop.id, p_n: x.n, p_pattern: x.pattern, p_from: null, p_horizon: horizon });
       d.close();
-      toast(`${r.crop} in ${r.zone}: ${r.positions} positions, ${r.batches} batches proposed · ≈ ${Math.round(x.mean || 0)} kg a week`, 'ok');
+      toast(`${r.crop}: ${r.batches} batches proposed over ${multi ? zones.map(z => z.name).join(' + ') : zones[0].name} · ≈ ${Math.round(x.mean || 0)} kg a week`, 'ok');
       await reload();
     } catch (e) { busy(go, false, 'Plan it'); toast(e.message, 'bad'); }
   };

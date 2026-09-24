@@ -283,14 +283,15 @@ export function icon(name) {
 }
 
 // ── faces ──────────────────────────────────────────────────────────────────
-// A person with no picture in the database gets a face drawn in the console's
-// own line style (owner, 24 Sept 2026): the round avatar is the head, two eyes
-// and a smile in the avatar's colour, which is the role's. Drawn inline, so it
-// needs no network and looks the same offline. A stored photo_url always wins.
-// (Until 0.7.94 these were stock portraits from randomuser.me.)
-const FACE_SVG = '<svg viewBox="5 5 14 14" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M9.3 9.4v1.3M14.7 9.4v1.3"/><path d="M8.6 13.6c1.9 2.2 4.9 2.2 6.8 0"/></svg>';
+// A person with no picture in the database gets a plain silhouette, a round
+// head over round shoulders cut by the circle — nobody's gender, nobody's face
+// (owner, 24 Sept 2026). Filled in the role's colour on the role's tint, drawn
+// inline, so it needs no network and looks the same offline. A stored
+// photo_url always wins. (0.7.93 and before: stock portraits from randomuser.me;
+// 0.7.94: a drawn smile.)
+const FACE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="12" cy="9.6" r="4.4"/>' +
+  '<path d="M3.2 24.5c0-5.3 3.9-8.9 8.8-8.9s8.8 3.6 8.8 8.9z"/></svg>';
 export function faceIcon() {
   const s = document.createElement('span');
   s.className = 'face';

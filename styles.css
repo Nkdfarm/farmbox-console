@@ -212,9 +212,9 @@ th.right, td.right { text-align: right; }
   background: var(--surface-offset); color: var(--text-muted);
   box-shadow: 0 0 0 2px var(--surface); }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* the drawn face of a person with no picture: eyes and a smile in the role's colour */
-.avatar .face { width: 64%; height: 64%; display: grid; place-items: center; }
-.avatar .face svg { width: 100%; height: 100%; }
+/* the silhouette of a person with no picture: head and shoulders in the role's colour */
+.avatar .face { width: 100%; height: 100%; display: block; opacity: .85; }
+.avatar .face svg { width: 100%; height: 100%; display: block; }
 .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
 .avatar.crop { border-radius: 10px; overflow: hidden; }
 .avatar.crop img { width: 100%; height: 100%; object-fit: cover; display: block; }

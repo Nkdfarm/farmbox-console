@@ -1,5 +1,5 @@
 {
-  "version": "0.7.101",
+  "version": "0.7.102",
   "released": "2026-09-24",
-  "note": "Pest & diseases on one page: the dashboard, the open cases, the reports by date, zone and photo, with red / orange / green dots. Migration 0099."
+  "note": "A console that could not start says why and tries again, instead of an empty page reading No FarmBox yet."
 }

@@ -423,6 +423,11 @@ async function route() {
 
   newPage();
   const page = $('page');
+  if (!booted) {
+    if (startError) showStartError();
+    else { page.textContent = ''; page.append(el('div', 'empty', 'Starting…')); }
+    return;
+  }
   if (!farm) {
     page.textContent = '';
     const e = el('div', 'empty');
@@ -470,7 +475,7 @@ async function start() {
     // everyone's own picture, for every avatar on every page (ui.js setPhotos)
     try { setPhotos(await select('worker', 'select=id,photo_url&photo_url=not.is.null')); } catch { /* demo faces */ }
     // Available systems and media, before any page draws a system or a medium
-    await Promise.all([loadCatalog(), loadFamilies()]);
+    await Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
     const v = document.getElementById('version');
@@ -496,9 +501,31 @@ async function start() {
         ? 'That account no longer exists. Sign in again.'
         : 'Your session has ended. Sign in again.');
     } else {
-      toast(err.message, 'bad');
+      // not a verdict on the session: say what failed, on the page, and try once more by itself
+      console.error('start failed', err);
+      startError = err.message || String(err);
+      const retry = !startRetried;
+      startRetried = true;
+      showStartError(retry);
+      if (retry) setTimeout(() => { if (!booted) start(); }, 4000);
     }
   }
+}
+
+// The console could not start (0.7.102): instead of an empty shell that later reads
+// "No FarmBox yet", the page says what failed and offers to try again.
+let startError = null, startRetried = false;
+function showStartError(retrying = false) {
+  const page = $('page');
+  page.textContent = '';
+  const e = el('div', 'empty');
+  e.append(el('h3', null, 'The console could not start'));
+  e.append(el('p', null, startError || 'Unknown error.'));
+  if (retrying) e.append(el('p', 'hint', 'It will try again by itself in a few seconds.'));
+  const again = el('button', 'btn btn-primary', 'Try again');
+  again.onclick = () => { startError = null; page.textContent = ''; page.append(el('div', 'empty', 'Starting…')); start(); };
+  e.append(again);
+  page.append(e);
 }
 
 if (getSession()) start(); else showSignin();

@@ -15,10 +15,8 @@ import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
-import { renderIpm } from './ipm.js';
 import { renderScouting } from './scouting.js';
-import { renderCases } from './cases.js';
-import { renderPests } from './pests.js';
+import { rpc as rpcCall } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
@@ -114,7 +112,7 @@ const LIB = {
   routines: { title: 'Routines', keep: p => p.family === 'Agriculture' && p.trigger !== 'crop_plan'
       && (p.category !== 'Pest & disease' || p.frequency === 'Routine'),
     blurb: 'The growing work that is not tied to one crop — irrigation, nutrients and water, climate, sanitation, the sticky-trap round and scouting, the daily and weekly rounds. The crop-specific procedures are in the Crop library.' },
-  ipm: { title: 'IPM programs', keep: p => p.category === 'Pest & disease',
+  ipm: { title: 'Pest & disease procedures', keep: p => p.category === 'Pest & disease',
     blurb: 'Scouting, the sticky-trap round, treatments: every Pest & disease procedure.' },
   office: { title: 'Farm management', keep: p => p.family === 'Office',
     blurb: 'The office procedures: admin, orders and deliveries, the weekend remote check.' },
@@ -131,7 +129,9 @@ const SECTIONS = {
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')],
     ['harvest', 'Harvest', renderHarvest]] },
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
-  ipm: { title: 'Pest & diseases', tabs: [['overview', 'Overview', renderPests], ['scouting', 'Scouting', renderScouting], ['cases', 'Cases', renderCases], ['traps', 'Traps', renderIpm], ['programs', 'Programs', lib('ipm')]] },
+  // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
+  // and the procedures; the trap setup is behind the page's "Traps…" button
+  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     ['sell', 'Sell', renderPrices], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
@@ -352,7 +352,8 @@ async function warm() {
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['scouting_day', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['reports', { ...p, ...reportRange() }],
+    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['scouting_day', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],
+    ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];
@@ -394,7 +395,22 @@ function paintTabs(sec, active) {
   });
 }
 
+// the side menu's dot on Pest & diseases (0099): the worst open case or trap on the farm
+async function paintPestDot() {
+  const a = document.querySelector('.rail a[data-route="ipm"]');
+  if (!a || !farm) return;
+  let d = null;
+  try { d = await rpcCall('pest_dot', { p_farm: farm.id }); } catch { d = null; }
+  a.querySelector('.rail-dot')?.remove();
+  if (d) {
+    const s = el('span', 'rail-dot ' + d);
+    s.title = { red: 'A severe case, or a trap over the threshold', orange: 'A case open, or a trap on watch', green: 'Improving, or resolved recently' }[d];
+    a.append(s);
+  }
+}
+
 async function route() {
+  paintPestDot();
   const { sec, tab } = currentRoute();
   const wanted = `#/${sec}/${tab[0]}`;
   if (location.hash !== wanted) { history.replaceState(null, '', wanted); }

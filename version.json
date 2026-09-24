@@ -1,5 +1,5 @@
 {
-  "version": "0.7.100",
+  "version": "0.7.101",
   "released": "2026-09-24",
-  "note": "Pest & diseases overview: open cases and treatments, insect pressure per trap per day, crops by type with their cases; harvest tasks flagged during a withholding period. Migration 0098."
+  "note": "Pest & diseases on one page: the dashboard, the open cases, the reports by date, zone and photo, with red / orange / green dots. Migration 0099."
 }

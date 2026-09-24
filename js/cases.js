@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Pest & diseases › Cases — one problem followed until it is over (0097)
+// Pest & diseases — the case window: one problem followed until it is over (0097)
 //
 // A case is one pest, disease or disorder on one crop in one zone. Its window
 // draws the evolution on a real date axis: the severity of the photos added
@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, cropAvatar } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -22,87 +22,10 @@ const METHODS = [['biological', 'Biological'], ['chemical', 'Chemical'], ['cultu
 const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-let farm = null, data = null, mount = null, showClosed = false, catalog = null;
-
-export async function renderCases(container, currentFarm) {
-  farm = currentFarm; mount = container;
-  await load();
-}
-
-async function load() {
-  mount.textContent = '';
-  mount.append(el('div', 'empty', 'Reading the cases…'));
-  try {
-    [data, catalog] = await Promise.all([rpc('cases', { p_farm: farm.id, p_include_closed: showClosed }), catalog || rpc('pest_catalog')]);
-  } catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
-  paint();
-}
-
-function paint() {
-  mount.textContent = '';
-  const add = data.may_write ? el('button', 'btn btn-primary', 'Open a case') : null;
-  if (add) add.onclick = () => newCase({});
-  mount.append(pageHead('Cases',
-    'One pest, disease or disorder on one crop in one zone, followed until it is over: the photos and trap counts that show ' +
-    'how it goes, the treatment and when harvesting is safe again. Open a case from any photo in Scouting, or here.', add));
-
-  const c = data.counts || {};
-  const tiles = el('div', 'tiles ipm-tiles');
-  const tile = (n, label, cls) => {
-    const t = el('div', 'tile' + (cls ? ' ' + cls : ''));
-    const body = el('div', 'tile-body');
-    body.append(el('div', 'tile-value', String(n ?? 0)), el('div', 'tile-label', label));
-    t.append(body); tiles.append(t);
-  };
-  tile(c.diseases, 'diseases open', c.diseases ? 'is-bad' : '');
-  tile(c.pests, 'pests open', c.pests ? 'is-warn' : '');
-  tile(c.disorders, 'disorders open');
-  tile(c.programs, 'treatments running');
-  tile(c.withholding, 'waiting to harvest', c.withholding ? 'is-warn' : '');
-  mount.append(tiles);
-
-  const toggle = el('button', 'chip' + (showClosed ? ' on' : ''), 'Include closed');
-  toggle.onclick = () => { showClosed = !showClosed; load(); };
-  const chips = el('div', 'chips'); chips.style.marginBottom = 'var(--space-4)'; chips.append(toggle);
-  mount.append(chips);
-
-  const card = el('div', 'card');
-  card.append(table([
-    { key: 'crop', label: 'Crop', fmt: (v, r) => {
-        const b = el('div', 'cropdb-name');
-        b.append(cropAvatar({ name: v || '?', category: r.crop_category, photo_url: r.crop_photo }, 'sm'), el('span', null, v || '—'));
-        return b; } },
-    { key: 'label', label: 'Case', fmt: (v, r) => {
-        const b = el('div');
-        b.append(el('b', null, v || r.title), ' ', el('span', 'vw-tag ' + (r.kind || ''), KIND_WORD[r.kind] || r.kind || ''));
-        b.append(el('div', 'hint', [r.zone, `opened ${day(r.opened)}`].filter(Boolean).join(' · ')));
-        return b; } },
-    { key: 'severity', label: 'Now', fmt: (v, r) => {
-        const lp = r.last_point;
-        const b = el('div');
-        b.append(el('span', 'pill' + (v === 'high' || v === 'critical' ? ' bad' : v === 'medium' ? ' warn' : ''), v));
-        if (lp) b.append(el('div', 'hint', [day(lp.at), lp.severity != null ? SEV[lp.severity] : null, lp.count != null ? `${lp.count} on the trap` : null].filter(Boolean).join(' · ')));
-        return b; } },
-    { key: 'points', label: 'Points', align: 'right', fmt: (v, r) => `${v}${r.traps ? ` · ${r.traps} trap${r.traps > 1 ? 's' : ''}` : ''}` },
-    { key: 'programs', label: 'Treatment', fmt: v => {
-        const list = v || [];
-        if (!list.length) return el('span', 'hint', 'none');
-        const b = el('div');
-        list.forEach(p => {
-          const next = (p.applications_list || []).find(a => a.status !== 'done');
-          b.append(el('div', null, `${p.product || p.name} · ${p.done}/${p.applications}` + (p.state === 'stopped' ? ' · stopped' : '')));
-          const hint = [next ? `next ${day(next.date)}` : null,
-                        p.harvest_after && p.harvest_after >= ymd(new Date()) ? `harvest from ${day(p.harvest_after)}` : null].filter(Boolean).join(' · ');
-          if (hint) b.append(el('div', 'hint', hint));
-        });
-        return b; } },
-    { key: 'days_open', label: 'Days', align: 'right' },
-    { key: 'status', label: 'Status', fmt: (v, r) => el('span', 'pill' + (v === 'closed' ? ' ok' : v === 'in_progress' ? ' info' : ' warn'),
-        v === 'closed' ? (r.outcome || 'closed').replace('_', ' ') : v === 'in_progress' ? 'treating' : 'watching') },
-  ], data.cases, { onRow: r => openCase(r.id, load), rowClass: r => r.status === 'closed' ? 'off' : '',
-                   empty: showClosed ? 'No case yet.' : 'No open case. Open one from a photo in Scouting.' }));
-  mount.append(card);
-}
+// The farm the case windows act on: set by the Pest & diseases page (useFarm)
+// before any case or photo is opened (0.7.101 — the Cases tab became part of it).
+let farm = null, catalog = null;
+export function useFarm(f, cat) { farm = f; if (cat) catalog = cat; }
 
 // ── a new case, from a photo or by hand ───────────────────────────────────
 // ctx: { zone_id, crop_id, from_kind, from_id, code, severity, zones?, crops? , onDone }
@@ -137,7 +60,6 @@ export async function newCase(ctx) {
         from_kind: ctx.from_kind || null, from_id: ctx.from_id || null } });
       d.close(); toast('Case opened: ' + c.title, 'ok');
       ctx.onDone?.(c);
-      if (mount?.isConnected && data) load();
     } catch (e) { busy(ok, false, 'Open the case'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, ok);

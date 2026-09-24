@@ -59,7 +59,7 @@ function paint() {
         // a pest case is followed in Pest & diseases › Cases (0097)
         if (r.kind === 'pest_case') {
           const a = el('a', 'linkish', 'pest case — open it in Pest & diseases');
-          a.href = '#/ipm/cases';
+          a.href = '#/ipm/scouting';
           b.append(el('div', 'hint')).append(a);
         }
         return b; } },

@@ -207,6 +207,25 @@ function weekCard() {
   card.append(m);
   card.append(el('div', 'hint', 'The morning is the room the anytime tasks fill before the line on the boards; the afternoon starts at its end.'));
 
+  // seedlings ordered from an external nursery: the spare on top of the places (0101)
+  const spare = el('input', 'input'); spare.type = 'number'; spare.min = 0; spare.max = 100; spare.step = 1;
+  spare.value = data.seedling_spare_pct ?? 10; spare.style.width = '6em';
+  const saveSp = el('button', 'btn btn-sm', 'Save');
+  saveSp.onclick = async () => {
+    const v = Number(spare.value);
+    if (!(v >= 0 && v <= 100)) { toast('Between 0 and 100 %', 'bad'); return; }
+    busy(saveSp, true, 'Saving…');
+    try {
+      const rows = await patch('farm', `id=eq.${farm.id}`, { seedling_spare_pct: v });
+      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+      toast(`Seedlings ordered with ${v} % spare`, 'ok'); busy(saveSp, false, 'Save');
+    } catch (e) { busy(saveSp, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  const sp = el('div', 'row'); sp.style.marginTop = 'var(--space-3)'; sp.style.alignItems = 'center';
+  sp.append(el('span', null, 'Seedlings from a nursery'), spare, el('span', null, '% spare'), saveSp);
+  card.append(sp);
+  card.append(el('div', 'hint', 'Ordered on top of the places of each batch, for losses at transplant.'));
+
   const p = el('div', 'row');
   p.style.marginTop = 'var(--space-3)';
   p.append(el('span', 'pill',

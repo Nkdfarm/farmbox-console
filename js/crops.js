@@ -7,7 +7,7 @@
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine } from './ui.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
@@ -239,8 +239,26 @@ function openPosition(p, s, cur) {
     row('Crop', b.crop);
     row('Batch', b.batch_code);
     row('State', b.status + (b.mode === 'auto' ? ' · proposed by the planner' : ''));
-    row('Sow', fmt(b.sow_date));
+    if (b.nursery !== 'external') row('Sow', fmt(b.sow_date));
+    row('Seedlings', nurseryLine(b));
     row('Transplant', fmt(b.transplant_date));
+    // internal or external, until the seedlings are ordered (0101)
+    if (map.may_plan && b.id && b.nursery && !b.nursery_plan?.ordered_at && b.status !== 'active') {
+      const other = b.nursery === 'external' ? 'internal' : 'external';
+      const sw = el('button', 'btn btn-sm', other === 'external' ? 'Order from a nursery instead' : 'Sow it ourselves instead');
+      sw.onclick = async () => {
+        busy(sw, true, 'Changing…');
+        try {
+          const r = await rpc('set_batch_nursery', { p_plan: b.id, p_nursery: other });
+          d.close();
+          toast(other === 'external'
+            ? (r.order_by ? `Seedlings to order by ${fmt(r.order_by)}${r.late ? ' — late' : ''} · delivery ${fmt(r.delivery)}` : 'External nursery')
+            : 'Sown in our nursery', r.late ? 'bad' : 'ok');
+          await load();
+        } catch (e) { busy(sw, false, sw.textContent); toast(e.message, 'bad'); }
+      };
+      const r = el('div', 'set-row'); r.append(el('span'), sw); facts.append(r);
+    }
     row('Harvest', fmt(b.harvest_start) + (b.harvest_end ? ' → ' + fmt(b.harvest_end) : ''));
     if (b.yield) row('Expected', Math.round(b.yield) + ' kg · ' + money(b.revenue, cur));
     // a batch standing here without dates never makes a task: a manager dates it (0076)
@@ -280,14 +298,18 @@ function openPosition(p, s, cur) {
     } else {
       const crop = selectBox(fits.map(c => [c.id, c.name]));
       const when = input({ type: 'date', value: p.free_on });
+      const nurs = nurseryField(fits[0]);
+      crop.onchange = () => nurs.set(fits.find(c => c.id === crop.value));
       d.body.append(field('Crop', crop), field('Transplant on', when,
-        'Defaults to the day this position is free. The sowing date follows from the cycle.'));
+        'Defaults to the day this position is free. The sowing date follows from the cycle.'), nurs.field);
       const go = el('button', 'btn btn-primary', 'Propose it');
       go.onclick = async () => {
         busy(go, true, 'Planning…');
         try {
-          await rpc('plan_position', { p_position: p.id, p_crop: crop.value,
-                                       p_transplant: when.value || null });
+          const r = await rpc('plan_position', { p_position: p.id, p_crop: crop.value,
+                                                 p_transplant: when.value || null });
+          if (nurs.value() && r?.id && r.nursery !== nurs.value())
+            await rpc('set_batch_nursery', { p_plan: r.id, p_nursery: nurs.value() });
           d.close(); toast('Proposed', 'ok'); await load();
         } catch (e) { busy(go, false, 'Propose it'); toast(e.message, 'bad'); }
       };

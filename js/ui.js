@@ -398,6 +398,28 @@ export function subFamilyTag(name, cls = 'tag') {
   return t;
 }
 
+// Internal or external nursery for a batch (0101). The field hides itself for a
+// crop that starts in place (no nursery phase: microgreens, strawberry runners).
+export const NURSERY = [['internal', 'Internal nursery — we sow them'], ['external', 'External nursery — we order them']];
+export function nurseryField(crop) {
+  const sel = selectBox(NURSERY, 'internal');
+  const f = field('Seedlings', sel, 'Internal: the sowing is planned in our nursery from the cycle. External: an Office task '
+    + 'orders them from the nursery in time (with the farm\'s spare, 10 % by default), and a task receives them the working day before the transplant.');
+  const set = c => { f.style.display = c?.nursery ? '' : 'none'; if (c?.nursery) sel.value = c.nursery; };
+  set(crop);
+  return { field: f, select: sel, set, value: () => f.style.display === 'none' ? null : sel.value };
+}
+const dm = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
+export function nurseryLine(b) {
+  if (!b?.nursery) return '';
+  if (b.nursery === 'internal') return 'Internal nursery' + (b.sow_date ? ' · sown ' + dm(b.sow_date) : '');
+  const n = b.nursery_plan || {};
+  return ['External nursery' + (n.supplier ? ' · ' + n.supplier : ''),
+          n.plants ? `${n.plants} plants (${n.trays} tray${n.trays == 1 ? '' : 's'}, ${Number(n.spare_pct)} % spare)` : null,
+          n.ordered_at ? 'ordered ' + dm(n.ordered_at) : n.order_by ? (n.late ? 'order today — late' : 'order by ' + dm(n.order_by)) : null,
+          n.received_at ? 'received ' + dm(n.received_at) : n.delivery ? 'delivery ' + dm(n.delivery) : null].filter(Boolean).join(' · ');
+}
+
 // The crop's sowing parameters as one line: "1 seed/plug · 10 mm deep · vermiculite · 24–28 °C" (0074).
 export function sowingLine(s) {
   if (!s || typeof s !== 'object') return '';

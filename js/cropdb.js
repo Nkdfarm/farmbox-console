@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
-         systemLabel, mediumLabel, systemsFor } from './ui.js';
+         systemLabel, mediumLabel, systemsFor, nurseryField } from './ui.js';
 import { editCrop } from './crop-edit.js';
 
 // the words on screen, and a colour, for a category code
@@ -407,13 +407,14 @@ async function openPlan(full) {
       posBox.append(lbl);
     });
   };
-  crop.onchange = paintZones;
+  const nurs = nurseryField(crops.find(x => x.id === crop.value));
+  crop.onchange = () => { nurs.set(crops.find(x => x.id === crop.value)); paintZones(); };
   zone.onchange = paintPositions;
   paintZones();
 
   d.body.append(field('Crop', crop), field('Zone', zone),
     field('Transplant on', when, 'The sowing date follows from the cycle; work before today is not created.'),
-    field('Positions', posBox));
+    nurs.field, field('Positions', posBox));
 
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
@@ -425,6 +426,8 @@ async function openPlan(full) {
       const ids = [];
       for (const pid of chosen) {
         const r = await rpc('plan_position', { p_position: pid, p_crop: crop.value, p_transplant: when.value || null });
+        if (r?.id && nurs.value() && r.nursery !== nurs.value())
+          await rpc('set_batch_nursery', { p_plan: r.id, p_nursery: nurs.value() });
         if (r?.id) ids.push(r.id);
       }
       const v = await rpc('validate_crop_plan', { p_ids: ids });
@@ -462,6 +465,8 @@ async function openCrop(row) {
   fact('Sold by', c.sell_unit);
   fact('Plugs per tray', c.plugs_per_tray);
   fact('Seedling lead', c.seedling_lead_days ? c.seedling_lead_days + ' days' : '—');
+  fact('Seedlings', !c.has_nursery ? 'Starts in place' : c.nursery === 'external'
+    ? `External nursery · order ${c.nursery_lead ?? '—'} days ahead` : `Internal nursery (external: ${c.nursery_lead ?? '—'} days ahead)`);
   fact('Rotation group', c.rotation_group);
   fact('Scope', c.scope);
   fact('Sowing', sowingLine(c.sowing) || '—');

@@ -1237,3 +1237,8 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .tk-state.skipped { background: var(--error); border-color: var(--error); color: #fff; }
 .tk.skipped .tk-title { text-decoration: line-through; text-decoration-color: var(--error); }
 .tk-list-time { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── seedlings from an external nursery on the calendar (0.7.104) ─────────── */
+.cal-legend .seedlings i { background: var(--info, #3b82f6); }
+.ev.seedlings { background: var(--info-bg, rgba(59,130,246,.14)); color: var(--info, #3b82f6); }
+.ev.seedlings span { color: var(--info, #3b82f6); opacity: .75; }

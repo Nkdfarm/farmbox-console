@@ -65,6 +65,9 @@ export async function editCrop(c, onSaved, farm) {
   sell.onchange = showGrams;
   const lead = input({ type: 'number', min: 0, step: '1', value: c.seedling_lead_days ?? '' });
   const plugs = input({ type: 'number', min: 1, step: '1', value: c.plugs_per_tray ?? 72 });
+  // where the seedlings come from, and how far ahead an external nursery needs the order (0101)
+  const nursery = selectBox([['internal', 'Internal nursery — we sow them'], ['external', 'External nursery — we order them']], c.nursery || 'internal');
+  const nLead = input({ type: 'number', min: 0, max: 365, step: '1', value: c.nursery_lead_days ?? '', placeholder: String(c.nursery_lead ?? '') });
   const rotation = input({ value: c.rotation_group || '', placeholder: 'e.g. brassica' });
   const notes = el('textarea');
   notes.rows = 2;
@@ -124,6 +127,8 @@ export async function editCrop(c, onSaved, farm) {
     grid('grid3', field('Seedling lead (days)', lead, 'How long before transplant the seedlings are needed.'),
                   field('Plugs per tray', plugs, 'Turns plants into trays for a procedure counted per tray.'),
                   field('Rotation group', rotation)),
+    grid('grid3', field('Seedlings', nursery, 'The default when a batch is planned; each batch can differ.'),
+                  field('External nursery lead (days)', nLead, 'How long before the delivery the order must reach the nursery. Empty = the seedling\'s age in the cycle + 7 days, in whole weeks.')),
     field('Notes', notes),
     el('div', 'sec-title', 'Sowing'),
     grid('grid3', field('Seeds per plug', seeds), field('Depth (mm)', depth, '0 = on the surface.'), field('Cover', cover)),
@@ -265,6 +270,7 @@ export async function editCrop(c, onSaved, farm) {
         status: status.value, media: media.value(), sell_unit: sell.value,
         grams_per_unit: sell.value === 'kg' ? '' : grams.value,
         seedling_lead_days: lead.value, rotation_group: rotation.value, notes: notes.value,
+        nursery: nursery.value, nursery_lead_days: nLead.value,
         plugs_per_tray: plugs.value,
         sowing: sowing(),
         photo_url: photoUrl,

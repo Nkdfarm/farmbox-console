@@ -199,7 +199,7 @@ function tile({ label, value, sub, tone, list, families, go, icon: glyph }) {
 // the dashboard always opens on today.
 const CAL_KEY = 'fbc_cal_view';
 const VIEWS = [['week', 'Week'], ['month', 'Month'], ['year', 'Year']];
-const KIND_ORDER = { harvest: 0, transplant: 1, sow: 2 };
+const KIND_ORDER = { harvest: 0, transplant: 1, sow: 2, seedlings: 3 };
 const cal = { view: 'week', anchor: new Date() };
 {
   const v = pref.get(CAL_KEY);
@@ -284,7 +284,7 @@ function calendarCard() {
 
   const body = el('div', 'cal-body');
   const legend = el('div', 'cal-legend');
-  [['harvest', 'Harvest'], ['transplant', 'Transplant'], ['sow', 'Sowing']].forEach(([k, label]) => {
+  [['harvest', 'Harvest'], ['transplant', 'Transplant'], ['sow', 'Sowing'], ['seedlings', 'Seedlings in']].forEach(([k, label]) => {
     const item = el('span', k);
     item.append(el('i'), document.createTextNode(label));
     legend.append(item);
@@ -431,6 +431,7 @@ const openOn = (res, d) => !res.operating_days || res.operating_days.includes(is
 const todayKey = res => String(res.today || ymd(new Date())).slice(0, 10);
 const eventDetail = x => x.kind === 'harvest' ? `${x.position} · ${x.kg ?? '—'} kg` + (x.recorded === true ? ' harvested' : x.recorded === false ? ' expected' : '')
                        : x.kind === 'transplant' ? `${x.position} · in`
+                       : x.kind === 'seedlings' ? `${x.position} · from the nursery`
                        : `${x.position} · sown`;
 
 // ── week: seven columns, the batches by name ──

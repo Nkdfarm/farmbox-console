@@ -1,5 +1,5 @@
 {
-  "version": "0.7.103",
+  "version": "0.7.104",
   "released": "2026-09-24",
-  "note": "Tasks show planned, done or not done at a glance; Not done with a reason; a procedure may be closed with a swipe on the phone. Migration 0100."
+  "note": "Internal or external nursery for each batch: an external one is ordered by an Office task in time, with 10 % spare, and received the working day before the transplant. Migration 0101."
 }

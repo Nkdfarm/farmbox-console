@@ -141,13 +141,18 @@ function paint() {
   // the crop palette
   if (may) mount.append(palette());
 
-  // the board
+  // the board (0.7.118): a scroll bar on top for moving through time; below it a window
+  // that scrolls both ways, its head — dates, kg per week of the whole farm, plants per
+  // week — pinned while the zones scroll under it, each zone opened by its own kg line
+  const W = weeksOf(from, days);
   const board = el('div', 'tl-board');
   const inner = el('div', 'tl-inner');
-  inner.style.width = (LABEL_W + days * px) + 'px';
+  const innerW = LABEL_W + days * px;
+  inner.style.width = innerW + 'px';
   inner.style.setProperty('--px', px + 'px');
-  inner.append(scale(from, days, px, today));
-  inner.append(...weekStrip(from, days, px));
+  const pinned = el('div', 'tl-sticky');
+  pinned.append(scale(from, days, px, today), kgRow('All zones', W, null, from, px, true), plantsRow(W, from, px));
+  inner.append(pinned);
   (data.systems || []).forEach(sys => {
     const zh = el('div', 'tl-zone');
     const lab = el('div', 'tl-label tl-zone-label');
@@ -165,12 +170,19 @@ function paint() {
     }
     zh.append(zt);
     inner.append(zh);
+    inner.append(kgRow('kg / week', W, sys.id, from, px, false));
     (sys.positions || []).forEach(p => inner.append(row(sys, p, from, to, px, today, cur)));
   });
   board.append(inner);
-  mount.append(board);
+  // the scroll bar on top: the same sideways position as the board, both ways
+  const hs = el('div', 'tl-hscroll');
+  const hsi = el('div'); hsi.style.width = innerW + 'px'; hs.append(hsi);
+  let syncing = false;
+  hs.addEventListener('scroll', () => { if (syncing) { syncing = false; return; } syncing = true; board.scrollLeft = hs.scrollLeft; });
+  board.addEventListener('scroll', () => { if (syncing) { syncing = false; return; } syncing = true; hs.scrollLeft = board.scrollLeft; });
+  mount.append(hs, board);
   // open on today, a week in
-  requestAnimationFrame(() => { board.scrollLeft = Math.max(0, (today - from - 3) * px); });
+  requestAnimationFrame(() => { board.scrollLeft = hs.scrollLeft = Math.max(0, (today - from - 3) * px); });
 
   mount.append(legend());
 }
@@ -286,6 +298,7 @@ function legend() {
   const item = (cls, text) => { const s = el('span'); s.append(el('i', cls), text); l.append(s); };
   item('lg-nursery', 'nursery'); item('lg-grow', 'growing'); item('lg-harvest', 'harvest'); item('lg-clean', 'cleanup');
   item('lg-proposed', 'proposed'); item('lg-over', 'harvest over, not closed'); item('lg-closed', 'closed day');
+  item('lg-fc', 'kg forecast'); item('lg-fcp', 'kg forecast, proposed'); item('lg-real', 'kg harvested');
   return l;
 }
 
@@ -606,72 +619,103 @@ async function discard(ids) {
   catch (e) { toast(e.message, 'bad'); }
 }
 
-// ── the weeks: kg to harvest, plants to sow or receive (0.7.114) ─────────────
-// Read off the bars on screen: a batch's expected kg spread over its harvest days
-// (its recorded kg once harvested); its plants in the week it is sown in our
-// nursery, or the week it arrives from an external one. Proposals are counted
-// apart (lighter), so what is decided and what is only proposed read differently.
-function weekStrip(from, days, px) {
+// ── the weeks: kg forecast and harvested, plants to sow or receive (0.7.114, 0.7.118) ──
+// Forecast = a batch's expected kg spread over its harvest days (proposals apart,
+// lighter); harvested = the cuts recorded, by the day they were weighed. Both per
+// zone and for the whole farm. Plants = the position's places in the week the batch
+// is sown in our nursery, or the week it arrives from an external one.
+function weeksOf(from, days) {
+  const sysOf = new Map();
+  (data.systems || []).forEach(sy => (sy.positions || []).forEach(p => sysOf.set(p.id, sy.id)));
   const cap = new Map();
   (data.systems || []).forEach(sy => (sy.positions || []).forEach(p => cap.set(p.id, Number(p.capacity || 0))));
   const mon0 = from - (((new Date(from * DAY).getUTCDay() || 7) - 1));
-  const weeks = new Map();
-  const wk = d => { const m = d - (((new Date(d * DAY).getUTCDay() || 7) - 1)); if (!weeks.has(m)) weeks.set(m, { kg: 0, kgP: 0, sow: 0, sowP: 0, ext: 0, crops: new Map() }); return weeks.get(m); };
-  for (let m = mon0; m < from + days; m += 7) wk(m);
+  const end = from + days;
+  const weeks = new Map();        // monday → { all: cell, bySys: Map(sys → cell) }
+  const blank = () => ({ fc: 0, fcP: 0, real: 0, sow: 0, sowP: 0, ext: 0, crops: new Map() });
+  const cellOf = (d, sys) => {
+    const m = d - (((new Date(d * DAY).getUTCDay() || 7) - 1));
+    if (!weeks.has(m)) weeks.set(m, { all: blank(), bySys: new Map() });
+    const w = weeks.get(m);
+    if (sys && !w.bySys.has(sys)) w.bySys.set(sys, blank());
+    return [w.all, sys ? w.bySys.get(sys) : null];
+  };
+  for (let m = mon0; m < end; m += 7) cellOf(m, null);
+  const both = (d, sys, f) => cellOf(d, sys).forEach(c => c && f(c));
   (data.batches || []).forEach(b => {
-    const prop = b.status === 'proposed';
+    const sys = sysOf.get(b.position_id), prop = b.status === 'proposed';
     if (b.harvest_start && b.harvest_end) {
-      const hs = dn(b.harvest_start), he = dn(b.harvest_end), n = Math.max(he - hs + 1, 1);
-      const kg = b.status === 'harvested' && b.harvested_kg != null ? Number(b.harvested_kg) : Number(b.yield || 0);
-      for (let d = hs; d <= he; d++) {
-        if (d < mon0 || d >= from + days) continue;
-        const w = wk(d); const k = kg / n;
-        prop ? (w.kgP += k) : (w.kg += k);
-        w.crops.set(b.crop, (w.crops.get(b.crop) || 0) + k);
-      }
+      const hs = dn(b.harvest_start), he = dn(b.harvest_end), n = Math.max(he - hs + 1, 1), k = Number(b.yield || 0) / n;
+      for (let d = Math.max(hs, mon0); d <= Math.min(he, end - 1); d++)
+        both(d, sys, c => { prop ? (c.fcP += k) : (c.fc += k); c.crops.set(b.crop, (c.crops.get(b.crop) || 0) + k); });
     }
     if (b.status === 'harvested') return;
     const plants = cap.get(b.position_id) || 0;
     if (b.nursery === 'external' && b.transplant_date) {
       const d = dn(b.transplant_date) - 1;
-      if (d >= mon0 && d < from + days) wk(d).ext += plants;
+      if (d >= mon0 && d < end) both(d, sys, c => { c.ext += plants; });
     } else if (b.sow_date && b.transplant_date && dn(b.sow_date) < dn(b.transplant_date)) {
       const d = dn(b.sow_date);
-      if (d >= mon0 && d < from + days) { const w = wk(d); prop ? (w.sowP += plants) : (w.sow += plants); }
+      if (d >= mon0 && d < end) both(d, sys, c => { prop ? (c.sowP += plants) : (c.sow += plants); });
     }
   });
-  const list = [...weeks.entries()].sort((a, b) => a[0] - b[0]);
-  const maxKg = Math.max(1, ...list.map(([, w]) => w.kg + w.kgP));
-  const maxSow = Math.max(1, ...list.map(([, w]) => w.sow + w.sowP + w.ext));
-  const fmtN = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(Math.round(n));
-
-  const kgRow = el('div', 'tl-row tl-sum');
-  const kl = el('div', 'tl-label'); kl.append(el('b', null, 'kg / week')); kl.title = 'Expected harvest per week: decided batches solid, proposals light';
-  const kt = el('div', 'tl-track');
-  const sowRow = el('div', 'tl-row tl-sum');
-  const sl = el('div', 'tl-label'); sl.append(el('b', null, 'plants / week')); sl.title = 'Plants to sow in our nursery (green) or to receive from a nursery (blue), per week';
-  const st = el('div', 'tl-track');
-  list.forEach(([m, w]) => {
-    const x = (m - from) * px, width = 7 * px - 2;
-    const col = (track, parts, max, total, tip) => {
-      const c = el('div', 'tl-wk'); c.style.left = x + 'px'; c.style.width = width + 'px';
-      let bottom = 0;
-      parts.forEach(([v, cls]) => { if (!v) return; const p = el('span', 'tl-wk-part ' + cls); const h = 26 * v / max; p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; bottom += h; c.append(p); });
-      if (total && width >= 26) c.append(el('span', 'tl-wk-n', fmtN(total)));
-      c.title = tip;
-      track.append(c);
-    };
-    const kgT = w.kg + w.kgP;
-    col(kt, [[w.kg, 'kg'], [w.kgP, 'kg-p']], maxKg, kgT,
-      `Week of ${nice(ds(m))}: ${Math.round(kgT).toLocaleString()} kg` + (w.kgP ? ` (${Math.round(w.kgP).toLocaleString()} proposed)` : '') +
-      [...w.crops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c, k]) => `\n${c}: ${Math.round(k)} kg`).join(''));
-    const sT = w.sow + w.sowP + w.ext;
-    col(st, [[w.sow, 'sow'], [w.sowP, 'sow-p'], [w.ext, 'ext']], maxSow, sT,
-      `Week of ${nice(ds(m))}: ${sT.toLocaleString()} plants` + (w.sow ? `\nto sow: ${w.sow.toLocaleString()}` : '') +
-      (w.sowP ? `\nto sow if proposals are validated: ${w.sowP.toLocaleString()}` : '') + (w.ext ? `\nto receive from a nursery: ${w.ext.toLocaleString()}` : ''));
+  (data.harvests || []).forEach(h => {
+    const d = dn(h.date);
+    if (d >= mon0 && d < end) both(d, h.system_id, c => { c.real += Number(h.kg || 0); });
   });
-  kgRow.append(kl, kt); sowRow.append(sl, st);
-  return [kgRow, sowRow];
+  return [...weeks.entries()].sort((a, b) => a[0] - b[0]);
+}
+const fmtN = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(Math.round(n));
+
+// a kg line: forecast (left) and harvested (right) side by side in each week
+function kgRow(label, weeks, sysId, from, px, total) {
+  const cells = weeks.map(([m, w]) => [m, sysId ? (w.bySys.get(sysId) || { fc: 0, fcP: 0, real: 0, crops: new Map() }) : w.all]);
+  const max = Math.max(1, ...cells.map(([, c]) => Math.max(c.fc + c.fcP, c.real)));
+  const r = el('div', 'tl-row tl-sum tl-kg' + (total ? ' total' : ''));
+  const l = el('div', 'tl-label');
+  const sumF = cells.reduce((a, [, c]) => a + c.fc + c.fcP, 0), sumR = cells.reduce((a, [, c]) => a + c.real, 0);
+  l.append(el('b', null, label), el('span', 'hint', ` ${fmtN(sumF)} · ${fmtN(sumR)}`));
+  l.title = `${label}: ${Math.round(sumF).toLocaleString()} kg forecast, ${Math.round(sumR).toLocaleString()} kg harvested in the window`;
+  const t = el('div', 'tl-track');
+  const H = total ? 26 : 20;
+  cells.forEach(([m, c]) => {
+    const x = (m - from) * px, width = 7 * px - 2, half = Math.max((width - 2) / 2, 1);
+    const col = el('div', 'tl-wk'); col.style.left = x + 'px'; col.style.width = width + 'px';
+    const bar = (v, cls, left, bottom = 0) => { if (!v) return 0; const p = el('span', 'tl-wk-part ' + cls); const h = H * v / max;
+      p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; p.style.left = left + 'px'; p.style.width = half + 'px'; col.append(p); return h; };
+    const h1 = bar(c.fc, 'fc', 0); bar(c.fcP, 'fc-p', 0, h1);
+    bar(c.real, 'real', half + 2);
+    if (width >= 34 && (c.fc + c.fcP || c.real)) col.append(el('span', 'tl-wk-n', `${fmtN(c.fc + c.fcP)}${c.real ? ' | ' + fmtN(c.real) : ''}`));
+    col.title = `Week of ${nice(ds(m))}` + (sysId ? '' : ' · all zones') +
+      `\nforecast ${Math.round(c.fc + c.fcP).toLocaleString()} kg` + (c.fcP ? ` (${Math.round(c.fcP).toLocaleString()} only proposed)` : '') +
+      `\nharvested ${Math.round(c.real).toLocaleString()} kg` +
+      [...c.crops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `\n  ${k}: ${Math.round(v)} kg`).join('');
+    t.append(col);
+  });
+  r.append(l, t);
+  return r;
+}
+
+function plantsRow(weeks, from, px) {
+  const max = Math.max(1, ...weeks.map(([, w]) => w.all.sow + w.all.sowP + w.all.ext));
+  const r = el('div', 'tl-row tl-sum');
+  const l = el('div', 'tl-label'); l.append(el('b', null, 'plants / week'));
+  l.title = 'Plants to sow in our nursery (green) or to receive from a nursery (blue), per week';
+  const t = el('div', 'tl-track');
+  weeks.forEach(([m, w]) => {
+    const c = w.all, x = (m - from) * px, width = 7 * px - 2;
+    const col = el('div', 'tl-wk'); col.style.left = x + 'px'; col.style.width = width + 'px';
+    let bottom = 0;
+    [[c.sow, 'sow'], [c.sowP, 'sow-p'], [c.ext, 'ext']].forEach(([v, cls]) => { if (!v) return; const p = el('span', 'tl-wk-part ' + cls);
+      const h = 20 * v / max; p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; bottom += h; col.append(p); });
+    const sT = c.sow + c.sowP + c.ext;
+    if (sT && width >= 26) col.append(el('span', 'tl-wk-n', fmtN(sT)));
+    col.title = `Week of ${nice(ds(m))}: ${sT.toLocaleString()} plants` + (c.sow ? `\nto sow: ${c.sow.toLocaleString()}` : '') +
+      (c.sowP ? `\nto sow if proposals are validated: ${c.sowP.toLocaleString()}` : '') + (c.ext ? `\nto receive from a nursery: ${c.ext.toLocaleString()}` : '');
+    t.append(col);
+  });
+  r.append(l, t);
+  return r;
 }
 
 // ── succession: the same crop again and again ────────────────────────────────

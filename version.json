@@ -1,5 +1,5 @@
 {
-  "version": "0.7.117",
+  "version": "0.7.118",
   "released": "2026-09-25",
-  "note": "The zone Positions menu offers only whole groups of the rows or tables built (Zone 2: 10, 5, 2, 1); the built count is on Farm setup. Migration 0109."
+  "note": "Crop planner timeline: kg per week forecast and harvested for every zone and the whole farm; a scroll bar on top; the head stays in view while the zones scroll. Migration 0111."
 }

@@ -1401,3 +1401,20 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 /* how many positions a zone has (0.7.116) */
 .tl-split { display: inline-flex; align-items: center; gap: 6px; }
 .tl-split select { padding: 3px 6px; font-size: var(--text-xs); }
+
+/* ── the timeline window (0.7.118): top scroll bar, pinned head, kg per zone ── */
+.tl-hscroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin-bottom: 4px; border-radius: 7px; background: var(--chip); }
+.tl-hscroll > div { height: 1px; }
+.tl-board { max-height: calc(100dvh / var(--zoom, 1) - 250px); min-height: 360px; overflow: auto; overscroll-behavior: contain; }
+.tl-sticky { position: sticky; top: 0; z-index: 6; background: var(--surface); box-shadow: 0 2px 0 var(--border); }
+.tl-sticky .tl-scale { position: static; }
+.tl-kg.total { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.tl-kg .tl-label .hint { font-weight: 600; }
+.tl-row.tl-kg { border-top: 1px solid var(--divider); }
+.tl-wk-part { left: 0; right: auto; }
+.tl-wk-part.fc { background: color-mix(in srgb, var(--success, #2e7d32) 70%, transparent); }
+.tl-wk-part.fc-p { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--success, #2e7d32) 45%, transparent) 0 3px, transparent 3px 5px); }
+.tl-wk-part.real { background: #f59e0b; }
+.lg-fc { background: color-mix(in srgb, var(--success, #2e7d32) 70%, transparent); }
+.lg-fcp { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--success, #2e7d32) 45%, transparent) 0 3px, transparent 3px 5px); }
+.lg-real { background: #f59e0b; }

@@ -7,7 +7,8 @@
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine } from './ui.js';
+import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref } from './ui.js';
+import { renderTimeline } from './timeline.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
@@ -18,8 +19,22 @@ const money = (n, cur) => n == null ? '—'
   : `${cur} ${Math.round(Number(n)).toLocaleString()}`;
 const daysTo = d => d ? Math.round((new Date(d + 'T00:00:00') - new Date().setHours(0,0,0,0)) / 86400000) : null;
 
+// Timeline (0.7.113, the default) or the tile map of before
+const VIEW_KEY = 'fbc_planner_view';
+function viewSwitch(current) {
+  const s = el('div', 'seg');
+  [['timeline', 'Timeline'], ['map', 'Map']].forEach(([v, label]) => {
+    const b = el('button', 'seg-btn', label);
+    b.setAttribute('aria-pressed', String(v === current));
+    b.onclick = () => { if (v === current) return; pref.set(VIEW_KEY, v); renderCrops(mount, farm); };
+    s.append(b);
+  });
+  return s;
+}
+
 export async function renderCrops(container, currentFarm) {
   farm = currentFarm; mount = container;
+  if ((pref.get(VIEW_KEY) || 'timeline') === 'timeline') return renderTimeline(container, currentFarm, viewSwitch('timeline'));
   await load();
 }
 
@@ -49,6 +64,7 @@ function paint() {
     'earns most per day the position is tied up, priced at the season it will be ' +
     'harvested in. Nothing is planted until you validate it.'));
   head.append(titles, el('div', 'spacer'));
+  head.append(viewSwitch('map'));
   if (may) {
     const b = el('button', 'btn btn-primary', 'Plan the whole farm');
     b.onclick = () => propose(b);

@@ -1285,3 +1285,78 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 /* a crop past its harvest end, still in the position */
 .plot-tile.is-over { outline: 2px dashed var(--warning); outline-offset: -2px; }
 .plot-tile.is-over .plot-when { color: var(--warning); font-weight: 600; }
+
+/* ── the crop planner timeline (0.7.113) ───────────────────────────────────── */
+.tl-head { align-items: flex-start; }
+.tl-nav { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
+.tl-range { margin-left: var(--space-2); }
+.tl-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); min-height: 32px; }
+.tl-palette { display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-3);
+  padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.tl-palette > input { width: 190px; flex: none; }
+.tl-crops { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.tl-crop { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 3px 10px 3px 3px; border-radius: var(--radius-full);
+  background: var(--chip); font-size: var(--text-xs); cursor: grab; user-select: none; white-space: nowrap; }
+.tl-crop:active { cursor: grabbing; }
+.avatar.xs { width: 20px; height: 20px; font-size: 9px; flex: none; }
+.tl-board { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.tl-inner { position: relative; min-width: 100%; }
+.tl-scale, .tl-zone, .tl-row { display: flex; }
+.tl-label { position: sticky; left: 0; z-index: 3; flex: none; width: 176px; padding: 0 10px; display: flex; align-items: center; gap: 4px;
+  background: var(--surface); border-right: 1px solid var(--border); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; }
+.tl-scale { height: 34px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 4; background: var(--surface); }
+.tl-scale-label { color: var(--text-muted); }
+.tl-track { position: relative; flex: 1; min-height: 32px; }
+.tl-scale-track { overflow: hidden; }
+.tl-month { position: absolute; top: 2px; font-size: 11px; font-weight: 700; color: var(--text); padding-left: 3px; border-left: 1px solid var(--border-strong); white-space: nowrap; }
+.tl-tick { position: absolute; bottom: 2px; font-size: 9px; color: var(--text-faint); padding-left: 2px; border-left: 1px solid var(--divider); }
+.tl-tick.mon { border-left-color: var(--border); }
+.tl-closed { position: absolute; top: 18px; bottom: 0; background: repeating-linear-gradient(135deg, transparent 0 3px, var(--divider) 3px 4px); opacity: .7; }
+.tl-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); opacity: .7; z-index: 2; pointer-events: none; }
+.tl-zone { height: 34px; background: var(--surface-offset, var(--chip)); border-top: 1px solid var(--border); }
+.tl-zone .tl-label { background: var(--surface-offset, var(--chip)); font-size: var(--text-sm); }
+.tl-zone-track { flex: 1; display: flex; align-items: center; }
+.tl-zone-track > .btn { position: sticky; left: 184px; }
+.tl-row { border-top: 1px solid var(--divider); }
+.tl-row:hover .tl-track { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.tl-row.no-fit .tl-track { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(229,72,77,.08) 6px 12px); }
+.tl-row.no-fit .tl-label { opacity: .5; }
+.tl-bar { position: absolute; top: 4px; height: 24px; border-radius: 6px; cursor: pointer; overflow: visible; z-index: 1;
+  background: hsl(var(--h) 55% 45% / .38); border: 1px solid hsl(var(--h) 55% 50% / .8); }
+.tl-bar.movable { cursor: grab; }
+.tl-bar.dragging { opacity: .35; }
+.tl-part { position: absolute; top: 0; bottom: 0; }
+.tl-part.harvest { background: hsl(var(--h) 60% 45% / .85); }
+.tl-part.clean { background: var(--text-faint); opacity: .35; }
+.tl-bar:first-child .tl-part.harvest, .tl-bar .tl-part.clean { border-radius: 0 5px 5px 0; }
+.tl-nursery { position: absolute; top: 7px; height: 10px; border-radius: 3px 0 0 3px; pointer-events: auto;
+  background: repeating-linear-gradient(135deg, hsl(var(--h) 55% 50% / .55) 0 3px, transparent 3px 6px); }
+.tl-nursery.ext { background: none; border-bottom: 2px dotted hsl(var(--h) 55% 55%); }
+/* the name stays in view when the bar began before the window (sticky against the board's scroll) */
+.tl-bar-label { position: sticky; left: 180px; z-index: 1; display: inline-flex; max-width: 100%; align-items: center; gap: 4px; height: 100%; padding: 0 6px 0 2px;
+  font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; color: var(--text); pointer-events: none; }
+.tl-bar.is-proposed { background: hsl(var(--h) 55% 45% / .14); border-style: dashed; }
+.tl-bar.is-proposed .tl-part.harvest { opacity: .45; }
+.tl-bar.is-harvested { opacity: .45; }
+.tl-bar.is-over { outline: 2px dashed var(--warning); outline-offset: 1px; }
+.tl-bar.is-sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-bar.bad { outline: 2px solid var(--danger, #e5484d); }
+.tl-handle { position: absolute; right: -3px; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
+.tl-bar:hover .tl-handle { background: color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 0 5px 5px 0; }
+.tl-tip { position: absolute; left: 100%; top: -22px; white-space: nowrap; font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  background: var(--ink, #111); color: #fff; z-index: 5; }
+.tl-ghost { position: absolute; top: 3px; height: 26px; border-radius: 6px; border: 2px dashed var(--accent); z-index: 4;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); font-size: 11px; font-weight: 600; padding: 0 6px;
+  display: flex; align-items: center; white-space: nowrap; overflow: visible; pointer-events: none; color: var(--text); }
+.tl-ghost.bad { border-color: var(--danger, #e5484d); background: rgba(229,72,77,.14); }
+body.tl-dragging { cursor: grabbing; user-select: none; }
+.tl-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
+.tl-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.tl-legend i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; --h: 140; }
+.lg-nursery { background: repeating-linear-gradient(135deg, hsl(var(--h) 55% 50% / .55) 0 3px, transparent 3px 6px); }
+.lg-grow { background: hsl(var(--h) 55% 45% / .38); border: 1px solid hsl(var(--h) 55% 50% / .8); }
+.lg-harvest { background: hsl(var(--h) 60% 45% / .85); }
+.lg-clean { background: var(--text-faint); opacity: .5; }
+.lg-proposed { border: 1px dashed hsl(var(--h) 55% 50%); }
+.lg-over { outline: 2px dashed var(--warning); }
+.lg-closed { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--border-strong) 3px 4px); }

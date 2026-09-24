@@ -1,5 +1,5 @@
 {
-  "version": "0.7.112",
-  "released": "2026-09-24",
-  "note": "General check: the crop planner cannot double-book a position (migration 0104), a standing crop past its harvest end keeps its position; thirteen console fixes."
+  "version": "0.7.113",
+  "released": "2026-09-25",
+  "note": "The crop planner is a timeline: drag a crop onto a row, drag a bar to move it, its edge to change the harvest. One cycle for stored and task dates; no sowing in the past. Migration 0105."
 }

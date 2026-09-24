@@ -472,6 +472,7 @@ export function sowingLine(s) {
 // faces; else the crop's initials on a tint of its category. Used on the Crop
 // database only — a grouped task covers several crops, so the task cards carry none.
 const CROP_HUE = { fruiting_vines: 8, fruiting_bush: 24, leafy: 140, mixed_leafy: 165, herbs: 95, microgreens: 190 };
+export const cropHue = category => CROP_HUE[category] ?? 200;   // the planner's bars (0.7.113)
 const CROP_WIKI = {
   'Tomato cherry indeterminate': 'Cherry_tomato', 'Tomato round indeterminate': 'Tomato', 'Tomato determinate': 'Tomato',
   'Cucumber mini': 'Cucumber', 'Cucumber English': 'Cucumber', 'Climbing green bean': 'Green_bean', 'Bush green bean': 'Green_bean',

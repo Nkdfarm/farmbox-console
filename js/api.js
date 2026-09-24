@@ -109,7 +109,7 @@ async function live(path, opts) {
 // as a write, which is the safe mistake: a new read page that nobody added here
 // says "needs a connection" offline, rather than a write replaying an old "ok".
 const READ_RPCS = new Set([
-  'crop_calendar', 'crop_detail', 'crop_library', 'crop_map', 'dashboard',
+  'crop_calendar', 'crop_detail', 'crop_library', 'crop_map', 'crop_timeline', 'dashboard',
   'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvest_overview',
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
   'procedures', 'purchasing', 'reports', 'system_catalog', 'integration_status', 'task_families',

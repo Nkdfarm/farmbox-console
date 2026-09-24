@@ -21,6 +21,7 @@ import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
+import { initAssistant, assistantFarmChanged } from './assistant.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
 import { openSettings, applyTheme, startPage } from './settings.js';
@@ -272,13 +273,13 @@ function switchFarm(id) {
   $('farmPick').value = farm.id;
   pref.set(FARM_KEY, farm.id);
   location.hash = '#/dashboard/overview';
-  paintMyRole().then(() => { route(); warm(); });
+  paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
 }
 
 $('farmPick').addEventListener('change', e => {
   farm = farms.find(f => f.id === e.target.value) || farm;
   pref.set(FARM_KEY, farm.id);
-  paintMyRole().then(() => { route(); warm(); });
+  paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
 });
 
 // ── connected / offline ────────────────────────────────────────────────────
@@ -469,6 +470,10 @@ window.addEventListener('hashchange', route);
 // Say so when a newer console is deployed: an installed tab can sit on an old
 // copy of itself for days otherwise.
 watchForUpdates();
+
+// the assistant (0.7.122): a side panel, one conversation per FarmBox; a change it proposes
+// runs only when the person presses Do it, and then the page on screen is drawn again
+initAssistant({ farm: () => farm, refresh: () => route() });
 
 // ── boot ───────────────────────────────────────────────────────────────────
 let booted = false;

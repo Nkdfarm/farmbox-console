@@ -1,5 +1,5 @@
 {
-  "version": "0.7.121",
+  "version": "0.7.122",
   "released": "2026-09-25",
-  "note": "Crop planner: drop a crop on a zone for a steady weekly harvest (the zone split and staggered, the best split marked); Clear zone, with a warning first. Migration 0112."
+  "note": "The assistant: a side panel that answers about the farm, plans, imports Excel or a photo and writes reports; every change it proposes waits for Do it."
 }

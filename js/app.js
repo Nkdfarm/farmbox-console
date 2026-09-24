@@ -106,8 +106,11 @@ applyTheme();
 // live in the Crop library). Addresses read #/section/tab; the old one-word
 // addresses still open the right place (MOVED).
 const LIB = {
-  routines: { title: 'Routines', keep: p => p.family === 'Agriculture' && p.trigger !== 'crop_plan' && p.category !== 'Pest & disease',
-    blurb: 'The growing work that is not tied to one crop — irrigation, nutrients and water, climate, sanitation, the daily and weekly rounds. The crop-specific procedures are in the Crop library.' },
+  // the recurring pest rounds (sticky traps, scouting) are crop routines too (owner, 24 Sept 2026);
+  // a Pest & disease treatment started by a person stays under IPM programs only
+  routines: { title: 'Routines', keep: p => p.family === 'Agriculture' && p.trigger !== 'crop_plan'
+      && (p.category !== 'Pest & disease' || p.frequency === 'Routine'),
+    blurb: 'The growing work that is not tied to one crop — irrigation, nutrients and water, climate, sanitation, the sticky-trap round and scouting, the daily and weekly rounds. The crop-specific procedures are in the Crop library.' },
   ipm: { title: 'IPM programs', keep: p => p.category === 'Pest & disease',
     blurb: 'Scouting, the sticky-trap round, treatments: every Pest & disease procedure.' },
   office: { title: 'Farm management', keep: p => p.family === 'Office',
@@ -216,7 +219,7 @@ async function loadFarms() {
   // minutes ago cannot be configured: it is exactly the farm somebody needs
   // to open. Its state is shown beside the name rather than hidden.
   farms = await select('farm',
-    'select=id,name,code,status,org_id&status=in.(active,setup)&order=name');
+    'select=id,name,code,status,org_id,operating_days&status=in.(active,setup)&order=name');
   const pick = $('farmPick');
   pick.textContent = '';
   farms.forEach(f => {

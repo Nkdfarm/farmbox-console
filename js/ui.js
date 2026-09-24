@@ -480,3 +480,16 @@ export function cropAvatar(c, size = '') {
   else cropDefault(c).then(show);
   return box;
 }
+
+// When a procedure repeats, in words (0093): "Every working day", "Mon, Thu",
+// "Wed · every 2 weeks". Anything that is not a routine says its own word.
+const DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+export function scheduleText(p) {
+  if (!p || p.frequency !== 'Routine') return p?.frequency || '—';
+  const days = [...(p.repeat_days || [])].sort((a, b) => a - b);
+  const n = Number(p.repeat_weeks) || 1;
+  const which = days.length === 7 ? (p.on_closed_days ? 'Every day' : 'Every working day')
+              : days.map(d => DAY_ABBR[d - 1]).join(', ');
+  return which + (n > 1 ? ` · every ${n} weeks` : '')
+       + (p.on_closed_days && days.length < 7 ? ' · closed days too' : '');
+}

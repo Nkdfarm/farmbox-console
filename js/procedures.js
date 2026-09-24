@@ -7,7 +7,7 @@
 // runs is never edited in place), and tasks not yet started move onto it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel } from './ui.js';
+import { el, table, pageHead, drawer, toast, num, subFamilyTag, systemLabel, scheduleText } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -80,7 +80,7 @@ function paint() {
     // the same sub-family People › Responsible for and the planner use
     { key: 'category', label: 'Sub-family', fmt: v => subFamilyTag(v) },
     { key: 'frequency', label: 'When', fmt: (v, r) =>
-        [v, r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area'
+        [scheduleText(r), r.target === 'system' ? 'per bay' : r.target === 'area' ? 'per area'
               : r.target === 'crop' ? 'per crop' : r.target === 'position' ? 'per batch' : null]
           .filter(Boolean).join(' · ') },
     { key: 'steps', label: 'Steps', align: 'right' },
@@ -113,7 +113,8 @@ async function openProcedure(row) {
   };
   fact('Version', p.version);
   fact('Status', p.status + (p.app_ready ? ' · app ready' : ''));
-  fact('Frequency', p.frequency);
+  fact('When', scheduleText(p));
+  if (p.frequency_rule) fact('Note', p.frequency_rule);
   fact('Time of day', { am: 'Morning', pm: 'Afternoon' }[p.slot] || 'Anytime');
   fact('Repeats over', p.target === 'system' ? 'each bay'
                      : p.target === 'area' ? (p.area_kinds || []).join(', ') || 'each area'
@@ -172,7 +173,7 @@ async function openProcedure(row) {
     edit.onclick = () => {
       d.close();
       const cats = [...new Set((data?.procedures || []).map(x => x.category).filter(Boolean))].sort();
-      editProcedure(p, cats, load, data.procedures);
+      editProcedure(p, cats, load, data.procedures, farm);
     };
     d.footer.append(edit);
   } else {

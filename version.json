@@ -1,5 +1,5 @@
 {
-  "version": "0.7.113",
+  "version": "0.7.114",
   "released": "2026-09-25",
-  "note": "The crop planner is a timeline: drag a crop onto a row, drag a bar to move it, its edge to change the harvest. One cycle for stored and task dates; no sowing in the past. Migration 0105."
+  "note": "Crop planner: auto mode fills the gaps and plans several cycles, planting in succession, kg and plants per week above the timeline. Migration 0106."
 }

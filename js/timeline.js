@@ -17,7 +17,7 @@
 // The database checks every drop again; the colours only say it in advance.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, drawer, field, selectBox, toast, busy, confirmDrawer, pref, cropAvatar, cropHue,
+import { loading, el, drawer, field, input, selectBox, toast, busy, confirmDrawer, pref, cropAvatar, cropHue,
          systemLabel, mediumLabel, nurseryLine } from './ui.js';
 
 const SPANS = [['35', '5 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'Year']];
@@ -113,7 +113,10 @@ function paint() {
     const all = el('button', 'btn btn-primary btn-sm', 'Plan the whole farm');
     all.title = 'Fill every free position inside the window with what earns most per day';
     all.onclick = () => propose(all);
-    act.append(all);
+    const suc = el('button', 'btn btn-sm', 'Succession…');
+    suc.title = 'The same crop planted again and again — every week, say — for a steady harvest';
+    suc.onclick = () => succession();
+    act.append(all, suc);
     if (proposed.length) {
       const rev = proposed.reduce((a, b) => a + Number(b.revenue || 0), 0);
       act.append(el('span', 'pill', `${proposed.length} proposed · ${money(rev, cur)}`));
@@ -144,6 +147,7 @@ function paint() {
   inner.style.width = (LABEL_W + days * px) + 'px';
   inner.style.setProperty('--px', px + 'px');
   inner.append(scale(from, days, px, today));
+  inner.append(...weekStrip(from, days, px));
   (data.systems || []).forEach(sys => {
     const zh = el('div', 'tl-zone');
     const lab = el('div', 'tl-label tl-zone-label');
@@ -463,6 +467,10 @@ function openBatch(b, sys, p) {
   const row = (k, v) => { if (v == null || v === '') return; const r = el('div', 'set-row'); r.append(el('span', null, k), el('span', null, String(v))); facts.append(r); };
   row('State', { proposed: 'Proposed — not planted until validated', validated: 'Validated', active: 'Growing', harvested: 'Harvested' }[b.status] || b.status);
   row('Batch', b.batch_code);
+  if (b.succession) {
+    const series = (data.batches || []).filter(x => x.succession === b.succession);
+    row('Succession', `planting ${b.round ?? '?'} · ${series.length} in this window`);
+  }
   if (b.nursery) row('Seedlings', nurseryLine(b));
   row('Sowing', nice(b.sow_date));
   row('In the position', `${nice(b.stay_from)} → ${nice(b.stay_to)}`);
@@ -504,6 +512,15 @@ function openBatch(b, sys, p) {
 
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;
   d.footer.append(close, el('div', 'spacer'));
+  if (data.may_plan && b.succession) {
+    const series = (data.batches || []).filter(x => x.succession === b.succession && x.status === 'proposed');
+    if (series.length > 1) {
+      const rs = el('button', 'btn', `Remove the series (${series.length})`);
+      rs.title = 'Every proposed planting of this succession on screen';
+      rs.onclick = async () => { d.close(); await discard(series.map(x => x.id)); };
+      d.footer.append(rs);
+    }
+  }
   if (data.may_plan && b.status === 'proposed') {
     const rm = el('button', 'btn btn-danger', 'Remove');
     rm.onclick = async () => { try { await rpc('cancel_crop_plan', { p_ids: [b.id] }); d.close(); toast('Removed', 'ok'); await reload(); } catch (e) { toast(e.message, 'bad'); } };
@@ -568,4 +585,129 @@ async function discard(ids) {
   if (!await confirmDrawer('Remove them?', `${ids.length} batch${ids.length === 1 ? '' : 'es'} will be removed. A validated one loses its open tasks; nothing growing is touched.`, 'Remove', true)) return;
   try { await rpc('cancel_crop_plan', { p_ids: ids }); selected.clear(); toast('Removed', 'ok'); await reload(); }
   catch (e) { toast(e.message, 'bad'); }
+}
+
+// ── the weeks: kg to harvest, plants to sow or receive (0.7.114) ─────────────
+// Read off the bars on screen: a batch's expected kg spread over its harvest days
+// (its recorded kg once harvested); its plants in the week it is sown in our
+// nursery, or the week it arrives from an external one. Proposals are counted
+// apart (lighter), so what is decided and what is only proposed read differently.
+function weekStrip(from, days, px) {
+  const cap = new Map();
+  (data.systems || []).forEach(sy => (sy.positions || []).forEach(p => cap.set(p.id, Number(p.capacity || 0))));
+  const mon0 = from - (((new Date(from * DAY).getUTCDay() || 7) - 1));
+  const weeks = new Map();
+  const wk = d => { const m = d - (((new Date(d * DAY).getUTCDay() || 7) - 1)); if (!weeks.has(m)) weeks.set(m, { kg: 0, kgP: 0, sow: 0, sowP: 0, ext: 0, crops: new Map() }); return weeks.get(m); };
+  for (let m = mon0; m < from + days; m += 7) wk(m);
+  (data.batches || []).forEach(b => {
+    const prop = b.status === 'proposed';
+    if (b.harvest_start && b.harvest_end) {
+      const hs = dn(b.harvest_start), he = dn(b.harvest_end), n = Math.max(he - hs + 1, 1);
+      const kg = b.status === 'harvested' && b.harvested_kg != null ? Number(b.harvested_kg) : Number(b.yield || 0);
+      for (let d = hs; d <= he; d++) {
+        if (d < mon0 || d >= from + days) continue;
+        const w = wk(d); const k = kg / n;
+        prop ? (w.kgP += k) : (w.kg += k);
+        w.crops.set(b.crop, (w.crops.get(b.crop) || 0) + k);
+      }
+    }
+    if (b.status === 'harvested') return;
+    const plants = cap.get(b.position_id) || 0;
+    if (b.nursery === 'external' && b.transplant_date) {
+      const d = dn(b.transplant_date) - 1;
+      if (d >= mon0 && d < from + days) wk(d).ext += plants;
+    } else if (b.sow_date && b.transplant_date && dn(b.sow_date) < dn(b.transplant_date)) {
+      const d = dn(b.sow_date);
+      if (d >= mon0 && d < from + days) { const w = wk(d); prop ? (w.sowP += plants) : (w.sow += plants); }
+    }
+  });
+  const list = [...weeks.entries()].sort((a, b) => a[0] - b[0]);
+  const maxKg = Math.max(1, ...list.map(([, w]) => w.kg + w.kgP));
+  const maxSow = Math.max(1, ...list.map(([, w]) => w.sow + w.sowP + w.ext));
+  const fmtN = n => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(Math.round(n));
+
+  const kgRow = el('div', 'tl-row tl-sum');
+  const kl = el('div', 'tl-label'); kl.append(el('b', null, 'kg / week')); kl.title = 'Expected harvest per week: decided batches solid, proposals light';
+  const kt = el('div', 'tl-track');
+  const sowRow = el('div', 'tl-row tl-sum');
+  const sl = el('div', 'tl-label'); sl.append(el('b', null, 'plants / week')); sl.title = 'Plants to sow in our nursery (green) or to receive from a nursery (blue), per week';
+  const st = el('div', 'tl-track');
+  list.forEach(([m, w]) => {
+    const x = (m - from) * px, width = 7 * px - 2;
+    const col = (track, parts, max, total, tip) => {
+      const c = el('div', 'tl-wk'); c.style.left = x + 'px'; c.style.width = width + 'px';
+      let bottom = 0;
+      parts.forEach(([v, cls]) => { if (!v) return; const p = el('span', 'tl-wk-part ' + cls); const h = 26 * v / max; p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; bottom += h; c.append(p); });
+      if (total && width >= 26) c.append(el('span', 'tl-wk-n', fmtN(total)));
+      c.title = tip;
+      track.append(c);
+    };
+    const kgT = w.kg + w.kgP;
+    col(kt, [[w.kg, 'kg'], [w.kgP, 'kg-p']], maxKg, kgT,
+      `Week of ${nice(ds(m))}: ${Math.round(kgT).toLocaleString()} kg` + (w.kgP ? ` (${Math.round(w.kgP).toLocaleString()} proposed)` : '') +
+      [...w.crops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c, k]) => `\n${c}: ${Math.round(k)} kg`).join(''));
+    const sT = w.sow + w.sowP + w.ext;
+    col(st, [[w.sow, 'sow'], [w.sowP, 'sow-p'], [w.ext, 'ext']], maxSow, sT,
+      `Week of ${nice(ds(m))}: ${sT.toLocaleString()} plants` + (w.sow ? `\nto sow: ${w.sow.toLocaleString()}` : '') +
+      (w.sowP ? `\nto sow if proposals are validated: ${w.sowP.toLocaleString()}` : '') + (w.ext ? `\nto receive from a nursery: ${w.ext.toLocaleString()}` : ''));
+  });
+  kgRow.append(kl, kt); sowRow.append(sl, st);
+  return [kgRow, sowRow];
+}
+
+// ── succession: the same crop again and again ────────────────────────────────
+function succession() {
+  const crops = data.crops || [];
+  const d = drawer('Plant in succession', 'The same crop at a steady rhythm, for a harvest every week rather than all at once');
+  const crop = selectBox(crops.map(c => [c.id, c.name]));
+  const zone = selectBox([]);
+  const first = input({ type: 'date' });
+  const every = input({ type: 'number', min: 1, value: 1 });
+  const unit = selectBox([['7', 'week(s)'], ['1', 'day(s)']], '7');
+  const times = input({ type: 'number', min: 1, max: 52, value: 8 });
+  const each = input({ type: 'number', min: 1, value: 1 });
+  const info = el('div', 'hint');
+  const cropOf = () => crops.find(c => c.id === crop.value);
+  const fillZones = () => {
+    const c = cropOf();
+    zone.textContent = '';
+    const any = el('option', null, 'Any zone it grows in'); any.value = ''; zone.append(any);
+    (data.systems || []).filter(sy => fits(c, sy)).forEach(sy => { const o = el('option', null, `${sy.name} · ${systemLabel(sy.type)}`); o.value = sy.code; zone.append(o); });
+    first.value = ds(dn(data.today) + (c.lead || 0));
+    say();
+  };
+  const say = () => {
+    const c = cropOf(); if (!c || !first.value) return;
+    const step = Number(every.value || 1) * Number(unit.value), n = Number(times.value || 1), k = Number(each.value || 1);
+    const a = cycleOf(c, dn(first.value)), z = cycleOf(c, dn(first.value) + step * (n - 1));
+    const zones = (data.systems || []).filter(sy => fits(c, sy) && (!zone.value || sy.code === zone.value));
+    const room = zones.reduce((t, sy) => t + (sy.positions || []).length, 0);
+    info.textContent = `${n} plantings × ${k} position${k > 1 ? 's' : ''} = ${n * k} batches · harvest from ${nice(ds(a.hs))} to ${nice(ds(z.he))}` +
+      ` · each stays ${a.to - a.tp + 1} days, so about ${Math.ceil((a.to - a.tp + 1) / step) * k} positions are busy at once (${room} in ${zone.value ? 'this zone' : 'the zones it grows in'})` +
+      (a.sow < dn(data.today) ? ' · the first sowing would already be past' : '');
+  };
+  crop.onchange = fillZones; [zone, every, unit, times, each].forEach(x => x.onchange = say); first.onchange = say;
+  [every, times, each].forEach(x => x.oninput = say);
+  const ev = el('div', 'row'); ev.append(every, unit);
+  d.body.append(field('Crop', crop), field('Zone', zone), field('First transplant', first),
+    field('Every', ev), field('How many plantings', times), field('Positions each time', each), info,
+    el('div', 'hint', 'Only free slots are used — each planting takes positions that are free for its whole stay. Everything lands as a proposal to validate.'));
+  fillZones();
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Propose the series');
+  go.onclick = async () => {
+    busy(go, true, 'Planning…');
+    try {
+      const r = await rpc('plan_succession', { p_farm: farm.id, p_crop: crop.value, p_first: first.value,
+        p_every_days: Number(every.value) * Number(unit.value), p_times: Number(times.value), p_positions_each: Number(each.value),
+        p_system: zone.value || null });
+      d.close();
+      const short = r.short || [];
+      toast(`${r.crop}: ${r.placed} of ${r.wanted} batches proposed · ${Math.round(r.expected_kg).toLocaleString()} kg · harvest ${nice(r.harvest_from)} – ${nice(r.harvest_to)}` +
+        (short.length ? ` · ${short.length} planting${short.length > 1 ? 's' : ''} short: ${short.slice(0, 3).map(x => `${nice(x.transplant)} ${x.reason}`).join('; ')}` : ''),
+        short.length ? 'bad' : 'ok');
+      await reload();
+    } catch (e) { busy(go, false, 'Propose the series'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, go);
 }

@@ -1360,3 +1360,15 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .lg-proposed { border: 1px dashed hsl(var(--h) 55% 50%); }
 .lg-over { outline: 2px dashed var(--warning); }
 .lg-closed { background: repeating-linear-gradient(135deg, transparent 0 3px, var(--border-strong) 3px 4px); }
+
+/* the per-week strip above the rows (0.7.114) */
+.tl-sum { height: 34px; background: var(--surface); }
+.tl-sum .tl-label { color: var(--text-muted); }
+.tl-wk { position: absolute; top: 3px; bottom: 3px; }
+.tl-wk-part { position: absolute; left: 0; right: 0; border-radius: 2px 2px 0 0; }
+.tl-wk-part.kg { background: color-mix(in srgb, var(--success, #2e7d32) 70%, transparent); }
+.tl-wk-part.kg-p { background: color-mix(in srgb, var(--success, #2e7d32) 28%, transparent); }
+.tl-wk-part.sow { background: color-mix(in srgb, #8bc34a 70%, transparent); }
+.tl-wk-part.sow-p { background: color-mix(in srgb, #8bc34a 28%, transparent); }
+.tl-wk-part.ext { background: color-mix(in srgb, #3b82f6 60%, transparent); }
+.tl-wk-n { position: absolute; left: 2px; top: -1px; font-size: 9px; font-weight: 700; color: var(--text); text-shadow: 0 0 2px var(--surface); }

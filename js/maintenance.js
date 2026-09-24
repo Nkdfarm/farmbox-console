@@ -121,13 +121,19 @@ function assetRow(a, may) {
     row.append(el('span', 'rule-name', r.name));
     row.append(el('span', 'hint', r.every_days ? `every ${r.every_days} d` : 'on the meter'));
     row.append(el('span', 'hint', 'last ' + shortDate(r.last_done)));
-    const next = el('span', r.overdue ? 'pill bad' : 'pill', 'due ' + shortDate(r.next_due));
+    const next = el('span', r.overdue ? 'pill bad' : 'pill', r.active ? 'due ' + shortDate(r.next_due) : 'switched off');
     row.append(next);
+    if (r.procedure && r.procedure !== r.name) row.append(el('span', 'hint', '· ' + r.procedure));
     row.append(el('div', 'spacer'));
     if (may) {
-      const done = el('button', 'btn btn-ghost btn-sm', 'Done today');
-      done.onclick = () => logDone(done, r);
-      row.append(done);
+      const edit = el('button', 'btn btn-ghost btn-sm', 'Edit');
+      edit.onclick = () => editRule(a, r);
+      row.append(edit);
+      if (r.active) {
+        const done = el('button', 'btn btn-ghost btn-sm', 'Done today');
+        done.onclick = () => logDone(done, r);
+        row.append(done);
+      }
     }
     box.append(row);
   });
@@ -189,15 +195,33 @@ function editAsset(a) {
   d.footer.append(cancel, save);
 }
 
-function editRule(asset, r) {
-  const d = drawer('Routine on ' + asset.name, 'What has to be done, and how often');
+let maintProcs = null;   // the Maintenance procedures a routine may run, read once
+async function editRule(asset, r) {
+  const d = drawer((r ? 'Routine' : 'New routine') + ' on ' + asset.name, 'What has to be done, and how often');
+  if (!maintProcs) {
+    try {
+      const all = await rpc('procedures', { p_farm: farm.id });
+      maintProcs = (all.procedures || []).filter(p => p.family === 'Maintenance' && p.status === 'approved')
+        .sort((a, b) => a.title.localeCompare(b.title));
+    } catch (e) { maintProcs = null; toast(e.message, 'bad'); d.close(); return; }
+  }
+  if (!maintProcs.length) {
+    d.body.append(el('div', 'note warn', 'There is no approved Maintenance procedure yet. A routine runs one — add it under Maintenance › Preventive maintenance first.'));
+    return;
+  }
+  // a routine runs a procedure (maintenance_rule.sop_id is required): without one it could never be saved (0.7.112)
+  const proc = selectBox(maintProcs.map(p => [p.id, p.title]), r?.sop_id || maintProcs[0].id);
   const name = input({ value: r?.name || '', required: true });
+  if (!r) { name.value = maintProcs[0].title; proc.onchange = () => { name.value = maintProcs.find(p => p.id === proc.value)?.title || name.value; }; }
   const every = input({ type: 'number', min: '1', value: r?.every_days ?? 30 });
   const last = input({ type: 'date', value: r?.last_done || '' });
+  const active = selectBox([['true', 'On — makes tasks'], ['false', 'Switched off']], String(r?.active ?? true));
 
+  d.body.append(field('Procedure', proc, 'The checklist the task runs.'));
   d.body.append(field('What it is called', name));
   d.body.append(field('Every, in days', every));
   d.body.append(field('Last done', last, 'The next one is counted from here.'));
+  if (r) d.body.append(field('State', active));
   d.body.append(el('p', 'hint',
     'A routine becomes a real task when somebody presses "Schedule what is due"; ' +
     'the Friday planner then puts a name against it like any other job.'));
@@ -210,9 +234,9 @@ function editRule(asset, r) {
     busy(save, true, 'Saving…');
     try {
       await rpc('save_maintenance_rule', { p: {
-        id: r?.id ?? null, farm_id: farm.id, asset_id: asset.id,
+        id: r?.id ?? null, farm_id: farm.id, asset_id: asset.id, sop_id: proc.value,
         name: name.value.trim(), every_days: Number(every.value),
-        last_done: last.value || null } });
+        last_done: last.value || null, active: active.value === 'true' } });
       d.close();
       toast('Saved', 'ok');
       await load();

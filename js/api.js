@@ -77,6 +77,8 @@ async function refresh() {
     // 400 for that, and a 400 used to leave the console sitting in an empty
     // shell with nothing to sign in with. Whatever the wording, it is a 401.
     save(null);
+    // the console reacts wherever it is, not only at start-up (0.7.112): app.js signs out and shows the form
+    dispatchEvent(new CustomEvent('fbc:session-ended'));
     throw new ApiError('Your session has ended. Sign in again.', 401, e.body);
   }
   save({ ...s, expires_at: Date.now() + (s.expires_in ?? 3600) * 1000 });
@@ -232,13 +234,15 @@ addEventListener('online', () => reconnect());
 export const OFFLINE_WRITE = 'Offline — the console is read only. This needs a connection.';
 
 // Every call goes through here.
+// the last change this tab made: a copy kept before it is out of date (0.7.112)
+let lastWrite = 0;
 export async function api(path, opts = {}) {
   if (!session) throw new ApiError('sign in first', 401);
   const read = isRead(path, opts);
   try {
     const body = await live(path, opts);
     setOnline(true);
-    if (read) remember(keyOf(path, opts), body);
+    if (read) remember(keyOf(path, opts), body); else lastWrite = Date.now();
     return body;
   } catch (e) {
     // The server answered: that is a real answer, online or not.
@@ -265,7 +269,8 @@ export const rpc = (name, args) =>
 export async function cachedRpc(name, args) {
   if (!READ_RPCS.has(name)) return null;
   const hit = await recall(keyOf('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) }));
-  return hit ? hit.body : null;
+  // a copy from before this tab changed something would show the old state for a moment
+  return hit && hit.saved_at > lastWrite ? hit.body : null;
 }
 
 // A page that opens at once (0.7.107). reads = [[name, args, optional?], …].
@@ -275,15 +280,20 @@ export async function cachedRpc(name, args) {
 // waiting() draws the loading state first. failed(e) only when nothing could be
 // shown. stillHere() false (the person moved on) drops the late answer.
 // fresh: after a change the kept copy is out of date — skip it, keep the screen until the answer.
+// Only the latest call draws (0.7.112): every page draws into the same #page, so a
+// page left behind — another page, another farm, an older period — must not paint over it.
+let openSeq = 0;
 export async function openFast(reads, { show, waiting, failed, stillHere, fresh = false }) {
+  const mine = ++openSeq;
   const old = fresh ? reads.map(() => null) : await Promise.all(reads.map(([n, a]) => cachedRpc(n, a)));
+  if (mine !== openSeq) return;
   const had = reads.every(([, , optional], i) => optional || old[i] != null) ? JSON.stringify(old) : null;
   if (had) show(old, false); else if (!fresh) waiting?.();
   let now;
   try {
     now = await Promise.all(reads.map(([n, a, optional]) => optional ? rpc(n, a).catch(() => null) : rpc(n, a)));
-  } catch (e) { if (!had) failed?.(e); return; }
-  if (stillHere && !stillHere()) return;
+  } catch (e) { if (!had && mine === openSeq) failed?.(e); return; }
+  if (mine !== openSeq || (stillHere && !stillHere())) return;
   if (had && JSON.stringify(now) === had) return;
   show(now, true);
 }

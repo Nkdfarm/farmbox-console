@@ -53,6 +53,8 @@ export function toast(message, kind = '') {
 
 // A right-hand drawer. Returns { body, footer, close } — the caller fills the
 // body, adds buttons to the footer, and closes when it is done.
+// drawers open on top of each other (a confirm over an editor): Escape closes the top one only (0.7.112)
+const drawerStack = [];
 export function drawer(title, subtitle, opts = {}) {
   const scrim = el('div', 'scrim');
   const box = el('aside', 'drawer');
@@ -73,12 +75,17 @@ export function drawer(title, subtitle, opts = {}) {
   box.append(head, body, footer);
   document.body.append(scrim, box);
 
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     scrim.remove(); box.remove();
+    const i = drawerStack.indexOf(close); if (i >= 0) drawerStack.splice(i, 1);
     opts.onClose?.();
     document.removeEventListener('keydown', onKey);
   };
-  const onKey = e => { if (e.key === 'Escape') close(); };
+  drawerStack.push(close);
+  const onKey = e => { if (e.key === 'Escape' && drawerStack[drawerStack.length - 1] === close) { e.stopImmediatePropagation(); close(); } };
   document.addEventListener('keydown', onKey);
   scrim.onclick = close;
   x.onclick = close;
@@ -89,12 +96,13 @@ export function drawer(title, subtitle, opts = {}) {
 
 export function confirmDrawer(title, message, okLabel, danger) {
   return new Promise(resolve => {
-    const d = drawer(title);
+    const d = drawer(title, undefined, { onClose: () => resolve(false) });   // Escape or the scrim = no
     d.body.append(el('p', null, message));
     const no = el('button', 'btn', 'Cancel');
     const yes = el('button', 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), okLabel);
-    no.onclick = () => { d.close(); resolve(false); };
-    yes.onclick = () => { d.close(); resolve(true); };
+    // answer first: closing answers "no" through onClose, and a promise keeps its first answer
+    no.onclick = () => { resolve(false); d.close(); };
+    yes.onclick = () => { resolve(true); d.close(); };
     d.footer.append(no, yes);
   });
 }

@@ -173,7 +173,7 @@ function locationCard(may) {
 }
 
 // ── the week ───────────────────────────────────────────────────────────────
-function weekCard() {
+function weekCard(may) {
   const card = el('div', 'card card-pad');
   card.style.marginBottom = 'var(--space-4)';
   card.append(el('div', 'sec-title', 'The week'));
@@ -189,7 +189,7 @@ function weekCard() {
   card.append(days);
   card.append(el('div', 'hint',
     'The days somebody is on site. Daily work is only generated on these; the weekend ' +
-    'is covered by the remote check instead. Change it on the People page for now.'));
+    'is covered by the remote check instead. Changed by the franchisor for now.'));
 
   // the working morning (0081): its length, for every person on site, is the room
   // the anytime tasks fill before the line; the afternoon starts at its end
@@ -206,7 +206,8 @@ function weekCard() {
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };
   const m = el('div', 'row'); m.style.marginTop = 'var(--space-3)'; m.style.alignItems = 'center';
-  m.append(el('span', null, 'Morning'), mf, el('span', null, 'to'), mt, save);
+  m.append(el('span', null, 'Morning'), mf, el('span', null, 'to'), mt);
+  if (may) m.append(save); else { mf.disabled = mt.disabled = true; }
   card.append(m);
   card.append(el('div', 'hint', 'The morning is the room the anytime tasks fill before the line on the boards; the afternoon starts at its end.'));
 
@@ -225,7 +226,8 @@ function weekCard() {
     } catch (e) { busy(saveSp, false, 'Save'); toast(e.message, 'bad'); }
   };
   const sp = el('div', 'row'); sp.style.marginTop = 'var(--space-3)'; sp.style.alignItems = 'center';
-  sp.append(el('span', null, 'Seedlings from a nursery'), spare, el('span', null, '% spare'), saveSp);
+  sp.append(el('span', null, 'Seedlings from a nursery'), spare, el('span', null, '% spare'));
+  if (may) sp.append(saveSp); else spare.disabled = true;
   card.append(sp);
   card.append(el('div', 'hint', 'Ordered on top of the places of each batch, for losses at transplant.'));
 

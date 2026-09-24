@@ -54,7 +54,12 @@ function paint() {
   search.type = 'search';
   search.placeholder = 'Find a procedure';
   search.value = filter.q;
-  search.oninput = () => { filter.q = search.value.trim().toLowerCase(); paint(); search.focus(); };
+  search.oninput = () => {
+    filter.q = search.value.trim().toLowerCase(); paint();
+    // paint() drew a new box: put the cursor back in it (the old one is gone)
+    const s = mount.querySelector('input[type=search]');
+    if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  };
   search.style.minWidth = '220px';
 
   const widen = lib ? el('button', 'btn btn-sm btn-ghost', showAll ? `Back to ${lib.title}` : 'Every procedure') : null;

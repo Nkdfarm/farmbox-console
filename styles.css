@@ -1274,3 +1274,14 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
   background: color-mix(in srgb, var(--danger, #e5484d) 14%, hsl(var(--h) 70% 50% / 0.10));
 }
 .tk.dropping .avatar { opacity: .35; filter: grayscale(1); }
+
+/* ── plain inputs styled like the form fields (0.7.112: class "input" was never defined) ── */
+.input, input.input, select.input {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--field-bg); color: var(--text); font: inherit;
+}
+.input:focus { border-color: rgba(255,91,31,0.6); outline: none; box-shadow: 0 0 0 3px rgba(255,91,31,0.15); }
+.input:disabled { opacity: .6; }
+/* a crop past its harvest end, still in the position */
+.plot-tile.is-over { outline: 2px dashed var(--warning); outline-offset: -2px; }
+.plot-tile.is-over .plot-when { color: var(--warning); font-weight: 600; }

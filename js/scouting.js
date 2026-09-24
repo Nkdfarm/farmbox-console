@@ -16,7 +16,7 @@
 // The trap setup (add, move, thresholds) is behind "Traps…".
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, pageHead, drawer, num, cropAvatar } from './ui.js';
+import { loading, el, pageHead, drawer, num, cropAvatar, toast } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { renderIpm } from './ipm.js';
@@ -176,7 +176,11 @@ function caseStrip() {
     box.append(b);
   });
   const t = el('button', 'linkish', showClosed ? 'Hide closed' : 'Show closed');
-  t.onclick = async () => { showClosed = !showClosed; cases = await rpc('cases', { p_farm: farm.id, p_include_closed: showClosed }); paint(); };
+  t.onclick = async () => {
+    showClosed = !showClosed;
+    try { cases = await rpc('cases', { p_farm: farm.id, p_include_closed: showClosed }); paint(); }
+    catch (e) { showClosed = !showClosed; toast(e.message, 'bad'); }
+  };
   box.append(t);
   return box;
 }
@@ -343,10 +347,10 @@ function photoFig(p, z, day) {
 
 // the trap setup, in a wide window: add, move, thresholds, every trap with its trend
 function openTraps() {
-  const d = drawer('Traps', 'Where they hang, their thresholds, their trend');
+  const d = drawer('Traps', 'Where they hang, their thresholds, their trend', { onClose: () => reload() });
   d.box.style.width = 'min(1100px, 100vw)';
   renderIpm(d.body, farm);
   const close = el('button', 'btn', 'Close');
-  close.onclick = () => { d.close(); reload(); };
+  close.onclick = () => d.close();
   d.footer.append(close);
 }

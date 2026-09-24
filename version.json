@@ -1,5 +1,5 @@
 {
-  "version": "0.7.111",
+  "version": "0.7.112",
   "released": "2026-09-24",
-  "note": "Assign manually: click an assigned task to take the name off; a chosen person's tasks are outlined and come off them with a click. Migration 0103."
+  "note": "General check: the crop planner cannot double-book a position (migration 0104), a standing crop past its harvest end keeps its position; thirteen console fixes."
 }

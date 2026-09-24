@@ -212,12 +212,18 @@ function tile(p, s, cur) {
     const name = el('span', 'plot-crop', b.crop);
     name.title = b.crop;
     t.append(name);
-    const d = daysTo(b.harvest_start);
-    t.append(el('span', 'plot-when',
+    const d = daysTo(b.harvest_start), e = daysTo(b.harvest_end);
+    const over = b.status === 'active' && e != null && e < 0;
+    if (over) t.classList.add('is-over');
+    const when = el('span', 'plot-when',
       b.status === 'proposed' ? 'from ' + fmt(b.transplant_date)
       : d == null ? 'no dates'
       : d > 0 ? d + ' d to harvest'
-      : 'harvesting'));
+      // past its harvest end and still standing: the last cut was never recorded (0.7.112)
+      : over ? 'harvest ended ' + fmt(b.harvest_end)
+      : 'harvesting');
+    if (over) when.title = 'Still in the position: record the last cut (Grow › Harvest) to free it.';
+    t.append(when);
   } else {
     t.append(el('span', 'plot-crop', 'Empty'));
     t.append(el('span', 'plot-when', 'free ' + fmt(p.free_on)));

@@ -69,6 +69,8 @@ const longDate = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'long
 const shortDay = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 export async function renderWeek(container, currentFarm) {
+  // another farm: its people are not this farm's, so no spotlight or half-made manual choice carries over (0.7.112)
+  if (farm && farm.id !== currentFarm.id) { spotlight = null; resetManual(false); }
   farm = currentFarm;
   mount = container;
   if (!week) { day = today(); week = mondayOf(day); month = firstOfMonth(day); }
@@ -389,9 +391,14 @@ function navBar() {
   }
   bar.append(tod, back, fwd, label, el('div', 'spacer'));
   bar.append(seg([['day', 'Day'], ['week', 'Week'], ['month', 'Month']], span, v => {
+    const was = span;
     span = v; pref.set(SPAN_KEY, v);
     if (v === 'day' && !(day >= week && day <= shift(week, 6))) day = week;
-    if (v === 'month') month = firstOfMonth(span === 'day' ? day : week);
+    // the month of the day on screen; from a week, the month of today when the week holds today, else of its Thursday
+    if (v === 'month') {
+      const t = today();
+      month = firstOfMonth(was === 'day' ? day : (t >= week && t <= shift(week, 6)) ? t : shift(week, 3));
+    }
     load();
   }, 'Period'));
   return bar;

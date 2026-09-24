@@ -191,6 +191,12 @@ function doSignOut() {
   showSignin();
 }
 $('signout').addEventListener('click', doSignOut);
+// a session refused in the middle of the day: back to the form, the offline copies cleared (0.7.112)
+addEventListener('fbc:session-ended', () => {
+  if ($('shell').hidden) return;
+  warmed.clear(); signOut(); location.hash = '';
+  showSignin('Your session has ended. Sign in again.');
+});
 
 // ── the gear ───────────────────────────────────────────────────────────────
 $('settingsBtn').addEventListener('click', () => {
@@ -353,7 +359,7 @@ async function warm() {
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['scouting_day', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],
+    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],
     ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],

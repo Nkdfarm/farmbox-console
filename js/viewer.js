@@ -61,7 +61,7 @@ export function openViewer(ctx) {
   const panel = el('aside', 'vw-panel');
   root.append(stage, panel);
   document.body.append(root);
-  const close = () => { root.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { root.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
 
   // ── a pane: one photo with its zoom ──
   const panes = [];
@@ -140,7 +140,8 @@ export function openViewer(ctx) {
     else if (e.key === '1') oneToOne(null, null, panes[0]);
   };
   document.addEventListener('keydown', onKey);
-  window.addEventListener('resize', () => { if (view.fit) fitAll(); }, { once: false });
+  const onResize = () => { if (view.fit) fitAll(); };   // removed on close: it kept every viewer and its photo alive
+  window.addEventListener('resize', onResize);
   const main = makePane(photo);
 
   // ── the panel ──

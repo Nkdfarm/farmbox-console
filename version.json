@@ -1,5 +1,5 @@
 {
-  "version": "0.7.123",
+  "version": "0.7.124",
   "released": "2026-09-25",
-  "note": "Steady harvest over several zones: + Add a zone in the window; the zones are split and staggered together for an even total every week. Migration 0114."
+  "note": "Steady harvest: a different crop in each zone, and every split listed - evenest first or fewest positions first. Migration 0115."
 }

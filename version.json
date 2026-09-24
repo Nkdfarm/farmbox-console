@@ -1,5 +1,5 @@
 {
-  "version": "0.7.99",
+  "version": "0.7.100",
   "released": "2026-09-24",
-  "note": "Pest & diseases: cases followed until they are over, with their curve by date, and treatment programmes. Migration 0097."
+  "note": "Pest & diseases overview: open cases and treatments, insect pressure per trap per day, crops by type with their cases; harvest tasks flagged during a withholding period. Migration 0098."
 }

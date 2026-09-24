@@ -1139,3 +1139,32 @@ tr.off { opacity: .6; }
 .vw-case .linkish { flex: 1; text-align: left; }
 .sc-zone-facts .pill { cursor: default; }
 .sc-zone-facts button.pill { cursor: pointer; border: 0; font: inherit; }
+
+/* ── Pest & diseases: the overview (0098) ──────────────────────────────────── */
+.pd-chart { width: 100%; min-width: 560px; height: auto; display: block; }
+.pd-chart .pd-bar { fill: var(--info); opacity: .75; }
+.pd-chart .pd-bar.now { fill: var(--accent); opacity: 1; }
+.pd-zones { display: grid; gap: 2px; padding: 0 var(--space-4) var(--space-4); }
+.pd-zone { display: grid; grid-template-columns: 120px 110px 170px 1fr; gap: var(--space-3); align-items: baseline; font-size: var(--text-sm);
+  padding: 4px 0; border-top: 1px solid var(--border); }
+.pd-rate { font-family: var(--font-mono, monospace); }
+.pd-change.up { color: var(--error); } .pd-change.down { color: var(--success); }
+.pd-cat { display: flex; align-items: baseline; gap: var(--space-3); margin: var(--space-6) 0 var(--space-3); }
+.pd-cat h3 { font-size: var(--text-lg); font-weight: 650; }
+.pd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+.pd-crop { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4);
+  display: grid; gap: var(--space-3); cursor: pointer; align-content: start; }
+.pd-crop:hover { border-color: var(--border-strong); }
+.pd-crop.warn { border-left: 4px solid var(--warning); }
+.pd-crop.bad { border-left: 4px solid var(--error); }
+.pd-crop-head { display: flex; gap: var(--space-3); align-items: center; }
+.pd-crop-head .avatar.lg { width: 56px; height: 56px; }
+.pd-wait { font-size: var(--text-sm); font-weight: 600; color: var(--warning); }
+.pd-last { display: flex; gap: var(--space-2); align-items: center; cursor: zoom-in; }
+.pd-last img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; }
+button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; }
+.pd-case-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; text-align: left; width: 100%;
+  background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: var(--text); cursor: pointer; font: inherit; }
+.pd-case-row:hover { border-color: var(--border-strong); }
+.tk-hold { font-size: 12px; margin-left: 2px; flex: none; }
+@media (max-width: 700px) { .pd-zone { grid-template-columns: 1fr 1fr; } }

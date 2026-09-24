@@ -501,6 +501,11 @@ function chip(t, opts = {}) {
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
   }
   c.append(ic, text);
+  // a harvest under a treatment's withholding period (0098)
+  if (t.withholding_until && t.status !== 'done') {
+    const w = el('span', 'tk-hold', '⛔'); w.title = `Do not harvest before ${longDate(t.withholding_until)} — a treatment's withholding period`;
+    c.append(w);
+  }
   const p = PRIO[t.priority];
   if (p && p[0]) { const s = el('span', 'tk-prio ' + t.priority, p[0]); s.title = p[1] + ' priority'; c.append(s); }
   const who = el('span', 'tk-who');
@@ -615,6 +620,7 @@ function openTask(t) {
   const d = drawer(t.title, [longDate(t.date), SLOT_WORD[slotOf(t)] + (hhmm(t.due_time) ? ' · ' + hhmm(t.due_time) : ''), t.area].filter(Boolean).join(' · '));
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
+  if (t.withholding_until && t.status !== 'done') d.body.append(el('div', 'note bad', `Do not harvest before ${longDate(t.withholding_until)} — a treatment on this crop is in its withholding period. Move this task, or check the case in Pest & diseases.`));
   fact('Kind', subFamilyTag(t.category || t.family));
   fact('Family', t.family);
   if (t.crop) fact('Crop', t.crop);

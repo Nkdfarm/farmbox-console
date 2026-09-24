@@ -18,6 +18,7 @@ import { renderIssues } from './issues.js';
 import { renderIpm } from './ipm.js';
 import { renderScouting } from './scouting.js';
 import { renderCases } from './cases.js';
+import { renderPests } from './pests.js';
 import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { loadCatalog } from './catalog.js';
@@ -130,7 +131,7 @@ const SECTIONS = {
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['routines', 'Routines', lib('routines')],
     ['harvest', 'Harvest', renderHarvest]] },
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
-  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['cases', 'Cases', renderCases], ['traps', 'Traps', renderIpm], ['programs', 'Programs', lib('ipm')]] },
+  ipm: { title: 'Pest & diseases', tabs: [['overview', 'Overview', renderPests], ['scouting', 'Scouting', renderScouting], ['cases', 'Cases', renderCases], ['traps', 'Traps', renderIpm], ['programs', 'Programs', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     ['sell', 'Sell', renderPrices], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
@@ -351,7 +352,7 @@ async function warm() {
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['scouting_day', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['reports', { ...p, ...reportRange() }],
+    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['scouting_day', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];

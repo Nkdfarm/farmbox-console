@@ -14,7 +14,7 @@
 // until then. A wholesale price is shown for comparison and never replaces the
 // book or the farm's own prices in the planner.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn } from './api.js';
+import { rpc, cachedRpc, fn } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num, shortDate } from './ui.js';
 
@@ -32,15 +32,26 @@ export async function renderPrices(container, currentFarm) {
 }
 
 async function load() {
-  mount.textContent = '';
-  mount.append(loading('Reading the price book…'));
+  const here = mount, a = { p_farm: farm.id };
+  // last time's copy first (0.7.106): the page appears at once, the fresh one replaces it
+  const [oldBook, oldTrends] = await Promise.all([cachedRpc('price_table', a), cachedRpc('market_trends', a)]);
+  const shown = oldBook ? JSON.stringify([oldBook, oldTrends]) : null;
+  if (oldBook) { data = oldBook; trends = oldTrends; paint(); }
+  else { mount.textContent = ''; mount.append(loading('Reading the price book…')); }
+  let book, tr;
   try {
-    [data, trends] = await Promise.all([
-      rpc('price_table', { p_farm: farm.id }),
+    [book, tr] = await Promise.all([
+      rpc('price_table', a),
       // the market card is extra: a database without it still shows the book
-      rpc('market_trends', { p_farm: farm.id }).catch(() => null),
+      rpc('market_trends', a).catch(() => null),
     ]);
-  } catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return; }
+  } catch (e) {
+    if (!oldBook) { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); }
+    return;
+  }
+  if (!here.isConnected || mount !== here) return;          // the person has gone to another page
+  if (shown && JSON.stringify([book, tr]) === shown) return;  // nothing changed: do not redraw under them
+  data = book; trends = tr;
   paint();
 }
 

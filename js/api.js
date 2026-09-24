@@ -260,6 +260,14 @@ export async function api(path, opts = {}) {
 export const rpc = (name, args) =>
   api('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) });
 
+// The copy of a read kept from last time, without asking the server (0.7.106): a page
+// may draw it at once and replace it when the fresh answer comes. null when none.
+export async function cachedRpc(name, args) {
+  if (!READ_RPCS.has(name)) return null;
+  const hit = await recall(keyOf('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) }));
+  return hit ? hit.body : null;
+}
+
 export const fn = (name, body) =>
   api('/functions/v1/' + name, { method: 'POST', body: JSON.stringify(body ?? {}) });
 

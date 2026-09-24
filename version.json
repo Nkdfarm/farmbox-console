@@ -1,5 +1,5 @@
 {
-  "version": "0.7.114",
+  "version": "0.7.115",
   "released": "2026-09-25",
-  "note": "Crop planner: auto mode fills the gaps and plans several cycles, planting in succession, kg and plants per week above the timeline. Migration 0106."
+  "note": "Office › Orders: a customer order planned backwards from its delivery, checked first (yes / tight / no and why, with what would work). Crop rotation in the planner. Migration 0107."
 }

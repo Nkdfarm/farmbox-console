@@ -1372,3 +1372,28 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .tl-wk-part.sow-p { background: color-mix(in srgb, #8bc34a 28%, transparent); }
 .tl-wk-part.ext { background: color-mix(in srgb, #3b82f6 60%, transparent); }
 .tl-wk-n { position: absolute; left: 2px; top: -1px; font-size: 9px; font-weight: 700; color: var(--text); text-shadow: 0 0 2px var(--surface); }
+
+/* ── orders (0.7.115) ───────────────────────────────────────────────────────── */
+.ord-list { display: grid; gap: var(--space-3); }
+.ord-customer { font-size: var(--text-base, 15px); }
+.ord-line { display: grid; grid-template-columns: auto minmax(160px, 1.3fr) minmax(160px, 1fr) auto auto; gap: var(--space-3);
+  align-items: center; padding: var(--space-2) 0; border-top: 1px solid var(--divider); margin-top: var(--space-2); }
+.ord-line.off { opacity: .5; }
+.ord-line .ord-why { grid-column: 2 / -1; margin: 0; }
+.ord-cover { display: grid; gap: 3px; }
+.ord-bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.ord-bar i { display: block; height: 100%; background: var(--success, #2e7d32); }
+.ord-bar.short i { background: var(--warning); }
+.ord-answer { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
+.ord-verdict { padding: 10px 12px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.ord-verdict.yes { background: color-mix(in srgb, var(--success, #2e7d32) 18%, transparent); }
+.ord-verdict.tight { background: color-mix(in srgb, var(--warning) 20%, transparent); }
+.ord-verdict.no { background: rgba(229,72,77,.16); }
+.ord-plan { font-size: var(--text-xs); }
+.ord-alt { flex-wrap: wrap; gap: var(--space-2); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+@media (max-width: 700px) { .ord-line { grid-template-columns: auto 1fr; } .grid2 { grid-template-columns: 1fr; } }
+/* the timeline: an order's batch and a rotation warning */
+.tl-flag { font-size: 10px; color: var(--accent); flex: none; }
+.tl-flag.warn { color: var(--warning); font-weight: 900; }
+.tl-bar.has-order { box-shadow: inset 3px 0 0 var(--accent); }

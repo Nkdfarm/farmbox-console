@@ -231,7 +231,8 @@ function row(sys, p, from, to, px, today, cur) {
 function barOf(b, sys, p, from, px, cur) {
   const f = dn(b.stay_from), t = dn(b.stay_to);
   const hs = b.harvest_start ? dn(b.harvest_start) : null, he = b.harvest_end ? dn(b.harvest_end) : null;
-  const box = el('div', `tl-bar is-${b.status}` + (b.over ? ' is-over' : '') + (selected.has(b.id) ? ' is-sel' : '') + (b.movable ? ' movable' : ''));
+  const box = el('div', `tl-bar is-${b.status}` + (b.over ? ' is-over' : '') + (selected.has(b.id) ? ' is-sel' : '') + (b.movable ? ' movable' : '')
+    + (b.customer ? ' has-order' : '') + (b.rotation_warn ? ' rot-warn' : ''));
   box.style.setProperty('--h', cropHue(b.category));
   box.style.left = ((f - from) * px) + 'px';
   box.style.width = Math.max((t - f + 1) * px, 3) + 'px';
@@ -256,11 +257,15 @@ function barOf(b, sys, p, from, px, cur) {
   }
   const lab = el('span', 'tl-bar-label');
   if ((t - f + 1) * px > 70) { const a = cropAvatar({ name: b.crop, category: b.category, photo_url: b.photo_url }, 'xs'); lab.append(a); }
+  if (b.customer) lab.append(el('span', 'tl-flag', '◆'));          // for an order
+  if (b.rotation_warn) lab.append(el('span', 'tl-flag warn', '↻'));  // follows its own family
   lab.append(el('span', null, b.crop));
   box.append(lab);
   box.title = [b.crop + ' · ' + ({ proposed: 'proposed', validated: 'validated', active: 'growing', harvested: 'harvested' }[b.status] || b.status),
     `${nice(b.transplant_date)} in · harvest ${nice(b.harvest_start)} – ${nice(b.harvest_end)} · free ${nice(ds(t + 1))}`,
     b.over ? 'Harvest ended — record the last cut to free the position' : null,
+    b.customer ? `For ${b.customer} (an order)` : null,
+    b.rotation_warn ? `Rotation: ${b.rotation_warn}` : null,
     b.revenue ? `${Math.round(b.yield || 0).toLocaleString()} kg · ${money(b.revenue, cur)}` : null,
     b.movable && data.may_plan ? 'Drag to move · drag the right edge to change the harvest · Shift-click to select' : null]
     .filter(Boolean).join('\n');
@@ -332,6 +337,15 @@ function showGhost(track, crop, tpDay, from, px, bad, text) {
   if (ghost.parentNode !== track) track.append(ghost);
 }
 // what a drop there would say: nothing when it is fine, else the reason
+// the batch before on the row, when it is the same crop or the same rotation group (not 'other')
+function rotationNote(crop, pid, tpDay, except) {
+  const before = (data.batches || []).filter(b => b.position_id === pid && b.id !== except && dn(b.stay_from) < tpDay)
+    .sort((a, b) => dn(b.stay_from) - dn(a.stay_from))[0];
+  if (!before) return null;
+  const same = before.crop_id === crop.id
+    || (crop.rotation_group && crop.rotation_group !== 'other' && crop.rotation_group === before.rotation_group);
+  return same ? `follows ${before.crop} (${before.crop_id === crop.id ? 'same crop' : crop.rotation_group + ' family'})` : null;
+}
 function dropProblem(crop, sys, pid, tpDay, except) {
   if (!fits(crop, sys)) return `${crop.name} does not grow in ${sys.name}`;
   const c = cycleOf(crop, tpDay);
@@ -350,8 +364,10 @@ function dropTarget(track, sys, p, from, px) {
     const prob = dropProblem(dragCrop, sys, p.id, d, null);
     const c = cycleOf(dragCrop, d);
     e.dataTransfer.dropEffect = prob ? 'none' : 'copy';
+    const rot = prob ? null : rotationNote(dragCrop, p.id, d, null);
     showGhost(track, dragCrop, d, from, px, !!prob,
-      prob || `${dragCrop.name} · in ${nice(ds(c.tp))} · harvest ${nice(ds(c.hs))}` + (c.sow < dn(data.today) ? ' · sowing already past' : ''));
+      prob || `${dragCrop.name} · in ${nice(ds(c.tp))} · harvest ${nice(ds(c.hs))}` + (c.sow < dn(data.today) ? ' · sowing already past' : '')
+             + (rot ? ' · ↻ ' + rot : ''));
   });
   track.addEventListener('dragleave', e => { if (!track.contains(e.relatedTarget)) clearGhost(); });
   track.addEventListener('drop', async e => {
@@ -477,6 +493,8 @@ function openBatch(b, sys, p) {
   row('Harvest', `${nice(b.harvest_start)} – ${nice(b.harvest_end)}`);
   if (b.harvested_kg) row('Harvested', b.harvested_kg + ' kg');
   if (b.yield) row('Expected', `${Math.round(b.yield).toLocaleString()} kg · ${money(b.revenue, cur)}` + (b.revenue_per_day ? ` · ${money(b.revenue_per_day, cur)}/day` : ''));
+  if (b.customer) row('For', b.customer + ' (an order — Office › Orders)');
+  if (b.rotation_warn) facts.append(el('div', 'note warn', 'Rotation: ' + b.rotation_warn + '. Nothing stops it; a different family is better for the position.'));
   if (b.over) facts.append(el('div', 'note warn', 'The harvest window has ended and no last cut is recorded, so the position is still held. Record the last cut on Grow › Harvest (or the harvest task) to free it.'));
   if (!b.movable && b.status === 'validated') facts.append(el('div', 'hint', b.ordered ? 'Its seedlings are ordered: the date stays.' : 'It is in the ground: only the harvest end can change.'));
   d.body.append(facts);

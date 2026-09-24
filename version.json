@@ -1,5 +1,5 @@
 {
-  "version": "0.7.119",
+  "version": "0.7.120",
   "released": "2026-09-25",
-  "note": "Crop planner: the explanation is behind an ⓘ button and Timeline | Map sits with the calendar options, so the rows get more height."
+  "note": "Crop planner: the map view loses its page head too; Timeline | Map and the i button stay in the same place in both views and while switching."
 }

@@ -1423,3 +1423,8 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .tl-info { font-size: 16px; line-height: 1; padding: 4px 8px; }
 .tl-help { margin: 0 0 var(--space-3); font-size: var(--text-sm); }
 .tl-board { max-height: calc(100dvh / var(--zoom, 1) - 200px); }
+
+/* the planner's top bar, one frame for both views (0.7.120): the switch and ⓘ never move */
+.planner-top { flex-wrap: nowrap; }
+.planner-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-height: 32px; }
+.planner-switch, .planner-top > .tl-info { flex: none; }

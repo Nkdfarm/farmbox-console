@@ -19,23 +19,52 @@ const money = (n, cur) => n == null ? '—'
   : `${cur} ${Math.round(Number(n)).toLocaleString()}`;
 const daysTo = d => d ? Math.round((new Date(d + 'T00:00:00') - new Date().setHours(0,0,0,0)) / 86400000) : null;
 
-// Timeline (0.7.113, the default) or the tile map of before
+// Timeline (0.7.113, the default) or the tile map of before.
+// The planner's top bar is one frame for both (0.7.120): the view's own controls on its left,
+// Timeline | Map and ⓘ fixed on its right. Only the part under it changes with the view, so
+// the switch never moves — not while the other view loads, not after.
 const VIEW_KEY = 'fbc_planner_view';
-function viewSwitch(current) {
-  const s = el('div', 'seg');
+const view = () => pref.get(VIEW_KEY) || 'timeline';
+let shell = null;
+function buildShell(container) {
+  container.textContent = '';
+  const top = el('div', 'tl-nav planner-top');
+  const left = el('div', 'planner-left');
+  const sw = el('div', 'seg planner-switch');
+  const info = el('button', 'btn btn-sm btn-ghost tl-info', 'ⓘ');
+  info.title = 'How the planner works';
+  info.setAttribute('aria-expanded', 'false');
+  const help = el('div', 'note tl-help');
+  help.hidden = true;
+  info.onclick = () => { help.hidden = !help.hidden; info.setAttribute('aria-expanded', String(!help.hidden)); };
+  const body = el('div', 'planner-body');
+  top.append(left, sw, info);
+  container.append(top, help, body);
+  shell = { container, top, left, sw, help, body, setHelp: t => { help.textContent = t; } };
+  paintSwitch();
+}
+function paintSwitch() {
+  shell.sw.textContent = '';
   [['timeline', 'Timeline'], ['map', 'Map']].forEach(([v, label]) => {
     const b = el('button', 'seg-btn', label);
-    b.setAttribute('aria-pressed', String(v === current));
-    b.onclick = () => { if (v === current) return; pref.set(VIEW_KEY, v); renderCrops(mount, farm); };
-    s.append(b);
+    b.setAttribute('aria-pressed', String(v === view()));
+    b.onclick = () => { if (v === view()) return; pref.set(VIEW_KEY, v); paintSwitch(); showView(); };
+    shell.sw.append(b);
   });
-  return s;
+}
+async function showView() {
+  shell.left.textContent = '';
+  shell.help.textContent = '';
+  if (view() === 'timeline') return renderTimeline(shell.body, farm, shell);
+  mount = shell.body;
+  await load();
 }
 
 export async function renderCrops(container, currentFarm) {
-  farm = currentFarm; mount = container;
-  if ((pref.get(VIEW_KEY) || 'timeline') === 'timeline') return renderTimeline(container, currentFarm, viewSwitch('timeline'));
-  await load();
+  farm = currentFarm;
+  if (!shell || shell.container !== container || !container.contains(shell.top)) buildShell(container);
+  mount = shell.body;
+  await showView();
 }
 
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)
@@ -57,22 +86,19 @@ function paint() {
   const may = map.may_plan;
   const cur = map.currency || 'ZAR';
 
-  const head = el('div', 'page-head');
-  const titles = el('div');
-  titles.append(el('p', null,
-    'One tile per growing position. The planner fills the empty ones with whatever ' +
-    'earns most per day the position is tied up, priced at the season it will be ' +
-    'harvested in. Nothing is planted until you validate it.'));
-  head.append(titles, el('div', 'spacer'));
-  head.append(viewSwitch('map'));
+  // the map's controls in the planner's top bar (0.7.120): its counts, then planning; the explanation behind ⓘ
+  const controls = [...summary(cur).children, el('div', 'spacer')];
   if (may) {
-    const b = el('button', 'btn btn-primary', 'Plan the whole farm');
+    const b = el('button', 'btn btn-primary btn-sm', 'Plan the whole farm');
     b.onclick = () => propose(b);
-    head.append(b);
+    controls.push(b);
   }
-  mount.append(head);
-
-  mount.append(summary(cur));
+  if (shell && mount === shell.body) {
+    shell.left.replaceChildren(...controls);
+    shell.setHelp('One tile per growing position. The planner fills the empty ones with whatever earns most per day the ' +
+      'position is tied up, priced at the season it will be harvested in. Click a tile for the batch and to plan the next one. ' +
+      'Nothing is planted until you validate it.');
+  } else { const bar = el('div', 'tl-nav'); bar.append(...controls); mount.append(bar); }
 
   const proposed = allBatches().filter(b => b.status === 'proposed');
   if (proposed.length) mount.append(proposalCard(proposed, cur, may));

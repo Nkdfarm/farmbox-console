@@ -1,5 +1,5 @@
 {
-  "version": "0.7.120",
+  "version": "0.7.121",
   "released": "2026-09-25",
-  "note": "Crop planner: the map view loses its page head too; Timeline | Map and the i button stay in the same place in both views and while switching."
+  "note": "Crop planner: drop a crop on a zone for a steady weekly harvest (the zone split and staggered, the best split marked); Clear zone, with a warning first. Migration 0112."
 }

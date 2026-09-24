@@ -1428,3 +1428,20 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .planner-top { flex-wrap: nowrap; }
 .planner-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-height: 32px; }
 .planner-switch, .planner-top > .tl-info { flex: none; }
+
+/* ── a steady harvest and clearing a zone (0.7.121) ─────────────────────────── */
+.tl-steady { font-size: var(--text-xs); color: var(--text-muted); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-md);
+  padding: 4px 10px; white-space: nowrap; cursor: default; }
+.tl-steady.over { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tl-steady.bad { border-color: var(--danger, #e5484d); background: rgba(229,72,77,.12); }
+.tl-clear { color: var(--danger, #e5484d); }
+.tl-steady-list { display: grid; gap: var(--space-2); }
+.tl-steady-opt { display: grid; grid-template-columns: auto 1fr minmax(170px, auto); gap: var(--space-3); align-items: center;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; }
+.tl-steady-opt.best { border-color: color-mix(in srgb, var(--success, #2e7d32) 70%, transparent); background: color-mix(in srgb, var(--success, #2e7d32) 10%, transparent); }
+.tl-steady-opt.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-steady-opt .pill { margin-left: 6px; }
+.tl-steady-kg { text-align: right; }
+.tl-steady-meter { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 4px; }
+.tl-steady-meter i { display: block; height: 100%; background: var(--success, #2e7d32); }
+.tl-clear-list { margin: 0 0 var(--space-3); padding-left: 1.2em; }

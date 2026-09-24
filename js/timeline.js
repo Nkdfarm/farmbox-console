@@ -162,7 +162,7 @@ function paint() {
       const pb = el('button', 'btn btn-sm btn-ghost', 'Plan this bay');
       pb.title = 'Fill the free positions of this bay only';
       pb.onclick = () => propose(pb, sys.code, sys.name);
-      zt.append(pb);
+      zt.append(pb, steadyDrop(sys), clearButton(sys));
     }
     zh.append(zt);
     inner.append(zh);
@@ -810,4 +810,135 @@ function splitMenu(sys) {
   };
   wrap.append(el('span', 'hint', 'Positions'), sel);
   return wrap;
+}
+
+// ── a steady harvest: drop a crop on the zone (0.7.121, migration 0112) ──────────
+// The zone is cut along its built rows and every position planted in a staggered
+// chain, so the weeks come out as even as the crop's cycle allows. The window lists
+// every split the zone allows with its weekly kg and how much the weeks vary; the
+// flattest is marked Best, any other can be chosen.
+function steadyDrop(sys) {
+  const idle = '⇣ Steady harvest: drop a crop here';
+  const z = el('div', 'tl-steady', idle);
+  z.title = 'Drag a crop from the list onto this box: the zone is split and staggered for an even weekly harvest';
+  const reset = () => { z.textContent = idle; z.classList.remove('over', 'bad'); };
+  z.addEventListener('dragover', e => {
+    if (!dragCrop) return;
+    e.preventDefault();
+    const ok = fits(dragCrop, sys);
+    z.classList.add('over'); z.classList.toggle('bad', !ok);
+    e.dataTransfer.dropEffect = ok ? 'copy' : 'none';
+    z.textContent = ok ? `${dragCrop.name}: a steady harvest in ${sys.name}` : `${dragCrop.name} does not grow in ${sys.name}`;
+  });
+  z.addEventListener('dragleave', e => { if (!z.contains(e.relatedTarget)) reset(); });
+  z.addEventListener('drop', e => {
+    if (!dragCrop) return;
+    e.preventDefault();
+    const crop = dragCrop;
+    dragCrop = null; clearGhost(); unmarkRows(); document.body.classList.remove('tl-dragging'); reset();
+    if (!fits(crop, sys)) { toast(`${crop.name} does not grow in ${sys.name}`, 'bad'); return; }
+    openSteady(sys, crop);
+  });
+  z.onclick = () => toast('Drag a crop from the list above onto this box');
+  return z;
+}
+
+async function openSteady(sys, crop, horizon = 182) {
+  const d = drawer(`Steady harvest · ${crop.name}`, `${sys.name}: split along its rows and staggered, for an even harvest every week`);
+  d.body.append(loading('Working out the splits…'));
+  let o;
+  try { o = await rpc('steady_options', { p_system: sys.id, p_crop: crop.id, p_from: null, p_horizon: horizon }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+  d.body.textContent = '';
+  d.body.append(el('div', 'hint', `A ${crop.name} stays ${o.stay} days in a position (${o.grow_days} growing, ${o.harvest_days} harvesting, then cleaning); ` +
+    `the zone gives about ${Math.round(o.kg_cycle).toLocaleString()} kg a cycle. First planting ${nice(o.start)}.`));
+  const hz = selectBox([['91', '13 weeks'], ['182', '26 weeks'], ['364', '52 weeks']], String(horizon));
+  hz.onchange = () => { d.close(); openSteady(sys, crop, Number(hz.value)); };
+  d.body.append(field('Plan ahead for', hz));
+  if (o.blocked) {
+    const w = el('div', 'note warn');
+    w.append(`${sys.name} has ${o.blocked} batch${o.blocked === 1 ? '' : 'es'} validated or growing: clear the zone first. `);
+    const cl = el('button', 'btn btn-sm', 'Clear the zone…');
+    cl.onclick = () => { d.close(); openClear(sys); };
+    w.append(cl);
+    d.body.append(w);
+  }
+  let pick = (o.options.find(x => x.best) || o.options[0]).n;
+  const list = el('div', 'tl-steady-list');
+  const paintList = () => {
+    list.textContent = '';
+    o.options.forEach(x => {
+      const r = el('label', 'tl-steady-opt' + (x.best ? ' best' : '') + (x.n === pick ? ' on' : ''));
+      const radio = el('input'); radio.type = 'radio'; radio.name = 'steady-n'; radio.checked = x.n === pick;
+      radio.onchange = () => { pick = x.n; paintList(); };
+      const t = el('div');
+      t.append(el('b', null, `${x.n} position${x.n === 1 ? '' : 's'} × ${Number(x.places_each).toLocaleString()}` + (x.rows_each > 1 ? ` · ${x.rows_each} rows each` : '')));
+      if (x.best) t.append(el('span', 'pill ok', 'Best'));
+      if (x.current) t.append(el('span', 'pill', 'now'));
+      t.append(el('div', 'hint', `a planting every ${Number(x.interval).toLocaleString()} days (${x.pattern === 'weekly' ? 'on the same weekday' : 'evenly'}) · ${Math.round(x.kg_batch).toLocaleString()} kg a batch`));
+      const w = el('div', 'tl-steady-kg');
+      const cv = x.cv == null ? null : Math.round(Number(x.cv) * 100);
+      w.append(el('b', null, `≈ ${Math.round(x.mean || 0).toLocaleString()} kg / week`),
+               el('div', 'hint', `${Math.round(x.min || 0).toLocaleString()}–${Math.round(x.max || 0).toLocaleString()} · varies ±${cv ?? '—'}%`));
+      const meter = el('div', 'tl-steady-meter'); const f = el('i'); f.style.width = Math.max(4, 100 - Math.min(100, cv ?? 100)) + '%'; meter.append(f);
+      w.append(meter);
+      r.append(radio, t, w);
+      list.append(r);
+    });
+  };
+  paintList();
+  d.body.append(el('div', 'sec-title', 'How to split the zone'), list,
+    el('div', 'hint', 'Changing the number of positions renames them from their rows (ABC, DEF…) and is a farm manager’s decision. Everything lands as proposals to validate.'));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Plan it');
+  go.disabled = !!o.blocked;
+  go.onclick = async () => {
+    const x = o.options.find(y => y.n === pick);
+    busy(go, true, 'Planning…');
+    try {
+      const r = await rpc('plan_steady', { p_system: sys.id, p_crop: crop.id, p_n: pick, p_pattern: x.pattern, p_from: null, p_horizon: horizon });
+      d.close();
+      toast(`${r.crop} in ${r.zone}: ${r.positions} positions, ${r.batches} batches proposed · ≈ ${Math.round(x.mean || 0)} kg a week`, 'ok');
+      await reload();
+    } catch (e) { busy(go, false, 'Plan it'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, go);
+}
+
+// ── clearing a zone, after saying what goes ──────────────────────────────────
+function clearButton(sys) {
+  const b = el('button', 'btn btn-sm btn-ghost tl-clear', 'Clear zone');
+  b.title = `Remove the crops planned in ${sys.name} (and, if you choose, the ones growing)`;
+  b.onclick = () => openClear(sys);
+  return b;
+}
+function openClear(sys) {
+  const ids = new Set((sys.positions || []).map(p => p.id));
+  const mine = (data.batches || []).filter(b => ids.has(b.position_id));
+  const n = st => mine.filter(b => b.status === st).length;
+  const prop = n('proposed'), val = n('validated'), act = n('active');
+  const d = drawer(`Clear ${sys.name}?`, 'What is removed, before anything is');
+  if (!prop && !val && !act) { d.body.append(el('div', 'hint', 'Nothing is planned or growing in this zone.')); return; }
+  const lines = el('ul', 'tl-clear-list');
+  if (prop) lines.append(el('li', null, `${prop} proposal${prop === 1 ? '' : 's'} — removed`));
+  if (val) lines.append(el('li', null, `${val} validated batch${val === 1 ? '' : 'es'} — cancelled, their open tasks removed`));
+  if (act) lines.append(el('li', null, `${act} batch${act === 1 ? '' : 'es'} growing — kept unless you tick below`));
+  d.body.append(lines);
+  const growing = el('input'); growing.type = 'checkbox';
+  const gl = el('label', 'row'); gl.append(growing, el('span', null, `Also remove the ${act} crop${act === 1 ? '' : 's'} growing: they are marked cancelled and their tasks removed; harvests already recorded stay.`));
+  if (act) d.body.append(gl);
+  d.body.append(el('div', 'note warn', 'This cannot be undone from here: a cancelled batch has to be planned again.'));
+  const cancel = el('button', 'btn', 'Keep everything'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-danger', 'Clear the zone');
+  go.onclick = async () => {
+    busy(go, true, 'Clearing…');
+    try {
+      const r = await rpc('clear_zone', { p_system: sys.id, p_growing: growing.checked });
+      d.close();
+      toast(`${r.zone} cleared: ${r.proposed} proposed, ${r.validated} validated` + (r.growing ? `, ${r.growing} growing` : '') +
+            (r.growing_kept ? ` · ${r.growing_kept} growing kept` : ''), 'ok');
+      await reload();
+    } catch (e) { busy(go, false, 'Clear the zone'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, el('div', 'spacer'), go);
 }

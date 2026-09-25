@@ -1,7 +1,7 @@
 {
   "id": "/farmbox-console",
-  "name": "FarmBox Console",
-  "short_name": "FarmBox",
+  "name": "Naked Console",
+  "short_name": "Naked Console",
   "description": "Run a FarmBox: people, plans, procedures, crops.",
   "start_url": "./index.html",
   "scope": "./",

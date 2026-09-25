@@ -1,5 +1,5 @@
 {
-  "version": "0.7.128",
+  "version": "0.7.129",
   "released": "2026-09-25",
-  "note": "Seedlings ordered from a nursery carry at most 3 % spare (was 10 %). Migration 0117."
+  "note": "FarmBox Console is now Naked Console."
 }

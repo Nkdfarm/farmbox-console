@@ -147,7 +147,7 @@ function paint() {
   inner.style.width = innerW + 'px';
   inner.style.setProperty('--px', px + 'px');
   const pinned = el('div', 'tl-sticky');
-  pinned.append(scale(from, days, px, today), kgRow('All zones', W, null, from, px, true), plantsRow(W, from, px));
+  pinned.append(scale(from, days, px, today), kgRow('All zones', W, null, from, px, true), plantsRow('All zones · plants', W, null, from, px, true));
   inner.append(pinned);
   (data.systems || []).forEach(sys => {
     const zh = el('div', 'tl-zone');
@@ -166,7 +166,7 @@ function paint() {
     }
     zh.append(zt);
     inner.append(zh);
-    inner.append(kgRow('kg / week', W, sys.id, from, px, false));
+    inner.append(kgRow('kg / week', W, sys.id, from, px, false), plantsRow('plants / week', W, sys.id, from, px, false));
     (sys.positions || []).forEach(p => inner.append(row(sys, p, from, to, px, today, cur)));
   });
   board.append(inner);
@@ -618,8 +618,9 @@ async function discard(ids) {
 // ── the weeks: kg forecast and harvested, plants to sow or receive (0.7.114, 0.7.118) ──
 // Forecast = a batch's expected kg spread over its harvest days (proposals apart,
 // lighter); harvested = the cuts recorded, by the day they were weighed. Both per
-// zone and for the whole farm. Plants = the position's places in the week the batch
-// is sown in our nursery, or the week it arrives from an external one.
+// zone and for the whole farm. Plants (0.7.127) = the position's places in the week the
+// batch is transplanted: raised in our nursery, or ordered from an external one; the
+// week's sowing and deliveries are kept for the hover.
 function weeksOf(from, days) {
   const sysOf = new Map();
   (data.systems || []).forEach(sy => (sy.positions || []).forEach(p => sysOf.set(p.id, sy.id)));
@@ -628,7 +629,7 @@ function weeksOf(from, days) {
   const mon0 = from - (((new Date(from * DAY).getUTCDay() || 7) - 1));
   const end = from + days;
   const weeks = new Map();        // monday → { all: cell, bySys: Map(sys → cell) }
-  const blank = () => ({ fc: 0, fcP: 0, real: 0, sow: 0, sowP: 0, ext: 0, crops: new Map() });
+  const blank = () => ({ fc: 0, fcP: 0, real: 0, sow: 0, sowP: 0, ext: 0, tp: 0, tpP: 0, ord: 0, ordP: 0, tpCrops: new Map(), crops: new Map() });
   const cellOf = (d, sys) => {
     const m = d - (((new Date(d * DAY).getUTCDay() || 7) - 1));
     if (!weeks.has(m)) weeks.set(m, { all: blank(), bySys: new Map() });
@@ -647,6 +648,14 @@ function weeksOf(from, days) {
     }
     if (b.status === 'harvested') return;
     const plants = cap.get(b.position_id) || 0;
+    // the week it goes into the position: from our nursery, or ordered from one
+    if (b.transplant_date) {
+      const d = dn(b.transplant_date), ext = b.nursery === 'external';
+      if (d >= mon0 && d < end) both(d, sys, c => {
+        const k = ext ? (prop ? 'ordP' : 'ord') : (prop ? 'tpP' : 'tp');
+        c[k] += plants; c.tpCrops.set(b.crop, (c.tpCrops.get(b.crop) || 0) + plants);
+      });
+    }
     if (b.nursery === 'external' && b.transplant_date) {
       const d = dn(b.transplant_date) - 1;
       if (d >= mon0 && d < end) both(d, sys, c => { c.ext += plants; });
@@ -692,22 +701,40 @@ function kgRow(label, weeks, sysId, from, px, total) {
   return r;
 }
 
-function plantsRow(weeks, from, px) {
-  const max = Math.max(1, ...weeks.map(([, w]) => w.all.sow + w.all.sowP + w.all.ext));
-  const r = el('div', 'tl-row tl-sum');
-  const l = el('div', 'tl-label'); l.append(el('b', null, 'plants / week'));
-  l.title = 'Plants to sow in our nursery (green) or to receive from a nursery (blue), per week';
+// plants to transplant a week, one line per zone and the farm's total pinned on top:
+// from our nursery (green) or ordered from a nursery (blue); proposals lighter
+function plantsRow(label, weeks, sysId, from, px, total) {
+  const none = { tp: 0, tpP: 0, ord: 0, ordP: 0, sow: 0, sowP: 0, ext: 0, tpCrops: new Map() };
+  const cells = weeks.map(([m, w]) => [m, sysId ? (w.bySys.get(sysId) || none) : w.all]);
+  const sum = c => c.tp + c.tpP + c.ord + c.ordP;
+  const max = Math.max(1, ...cells.map(([, c]) => sum(c)));
+  const r = el('div', 'tl-row tl-sum tl-plants' + (total ? ' total' : ''));
+  const l = el('div', 'tl-label');
+  const all = cells.reduce((a, [, c]) => a + sum(c), 0), ord = cells.reduce((a, [, c]) => a + c.ord + c.ordP, 0);
+  l.append(el('b', null, label), el('span', 'hint', ` ${fmtN(all)}` + (ord ? ` · ${fmtN(ord)} ordered` : '')));
+  l.title = `${label}: plants to transplant a week — from our nursery (green) or ordered from a nursery (blue); ` +
+    `lighter = only proposed. In the window: ${all.toLocaleString()} plants, ${ord.toLocaleString()} of them ordered.`;
   const t = el('div', 'tl-track');
-  weeks.forEach(([m, w]) => {
-    const c = w.all, x = (m - from) * px, width = 7 * px - 2;
+  const H = total ? 22 : 18;
+  cells.forEach(([m, c]) => {
+    const x = (m - from) * px, width = 7 * px - 2;
     const col = el('div', 'tl-wk'); col.style.left = x + 'px'; col.style.width = width + 'px';
     let bottom = 0;
-    [[c.sow, 'sow'], [c.sowP, 'sow-p'], [c.ext, 'ext']].forEach(([v, cls]) => { if (!v) return; const p = el('span', 'tl-wk-part ' + cls);
-      const h = 20 * v / max; p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; bottom += h; col.append(p); });
-    const sT = c.sow + c.sowP + c.ext;
-    if (sT && width >= 26) col.append(el('span', 'tl-wk-n', fmtN(sT)));
-    col.title = `Week of ${nice(ds(m))}: ${sT.toLocaleString()} plants` + (c.sow ? `\nto sow: ${c.sow.toLocaleString()}` : '') +
-      (c.sowP ? `\nto sow if proposals are validated: ${c.sowP.toLocaleString()}` : '') + (c.ext ? `\nto receive from a nursery: ${c.ext.toLocaleString()}` : '');
+    [[c.tp, 'sow'], [c.tpP, 'sow-p'], [c.ord, 'ext'], [c.ordP, 'ext-p']].forEach(([v, cls]) => {
+      if (!v) return;
+      const p = el('span', 'tl-wk-part ' + cls);
+      const h = H * v / max;
+      p.style.height = h + 'px'; p.style.bottom = bottom + 'px'; p.style.width = width + 'px';
+      bottom += h; col.append(p);
+    });
+    const n = sum(c);
+    if (n && width >= 26) col.append(el('span', 'tl-wk-n', fmtN(n)));
+    col.title = `Week of ${nice(ds(m))}` + (sysId ? '' : ' · all zones') + `: ${n.toLocaleString()} plants to transplant` +
+      (c.tp ? `\nfrom our nursery: ${c.tp.toLocaleString()}` : '') + (c.tpP ? `\nfrom our nursery, proposed: ${c.tpP.toLocaleString()}` : '') +
+      (c.ord ? `\nordered from a nursery: ${c.ord.toLocaleString()}` : '') + (c.ordP ? `\nto order, proposed: ${c.ordP.toLocaleString()}` : '') +
+      [...c.tpCrops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `\n  ${k}: ${v.toLocaleString()}`).join('') +
+      (!sysId && (c.sow + c.sowP) ? `\nto sow in our nursery this week: ${(c.sow + c.sowP).toLocaleString()}` : '') +
+      (!sysId && c.ext ? `\nseedlings arriving this week: ${c.ext.toLocaleString()}` : '');
     t.append(col);
   });
   r.append(l, t);

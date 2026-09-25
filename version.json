@@ -1,5 +1,5 @@
 {
-  "version": "0.7.126",
+  "version": "0.7.127",
   "released": "2026-09-25",
-  "note": "Steady harvest back to the first version: one zone at a time, its splits listed with the evenest marked Best."
+  "note": "Crop planner: plants to transplant each week under every zone (our nursery or ordered), and the total on top."
 }

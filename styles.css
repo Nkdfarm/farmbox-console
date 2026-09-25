@@ -1371,6 +1371,10 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .tl-wk-part.sow { background: color-mix(in srgb, #8bc34a 70%, transparent); }
 .tl-wk-part.sow-p { background: color-mix(in srgb, #8bc34a 28%, transparent); }
 .tl-wk-part.ext { background: color-mix(in srgb, #3b82f6 60%, transparent); }
+.tl-wk-part.ext-p { background: repeating-linear-gradient(135deg, color-mix(in srgb, #3b82f6 45%, transparent) 0 3px, transparent 3px 5px); }
+.tl-plants { height: 28px; }
+.tl-plants.total { height: 30px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.tl-plants .tl-label .hint { font-weight: 600; }
 .tl-wk-n { position: absolute; left: 2px; top: -1px; font-size: 9px; font-weight: 700; color: var(--text); text-shadow: 0 0 2px var(--surface); }
 
 /* ── orders (0.7.115) ───────────────────────────────────────────────────────── */

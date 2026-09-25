@@ -1,5 +1,5 @@
 {
-  "version": "0.7.127",
+  "version": "0.7.128",
   "released": "2026-09-25",
-  "note": "Crop planner: plants to transplant each week under every zone (our nursery or ordered), and the total on top."
+  "note": "Seedlings ordered from a nursery carry at most 3 % spare (was 10 %). Migration 0117."
 }

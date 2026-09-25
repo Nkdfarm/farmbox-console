@@ -437,7 +437,7 @@ export const NURSERY = [['internal', 'Internal nursery — we sow them'], ['exte
 export function nurseryField(crop) {
   const sel = selectBox(NURSERY, 'internal');
   const f = field('Seedlings', sel, 'Internal: the sowing is planned in our nursery from the cycle. External: an Office task '
-    + 'orders them from the nursery in time (with the farm\'s spare, 10 % by default), and a task receives them the working day before the transplant.');
+    + 'orders them from the nursery in time (with the farm\'s spare, at most 3 %), and a task receives them the working day before the transplant.');
   const set = c => { f.style.display = c?.nursery ? '' : 'none'; if (c?.nursery) sel.value = c.nursery; };
   set(crop);
   return { field: f, select: sel, set, value: () => f.style.display === 'none' ? null : sel.value };

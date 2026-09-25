@@ -212,12 +212,12 @@ function weekCard(may) {
   card.append(el('div', 'hint', 'The morning is the room the anytime tasks fill before the line on the boards; the afternoon starts at its end.'));
 
   // seedlings ordered from an external nursery: the spare on top of the places (0101)
-  const spare = el('input', 'input'); spare.type = 'number'; spare.min = 0; spare.max = 100; spare.step = 1;
-  spare.value = data.seedling_spare_pct ?? 10; spare.style.width = '6em';
+  const spare = el('input', 'input'); spare.type = 'number'; spare.min = 0; spare.max = 3; spare.step = 0.5;
+  spare.value = data.seedling_spare_pct ?? 3; spare.style.width = '6em';
   const saveSp = el('button', 'btn btn-sm', 'Save');
   saveSp.onclick = async () => {
     const v = Number(spare.value);
-    if (!(v >= 0 && v <= 100)) { toast('Between 0 and 100 %', 'bad'); return; }
+    if (!(v >= 0 && v <= 3)) { toast('Between 0 and 3 %', 'bad'); return; }
     busy(saveSp, true, 'Saving…');
     try {
       const rows = await patch('farm', `id=eq.${farm.id}`, { seedling_spare_pct: v });
@@ -229,7 +229,7 @@ function weekCard(may) {
   sp.append(el('span', null, 'Seedlings from a nursery'), spare, el('span', null, '% spare'));
   if (may) sp.append(saveSp); else spare.disabled = true;
   card.append(sp);
-  card.append(el('div', 'hint', 'Ordered on top of the places of each batch, for losses at transplant.'));
+  card.append(el('div', 'hint', 'Ordered on top of the places of each batch, for losses at transplant — at most 3 %.'));
 
   const p = el('div', 'row');
   p.style.marginTop = 'var(--space-3)';

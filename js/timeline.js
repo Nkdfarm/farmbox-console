@@ -820,7 +820,7 @@ function splitMenu(sys) {
 function steadyDrop(sys) {
   const idle = '⇣ Steady harvest: drop a crop here';
   const z = el('div', 'tl-steady', idle);
-  z.title = 'Drag a crop from the list onto this box: its positions are planted in a weekly rhythm, a harvest every week';
+  z.title = 'Drag a crop from the list onto this box: the zone is split and staggered for an even weekly harvest';
   const reset = () => { z.textContent = idle; z.classList.remove('over', 'bad'); };
   z.addEventListener('dragover', e => {
     if (!dragCrop) return;
@@ -837,142 +837,45 @@ function steadyDrop(sys) {
     const crop = dragCrop;
     dragCrop = null; clearGhost(); unmarkRows(); document.body.classList.remove('tl-dragging'); reset();
     if (!fits(crop, sys)) { toast(`${crop.name} does not grow in ${sys.name}`, 'bad'); return; }
-    openRhythm(sys, crop);
+    openSteady(sys, crop);
   });
   z.onclick = () => toast('Drag a crop from the list above onto this box');
   return z;
 }
 
-// one zone or several (0.7.123), a crop per zone and every split (0.7.124, migration 0115): the
-// zones chosen are chips, each with its crop; "+ Add a zone" offers the zones where a crop grows.
-// With several, the options are every combination of their splits, staggered as one sequence so
-// that the TOTAL is even. Sorted evenest first or fewest positions first — fewer, larger positions
-// are less work to plant, and a person may accept a less even week for them.
-const ZONE_COLOURS = ['#2e7d32', '#3b82f6', '#f59e0b', '#a855f7'];
-const STEADY_SORT = 'fbc_steady_sort';
-async function openSteady(zones, crops, horizon = 182) {
-  if (!Array.isArray(zones)) zones = [zones];
-  if (!Array.isArray(crops)) crops = zones.map(() => crops);
-  const multi = zones.length > 1;
-  const names = [...new Set(crops.map(c => c.name))].join(' + ');
-  const d = drawer(`Steady harvest · ${names}`, multi
-    ? `${zones.map(z => z.name).join(' + ')}: split and staggered together, for an even total every week`
-    : `${zones[0].name}: split along its rows and staggered, for an even harvest every week`);
-  const again = (zs, cs, h = horizon) => { d.close(); openSteady(zs, cs, h); };
-  // the zones, each with its crop, and adding one
-  const zrow = el('div', 'row tl-steady-zones');
-  zones.forEach((z, i) => {
-    const chip = el('span', 'tl-zone-chip', z.name);
-    chip.style.setProperty('--zc', ZONE_COLOURS[i % ZONE_COLOURS.length]);
-    const fitting = (data.crops || []).filter(c => fits(c, z));
-    if (!fitting.some(c => c.id === crops[i].id)) fitting.unshift(crops[i]);
-    const cs = selectBox(fitting.map(c => [c.id, c.name]), crops[i].id);
-    cs.classList.add('tl-zone-crop'); cs.title = `The crop grown in ${z.name}`;
-    cs.onchange = () => { const c = fitting.find(x => x.id === cs.value); if (c) again(zones, crops.map((y, j) => j === i ? c : y)); };
-    chip.append(cs);
-    if (multi) {
-      const x = el('button', 'btn btn-sm btn-ghost', '✕'); x.title = `Leave ${z.name} out`;
-      x.onclick = () => again(zones.filter((_, j) => j !== i), crops.filter((_, j) => j !== i));
-      chip.append(x);
-    }
-    zrow.append(chip);
-  });
-  // any zone some crop grows in; it starts on the first zone's crop when that fits, else another of the chosen, else its first crop
-  const firstFit = s => fits(crops[0], s) ? crops[0] : (crops.find(c => fits(c, s)) || (data.crops || []).find(c => fits(c, s)));
-  const others = (data.systems || []).filter(s => !zones.some(z => z.id === s.id) && firstFit(s));
-  if (others.length && zones.length < 4) {
-    const busyZone = s => (data.batches || []).some(b => (b.status === 'validated' || b.status === 'active')
-      && (s.positions || []).some(p => p.id === b.position_id));
-    const add = selectBox([['', '+ Add a zone'], ...others.map(s => [s.id, `${s.name} · ${systemLabel(s.type)}` + (busyZone(s) ? ' — busy, clear it first' : '')])], '');
-    add.classList.add('tl-add-zone');
-    add.onchange = () => { const s = others.find(o => o.id === add.value); if (s) again([...zones, s], [...crops, firstFit(s)]); };
-    zrow.append(add);
-  }
-  d.body.append(zrow);
+async function openSteady(sys, crop, horizon = 182) {
+  const d = drawer(`Steady harvest · ${crop.name}`, `${sys.name}: split along its rows and staggered, for an even harvest every week`);
   d.body.append(loading('Working out the splits…'));
   let o;
-  try {
-    o = multi
-      ? await rpc('steady_group_options', { p_systems: zones.map(z => z.id), p_crops: crops.map(c => c.id), p_from: null, p_horizon: horizon })
-      : await rpc('steady_options', { p_system: zones[0].id, p_crop: crops[0].id, p_from: null, p_horizon: horizon });
-  } catch (e) { d.body.lastChild.remove(); d.body.append(el('div', 'note bad', e.message)); return; }
-  d.body.lastChild.remove();
-
-  const kgCycle = multi ? o.zones.reduce((a, z) => a + Number(z.kg_cycle || 0), 0) : o.kg_cycle;
-  d.body.append(el('div', 'hint', multi
-    ? `The zones give about ${Math.round(kgCycle).toLocaleString()} kg a cycle together. First planting ${nice(o.start)}.`
-    : `A ${crops[0].name} stays ${o.stay} days in a position (${o.grow_days} growing, ${o.harvest_days} harvesting, then cleaning); ` +
-      `the zone gives about ${Math.round(o.kg_cycle).toLocaleString()} kg a cycle. First planting ${nice(o.start)}.`));
+  try { o = await rpc('steady_options', { p_system: sys.id, p_crop: crop.id, p_from: null, p_horizon: horizon }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+  d.body.textContent = '';
+  d.body.append(el('div', 'hint', `A ${crop.name} stays ${o.stay} days in a position (${o.grow_days} growing, ${o.harvest_days} harvesting, then cleaning); ` +
+    `the zone gives about ${Math.round(o.kg_cycle).toLocaleString()} kg a cycle. First planting ${nice(o.start)}.`));
   const hz = selectBox([['91', '13 weeks'], ['182', '26 weeks'], ['364', '52 weeks']], String(horizon));
-  hz.onchange = () => again(zones, crops, Number(hz.value));
+  hz.onchange = () => { d.close(); openSteady(sys, crop, Number(hz.value)); };
   d.body.append(field('Plan ahead for', hz));
-
-  const blockedZones = multi ? o.zones.filter(z => Number(z.blocked) > 0) : (o.blocked ? [{ system_id: zones[0].id, zone: zones[0].name, blocked: o.blocked }] : []);
-  blockedZones.forEach(bz => {
+  if (o.blocked) {
     const w = el('div', 'note warn');
-    w.append(`${bz.zone} has ${bz.blocked} batch${bz.blocked == 1 ? '' : 'es'} validated or growing: clear it first. `);
-    const cl = el('button', 'btn btn-sm', `Clear ${bz.zone}…`);
-    cl.onclick = () => { d.close(); openClear((data.systems || []).find(s => s.id === bz.system_id)); };
+    w.append(`${sys.name} has ${o.blocked} batch${o.blocked === 1 ? '' : 'es'} validated or growing: clear the zone first. `);
+    const cl = el('button', 'btn btn-sm', 'Clear the zone…');
+    cl.onclick = () => { d.close(); openClear(sys); };
     w.append(cl);
     d.body.append(w);
-  });
-
-  const opts = (o.options || []).map(x => ({ ...x, positions: Number(x.positions ?? x.n), ok: x.possible !== false }));
-  if (!opts.length) { d.body.append(el('div', 'note warn', 'No split works for this crop here.')); return; }
-  const cvOf = x => x.cv == null ? 99 : Number(x.cv);
-  let sort = pref.get(STEADY_SORT) === 'fewest' ? 'fewest' : 'flat';
-  const order = () => opts.slice().sort((a, b) => (b.ok - a.ok) || (sort === 'fewest'
-    ? a.positions - b.positions || cvOf(a) - cvOf(b)
-    : cvOf(a) - cvOf(b) || a.positions - b.positions));
-  let pick = opts.find(x => x.best && x.ok) || opts.find(x => x.ok) || opts[0];
-  const go = el('button', 'btn btn-primary', 'Plan it');
+  }
+  let pick = (o.options.find(x => x.best) || o.options[0]).n;
   const list = el('div', 'tl-steady-list');
-  const chart = el('div', 'tl-steady-chart');
-  const paintChart = () => {
-    chart.textContent = '';
-    const x = pick;
-    if (!multi || !(x.weeks || []).length) { chart.hidden = true; return; }
-    chart.hidden = false;
-    const max = Math.max(1, ...x.weeks.map(w => Number(w.kg)));
-    const bars = el('div', 'tl-steady-bars');
-    x.weeks.forEach(w => {
-      const col = el('div', 'tl-steady-col');
-      col.title = `Week of ${nice(w.w)}: ${Math.round(w.kg)} kg` + (w.z || []).map((k, i) => `\n${o.zones[i]?.zone} · ${o.zones[i]?.crop}: ${Math.round(k)} kg`).join('');
-      (w.z || []).forEach((k, i) => { const s = el('span'); s.style.height = (60 * Number(k) / max) + 'px'; s.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length]; col.append(s); });
-      bars.append(col);
-    });
-    const leg = el('div', 'row tl-steady-legend');
-    o.zones.forEach((z, i) => { const s = el('span'); const dot = el('i'); dot.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length]; s.append(dot, `${z.zone} · ${z.crop}`); leg.append(s); });
-    chart.append(el('div', 'hint', 'kg a week, each zone its colour'), bars, leg);
-  };
   const paintList = () => {
     list.textContent = '';
-    order().forEach(x => {
-      const r = el('label', 'tl-steady-opt' + (x.best ? ' best' : '') + (x === pick ? ' on' : '') + (x.ok ? '' : ' off'));
-      const radio = el('input'); radio.type = 'radio'; radio.name = 'steady-n'; radio.checked = x === pick; radio.disabled = !x.ok;
-      radio.onchange = () => { pick = x; paintList(); paintChart(); go.disabled = blockedZones.length > 0 || !pick.ok; };
+    o.options.forEach(x => {
+      const r = el('label', 'tl-steady-opt' + (x.best ? ' best' : '') + (x.n === pick ? ' on' : ''));
+      const radio = el('input'); radio.type = 'radio'; radio.name = 'steady-n'; radio.checked = x.n === pick;
+      radio.onchange = () => { pick = x.n; paintList(); };
       const t = el('div');
-      if (multi) {
-        const top = el('div', 'tl-steady-total', `${x.positions} position${x.positions === 1 ? '' : 's'} in all`);
-        if (x.best) top.append(el('span', 'pill ok', 'Evenest'));
-        t.append(top);
-        x.zones.forEach((z, i) => {
-          const line = el('div', 'tl-steady-zline');
-          const dot = el('i'); dot.style.background = ZONE_COLOURS[i % ZONE_COLOURS.length];
-          line.append(dot, el('b', null, `${z.zone}: ${z.n} × ${Number(z.places_each).toLocaleString()}`),
-            el('span', 'hint', ` ${z.crop || o.zones[i]?.crop || ''}` + (z.rows_each > 1 ? ` · ${z.rows_each} rows each` : '') + (z.current ? ' · now' : '')));
-          if (z.keeps_harvests) line.append(el('span', 'pill bad', 'has harvests'));
-          t.append(line);
-        });
-      } else {
-        t.append(el('b', null, `${x.n} position${x.n === 1 ? '' : 's'} × ${Number(x.places_each).toLocaleString()}` + (x.rows_each > 1 ? ` · ${x.rows_each} rows each` : '')));
-        if (x.best) t.append(el('span', 'pill ok', 'Evenest'));
-        if (x.current) t.append(el('span', 'pill', 'now'));
-      }
-      t.append(el('div', 'hint', x.ok
-        ? `a planting every ${Number(x.interval).toLocaleString()} days (${x.pattern === 'weekly' ? 'on the same weekday' : 'evenly'})` +
-          (multi ? '' : ` · ${Math.round(x.kg_batch).toLocaleString()} kg a batch`)
-        : 'Not possible: it would remove a position that has harvests recorded'));
+      t.append(el('b', null, `${x.n} position${x.n === 1 ? '' : 's'} × ${Number(x.places_each).toLocaleString()}` + (x.rows_each > 1 ? ` · ${x.rows_each} rows each` : '')));
+      if (x.best) t.append(el('span', 'pill ok', 'Best'));
+      if (x.current) t.append(el('span', 'pill', 'now'));
+      t.append(el('div', 'hint', `a planting every ${Number(x.interval).toLocaleString()} days (${x.pattern === 'weekly' ? 'on the same weekday' : 'evenly'}) · ${Math.round(x.kg_batch).toLocaleString()} kg a batch`));
       const w = el('div', 'tl-steady-kg');
       const cv = x.cv == null ? null : Math.round(Number(x.cv) * 100);
       w.append(el('b', null, `≈ ${Math.round(x.mean || 0).toLocaleString()} kg / week`),
@@ -983,195 +886,23 @@ async function openSteady(zones, crops, horizon = 182) {
       list.append(r);
     });
   };
-  // the order: evenest first, or fewest positions first (less splitting, more variation)
-  const sorter = el('div', 'tl-steady-sort');
-  [['flat', 'Evenest first'], ['fewest', 'Fewest positions first']].forEach(([k, label]) => {
-    const b = el('button', 'btn btn-sm' + (sort === k ? ' on' : ''), label);
-    b.onclick = () => { sort = k; pref.set(STEADY_SORT, k); sorter.querySelectorAll('button').forEach(y => y.classList.toggle('on', y === b)); paintList(); };
-    sorter.append(b);
-  });
-  const head = el('div', 'row tl-steady-head');
-  head.append(el('div', 'sec-title', `${multi ? 'How to split the zones' : 'How to split the zone'} · ${opts.length} way${opts.length === 1 ? '' : 's'}`), sorter);
-  paintList(); paintChart();
-  d.body.append(head, list, chart,
-    el('div', 'hint', 'Fewer positions are fewer, larger plantings: less work, but the weeks vary more. Changing the number of positions renames them from their rows (ABC, DEF…) and is a farm manager’s decision. Everything lands as proposals to validate.'));
+  paintList();
+  d.body.append(el('div', 'sec-title', 'How to split the zone'), list,
+    el('div', 'hint', 'Changing the number of positions renames them from their rows (ABC, DEF…) and is a farm manager’s decision. Everything lands as proposals to validate.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
-  go.disabled = blockedZones.length > 0 || !pick.ok;
+  const go = el('button', 'btn btn-primary', 'Plan it');
+  go.disabled = !!o.blocked;
   go.onclick = async () => {
-    const x = pick;
+    const x = o.options.find(y => y.n === pick);
     busy(go, true, 'Planning…');
     try {
-      const r = multi
-        ? await rpc('plan_steady_group', { p_systems: zones.map(z => z.id), p_crops: crops.map(c => c.id), p_ns: x.zones.map(z => z.n), p_pattern: x.pattern, p_from: null, p_horizon: horizon })
-        : await rpc('plan_steady', { p_system: zones[0].id, p_crop: crops[0].id, p_n: x.n, p_pattern: x.pattern, p_from: null, p_horizon: horizon });
+      const r = await rpc('plan_steady', { p_system: sys.id, p_crop: crop.id, p_n: pick, p_pattern: x.pattern, p_from: null, p_horizon: horizon });
       d.close();
-      toast(`${r.crop}: ${r.batches} batches proposed over ${multi ? zones.map(z => z.name).join(' + ') : zones[0].name} · ≈ ${Math.round(x.mean || 0)} kg a week`, 'ok');
+      toast(`${r.crop} in ${r.zone}: ${r.positions} positions, ${r.batches} batches proposed · ≈ ${Math.round(x.mean || 0)} kg a week`, 'ok');
       await reload();
     } catch (e) { busy(go, false, 'Plan it'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, go);
-}
-
-// ── a weekly rhythm (0.7.125, migration 0116) ─────────────────────────────────
-// The positions as they are, a crop on each, one turn a week: every position is
-// replanted every W weeks on the same weekday, and the harvests are spread one
-// (or n ÷ W) a week. Five 5-week crops on five positions = a harvest every week.
-// The whole-zone split of 0.7.121–0.7.124 stays behind "Split the whole zone…".
-const SLOT_COLOURS = ['#2e7d32', '#3b82f6', '#f59e0b', '#a855f7', '#ef4444', '#14b8a6', '#eab308', '#ec4899', '#64748b', '#84cc16'];
-const cycleWeeks = c => {
-  const stay = Number(c.grow_days || 0) + Number(c.harvest_days || 1) + Number(c.cleanup_days || 0);
-  return Math.max(1, Math.ceil((stay - Math.min(3, Math.max(Number(c.harvest_days || 1) - 1, 0))) / 7));
-};
-function openRhythm(sys, crop) {
-  const positions = (data.systems || []).flatMap(s => (s.positions || []).map(p => ({ ...p, sys: s })));
-  const posById = id => positions.find(p => p.id === id);
-  const fitting = s => (data.crops || []).filter(c => fits(c, s));
-  // start from this zone: as many of its positions as the crop's cycle has weeks
-  const own = positions.filter(p => p.sys.id === sys.id);
-  let slots = own.slice(0, Math.min(own.length, cycleWeeks(crop))).map(p => ({ pos: p.id, crop: crop.id }));
-  let weeks = null, horizon = 182, last = null, seq = 0;
-
-  const d = drawer('Steady harvest · a weekly rhythm',
-    'The positions you choose, a crop on each, planted one after the other on the same weekday — so a harvest comes every week.');
-  const banner = el('div', 'tl-rh-banner');
-  const table = el('div', 'tl-rh-slots');
-  const addRow = el('div', 'row tl-rh-add');
-  const cycleSel = selectBox([], '');
-  const hz = selectBox([['91', '13 weeks'], ['182', '26 weeks'], ['364', '52 weeks']], String(horizon));
-  const chart = el('div', 'tl-steady-chart');
-  const stats = el('div', 'hint');
-  const go = el('button', 'btn btn-primary', 'Plan it');
-
-  const paintSlots = () => {
-    table.textContent = '';
-    const used = new Set(slots.map(s => s.pos));
-    slots.forEach((s, i) => {
-      const p = posById(s.pos);
-      const info = last?.slots?.[i];
-      const row = el('div', 'tl-rh-slot');
-      const dot = el('i', 'tl-rh-dot'); dot.style.background = SLOT_COLOURS[i % SLOT_COLOURS.length];
-      const turn = el('span', 'tl-rh-turn', info ? `wk ${info.week + 1}` : '');
-      turn.title = 'The week of the cycle this position is harvested';
-      const ps = selectBox(positions.filter(q => q.id === s.pos || (!used.has(q.id) && fitting(q.sys).length))
-        .map(q => [q.id, `${q.sys.name} · ${q.code}` + (q.capacity ? ` (${Number(q.capacity).toLocaleString()})` : '')]), s.pos);
-      ps.onchange = () => {
-        const q = posById(ps.value);
-        s.pos = q.id;
-        if (!fitting(q.sys).some(c => c.id === s.crop)) s.crop = (fitting(q.sys)[0] || {}).id;
-        refresh();
-      };
-      const crops = p ? fitting(p.sys) : [];
-      const cs = selectBox(crops.map(c => [c.id, c.name]), s.crop);
-      cs.onchange = () => { s.crop = cs.value; refresh(); };
-      const note = el('span', 'hint tl-rh-note');
-      if (info) {
-        const bits = [];
-        if (info.trim > 0) bits.push(`harvest ${info.trim} day${info.trim > 1 ? 's' : ''} shorter`);
-        if (info.idle > 0) bits.push(`empty ${info.idle} day${info.idle > 1 ? 's' : ''} a cycle`);
-        if (info.first) bits.push(`first ${nice(info.first)}`);
-        if (info.skipped > 0) bits.push(`${info.skipped} turn${info.skipped > 1 ? 's' : ''} skipped: busy`);
-        note.textContent = bits.join(' · ');
-        if (info.skipped > 0) note.classList.add('warn');
-      }
-      const up = el('button', 'btn btn-sm btn-ghost', '↑'); up.title = 'Earlier turn'; up.disabled = i === 0;
-      up.onclick = () => { [slots[i - 1], slots[i]] = [slots[i], slots[i - 1]]; refresh(); };
-      const x = el('button', 'btn btn-sm btn-ghost', '✕'); x.title = 'Leave this position out'; x.disabled = slots.length === 1;
-      x.onclick = () => { slots.splice(i, 1); refresh(); };
-      row.append(dot, turn, ps, cs, up, x, note);
-      table.append(row);
-    });
-    addRow.textContent = '';
-    const free = positions.filter(q => !used.has(q.id) && fitting(q.sys).length);
-    if (free.length && slots.length < 40) {
-      const lastPos = posById(slots[slots.length - 1]?.pos);
-      const b = el('button', 'btn btn-sm', '+ Add a position');
-      b.onclick = () => {
-        const q = free.find(f => lastPos && f.sys.id === lastPos.sys.id) || free[0];
-        const prev = slots[slots.length - 1]?.crop;
-        slots.push({ pos: q.id, crop: fitting(q.sys).some(c => c.id === prev) ? prev : fitting(q.sys)[0].id });
-        refresh();
-      };
-      addRow.append(b);
-    }
-  };
-
-  const paintResult = () => {
-    const o = last;
-    banner.textContent = ''; banner.className = 'tl-rh-banner';
-    chart.textContent = ''; stats.textContent = '';
-    if (!o) return;
-    const n = o.positions, w = o.cycle_weeks, per = n / w;
-    const flat = Number(o.empty_weeks) === 0 && Number(o.cuts_min) === Number(o.cuts_max);
-    banner.classList.add(flat ? 'ok' : 'warn');
-    banner.append(el('b', null, `${n} position${n > 1 ? 's' : ''} on a ${w}-week cycle`),
-      el('span', null, flat
-        ? ` → ${per === 1 ? 'a harvest every week' : `${o.cuts_min} harvest${o.cuts_min > 1 ? 's' : ''} every week`}`
-        : ` → ${Number.isInteger(per) ? `${per}` : per.toFixed(1)} harvests a week on average` +
-          (Number(o.empty_weeks) ? ` · ${o.empty_weeks} week${o.empty_weeks > 1 ? 's' : ''} without one` : '') +
-          ` · for the same every week use ${w} or ${2 * w} positions`));
-    const weeksList = o.weeks || [];
-    if (weeksList.length) {
-      const max = Math.max(1, ...weeksList.map(x => Number(x.kg)));
-      const bars = el('div', 'tl-steady-bars');
-      weeksList.forEach(x => {
-        const col = el('div', 'tl-steady-col');
-        col.title = `Week of ${nice(x.w)}: ${Math.round(x.kg)} kg, ${x.cuts} harvest${x.cuts === 1 ? '' : 's'} starting` +
-          (x.s || []).map((k, i) => Number(k) ? `\n${o.slots[i]?.zone} ${o.slots[i]?.code} · ${o.slots[i]?.crop}: ${Math.round(k)} kg` : '').join('');
-        (x.s || []).forEach((k, i) => { const sp = el('span'); sp.style.height = (60 * Number(k) / max) + 'px'; sp.style.background = SLOT_COLOURS[i % SLOT_COLOURS.length]; col.append(sp); });
-        bars.append(col);
-      });
-      chart.append(el('div', 'hint', 'kg a week, each position its colour'), bars);
-    }
-    const cv = o.cv == null ? null : Math.round(Number(o.cv) * 100);
-    stats.textContent = o.batches
-      ? `≈ ${Math.round(o.mean || 0).toLocaleString()} kg a week (${Math.round(o.min || 0).toLocaleString()}–${Math.round(o.max || 0).toLocaleString()}, ±${cv ?? '—'}%) · ${o.batches} plantings from ${nice(o.start)}` +
-        (cv > 15 ? ' · the kilograms differ with the size of each position and the crop, not with the timing' : '')
-      : 'Nothing fits in this window.';
-    // the cycle menu: the fewest weeks every crop fits, and a few longer
-    const opts = [];
-    for (let k = o.cycle_min; k <= Math.min(o.cycle_min + 4, 26); k++) opts.push([String(k), `every ${k} weeks` + (k === o.cycle_min ? ' (fewest that fits)' : '')]);
-    cycleSel.textContent = '';
-    opts.forEach(([v, t]) => { const op = el('option', null, t); op.value = v; cycleSel.append(op); });
-    cycleSel.value = String(o.cycle_weeks);
-    go.disabled = !o.batches || o.may_plan === false;
-  };
-
-  const args = () => ({ p_slots: slots.map(s => ({ position_id: s.pos, crop_id: s.crop })), p_weeks: weeks, p_from: null, p_horizon: horizon });
-  const refresh = async () => {
-    const mine = ++seq;
-    last = null; paintSlots(); paintResult();
-    banner.append(loading('Working out the rhythm…'));
-    try {
-      const o = await rpc('rhythm_preview', args());
-      if (mine !== seq) return;
-      last = o;
-    } catch (e) {
-      if (mine !== seq) return;
-      banner.textContent = ''; banner.append(el('div', 'note bad', e.message)); go.disabled = true; return;
-    }
-    paintSlots(); paintResult();
-  };
-  cycleSel.onchange = () => { weeks = Number(cycleSel.value); refresh(); };
-  hz.onchange = () => { horizon = Number(hz.value); refresh(); };
-
-  const opts = el('div', 'row tl-rh-opts');
-  opts.append(field('Replant each position', cycleSel), field('Plan ahead for', hz));
-  d.body.append(banner, el('div', 'sec-title', 'Positions, in the order of their harvest'), table, addRow, opts, chart, stats,
-    el('div', 'hint', 'Each position keeps its size and code; the rest of the zones is left alone. A turn that would fall on a batch validated or growing is skipped. It all lands as proposals to validate, replacing the proposals on these positions.'));
-  const split = el('button', 'btn btn-ghost', 'Split the whole zone instead…');
-  split.onclick = () => { d.close(); openSteady([sys], crop); };
-  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
-  go.onclick = async () => {
-    busy(go, true, 'Planning…');
-    try {
-      const r = await rpc('plan_rhythm', args());
-      d.close();
-      toast(`${r.batches} plantings proposed on ${r.positions} positions, every ${r.cycle_weeks} weeks · ≈ ${Math.round(r.mean || 0)} kg a week`, 'ok');
-      await reload();
-    } catch (e) { busy(go, false, 'Plan it'); toast(e.message, 'bad'); }
-  };
-  d.footer.append(split, cancel, go);
-  refresh();
 }
 
 // ── clearing a zone, after saying what goes ──────────────────────────────────

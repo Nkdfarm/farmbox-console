@@ -2,7 +2,7 @@
   "id": "/farmbox-console",
   "name": "Naked Heart",
   "short_name": "Naked Heart",
-  "description": "Run a FarmBox: people, plans, procedures, crops.",
+  "description": "Run the FarmBox: plans, crops and people.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

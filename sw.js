@@ -1,4 +1,4 @@
-// Naked Console (was FarmBox Console) — service worker.
+// Naked Heart (was Naked Console, FarmBox Console) — service worker.
 //
 // Network first, cache second, deliberately. The phone app was bitten once by a
 // cache-first worker that kept serving a shipped-and-fixed bug for days
@@ -9,7 +9,7 @@
 // Bump CACHE when the shell changes; the old one is deleted on activate.
 // TAG is the ?v= index.html puts on styles.css and app.js: the two must match
 // (the precached URL is the requested URL), so bump both together.
-const TAG = '20260926a';
+const TAG = '20260926b';
 const CACHE = 'farmbox-console-' + TAG;
 
 const SHELL = [

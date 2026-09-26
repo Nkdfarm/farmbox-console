@@ -437,7 +437,7 @@ async function route() {
     a.dataset.route === sec ? a.setAttribute('aria-current', 'page')
                             : a.removeAttribute('aria-current'));
   const title = SECTIONS[sec].title;
-  document.title = `${tab[1] === title ? title : tab[1] + ' · ' + title} · Naked Console`;
+  document.title = `${tab[1] === title ? title : tab[1] + ' · ' + title} · Naked Heart`;
   paintTabs(sec, tab);
 
   newPage();

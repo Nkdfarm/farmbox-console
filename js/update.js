@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.7.130';
+export const VERSION = '0.7.131';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -73,7 +73,7 @@ function show(latest, stuck) {
   const text = el('div', 'update-text');
   text.append(el('b', null, `Version ${latest} is ready`));
   text.append(el('span', null, stuck
-    ? 'The update did not finish — close every Naked Console tab and open it again.'
+    ? 'The update did not finish — close every Naked Heart tab and open it again.'
     : `You are on ${VERSION}. Nothing you have typed is lost by updating.`));
 
   const go = el('button', 'btn btn-primary btn-sm', 'Update now');

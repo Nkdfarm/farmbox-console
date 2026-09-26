@@ -449,7 +449,7 @@ function version() {
   const list = el('div', 'set-list');
   const status = el('small', null, 'Checking for updates…');
   const t = el('div', 'set-text');
-  t.append(el('b', null, `Naked Console ${VERSION}`), status);
+  t.append(el('b', null, `Naked Heart ${VERSION}`), status);
   const btn = el('button', 'btn btn-sm', 'Check again');
   btn.type = 'button';
   const r = el('div', 'set-row');

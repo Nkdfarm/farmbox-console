@@ -1507,3 +1507,11 @@ body.ai-open .main { margin-right: min(420px, 90vw); }
 .st-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
 @media (max-width: 700px) { .st-zone, .st-line { grid-template-columns: 1fr; } }
 .st-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+/* ── sister units on the combined board (0.7.139) ───────────────────────────── */
+.tk-unit { flex: none; font-size: 9px; font-weight: 800; letter-spacing: .04em; line-height: 1; padding: 3px 4px; border-radius: 4px;
+  color: #fff; background: var(--u); }
+.tk-unit.big { font-size: 11px; padding: 3px 6px; }
+.tk.has-unit { box-shadow: inset 3px 0 0 var(--u); }
+.unit-legend { display: inline-flex; gap: 10px; align-items: center; font-size: var(--text-xs); color: var(--text-muted); }
+.unit-legend .tk-unit { margin-right: 4px; }

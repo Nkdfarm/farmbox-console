@@ -1,5 +1,5 @@
 {
-  "version": "0.7.138",
+  "version": "0.7.139",
   "released": "2026-09-28",
-  "note": "Fixed harvest days."
+  "note": "Sister units: FarmLab and FarmBox1 on one board."
 }

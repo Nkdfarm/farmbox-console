@@ -45,7 +45,7 @@ const weeks = new Map();  // Monday → labour_week payload
 let data = null;          // the payload of the week in focus (its plan and roster)
 let body = null;          // the part under the toolbars, repainted on its own
 
-const EMPTY_FILTERS = { q: '', status: 'open', family: '', category: '', crop: '', worker: '', area: '', priority: '' };
+const EMPTY_FILTERS = { q: '', status: 'open', unit: '', family: '', category: '', crop: '', worker: '', area: '', priority: '' };
 let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
 // 0.7.111: `drop` = the tasks to take a name off — the chosen person's, or everybody's when no face is chosen
@@ -120,6 +120,21 @@ function holidayOn(date) {
   return null;
 }
 
+// sister units (0.7.139): one board for the group, each task marked with its unit
+function units() {
+  for (const w of weeks.values()) if ((w?.sisters || []).length > 1) return w.sisters;
+  return [];
+}
+const unitOf = t => units().find(u => u.id === t.farm_id) || null;
+function unitMark(t, big) {
+  const u = unitOf(t);
+  if (!u) return null;
+  const m = el('span', 'tk-unit' + (big ? ' big' : ''), u.badge);
+  m.style.setProperty('--u', u.colour || 'var(--text-muted)');
+  m.title = u.name;
+  return m;
+}
+
 // every task on screen, once
 function tasksOnScreen() {
   const seen = new Set(), out = [];
@@ -140,6 +155,7 @@ function visible(tasks) {
     && (!filters.family || t.family === filters.family)
     && (!filters.category || (t.category || '') === filters.category)
     && (!filters.crop || (t.crops?.length ? t.crops : [t.crop || '']).includes(filters.crop))
+    && (!filters.unit || t.farm_id === filters.unit)
     && (!filters.area || (t.area || '') === filters.area)
     && (!filters.priority || t.priority === filters.priority)
     && (!filters.worker || (filters.worker === 'nobody' ? !t.workers.length : t.workers.some(w => w.id === filters.worker)))
@@ -334,6 +350,7 @@ function filterBar() {
     bar.append(s);
   };
   sel('status', 'Status', STATUS);
+  if (units().length > 1) sel('unit', 'Unit', units().map(u => [u.id, u.name]));
   sel('family', 'Type', uniq(t => t.family).map(x => [x, x]));
   sel('category', 'Sub-family', uniq(t => t.category).map(x => [x, x]));
   sel('crop', 'Crop', [...new Set(tasks.flatMap(t => t.crops?.length ? t.crops : [t.crop]).filter(Boolean))].sort().map(x => [x, x]));
@@ -349,6 +366,12 @@ function filterBar() {
   clear.disabled = !on && !filters.q;
   clear.onclick = () => { filters = { ...EMPTY_FILTERS }; remember(); paint(); };
   bar.append(clear);
+  // the units on this board, with their marks (sister units, 0.7.139)
+  if (units().length > 1) {
+    const lg = el('span', 'unit-legend');
+    units().forEach(u => { const x = el('span'); const m = el('span', 'tk-unit', u.badge); m.style.setProperty('--u', u.colour || 'var(--text-muted)'); x.append(m, u.name); lg.append(x); });
+    bar.append(lg);
+  }
   return bar;
 }
 const remember = () => pref.set(FILTER_KEY, JSON.stringify({ ...filters, q: '' }));
@@ -533,7 +556,10 @@ function chip(t, opts = {}) {
     text.append(el('span', 'tk-sub', [hhmm(t.due_time) || SLOT_WORD[slotOf(t)], t.area, t.crop, t.category, hrs(t.minutes) + ' h',
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
   }
-  c.append(stateMark(t), ic, text);
+  c.append(stateMark(t));
+  const um = unitMark(t, opts.big);
+  if (um) { c.append(um); c.style.setProperty('--u', unitOf(t).colour || 'transparent'); c.classList.add('has-unit'); }
+  c.append(ic, text);
   // a harvest under a treatment's withholding period (0098)
   if (t.withholding_until && t.status !== 'done') {
     const w = el('span', 'tk-hold', '⛔'); w.title = `Do not harvest before ${longDate(t.withholding_until)} — a treatment's withholding period`;
@@ -659,6 +685,7 @@ function openTask(t) {
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
   if (t.withholding_until && t.status !== 'done') d.body.append(el('div', 'note bad', `Do not harvest before ${longDate(t.withholding_until)} — a treatment on this crop is in its withholding period. Move this task, or check the case in Pest & diseases.`));
+  if (unitOf(t)) { const um = unitMark(t, true); const w = el('span'); w.append(um, ' ' + unitOf(t).name); fact('Unit', w); }
   fact('Kind', subFamilyTag(t.category || t.family));
   fact('Family', t.family);
   if (t.crop) fact('Crop', t.crop);

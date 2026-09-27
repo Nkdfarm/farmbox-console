@@ -253,6 +253,31 @@ function weekCard(may) {
     'crop work, maintenance or treatments — to try the ordering before the farm runs fully. Seedlings sets where a new batch\'s ' +
     'seedlings come from when the planner is not told otherwise.'));
 
+  // sister units (0.7.139, migration 0125): the group, and this unit's mark on the combined board
+  if ((data.sisters || []).length) {
+    const sr = el('div', 'row'); sr.style.marginTop = 'var(--space-3)'; sr.style.alignItems = 'center'; sr.style.flexWrap = 'wrap';
+    sr.append(el('span', null, 'Sister units'));
+    const mark = (label, colour) => { const m = el('span', 'tk-unit big', label); m.style.setProperty('--u', colour || 'var(--text-muted)'); return m; };
+    data.sisters.forEach(u => { const x = el('span', 'pill'); x.append(mark(u.badge, u.colour), ' ' + u.name + (u.home ? ' · home' : '')); sr.append(x); });
+    const lab = input({ value: data.badge_label || farm.code || '', maxlength: 6 }); lab.style.width = '6em'; lab.setAttribute('aria-label', 'This unit’s mark');
+    const col = el('input', 'input'); col.type = 'color'; col.value = data.badge_colour || '#6d8cf0'; col.setAttribute('aria-label', 'This unit’s colour');
+    col.style.width = '3em'; col.style.padding = '2px';
+    const saveU = el('button', 'btn btn-sm', 'Save mark');
+    saveU.onclick = async () => {
+      busy(saveU, true, 'Saving…');
+      try {
+        const rows = await patch('farm', `id=eq.${farm.id}`, { badge_label: lab.value.trim() || null, badge_colour: col.value });
+        if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+        toast('This unit’s mark is saved', 'ok'); busy(saveU, false, 'Save mark');
+      } catch (e) { busy(saveU, false, 'Save mark'); toast(e.message, 'bad'); }
+    };
+    sr.append(el('span', 'hint', 'This unit:'), mark(data.badge_label || farm.code, data.badge_colour), lab, col);
+    if (may) sr.append(saveU); else { lab.disabled = col.disabled = true; }
+    card.append(sr);
+    card.append(el('div', 'hint', 'Sister units share their people, suppliers, stock, working days, harvest days and holidays; ' +
+      'their growing areas, crops, tasks and equipment are their own. The Tasks board shows the group’s work, each task with its unit’s mark.'));
+  }
+
   // the fixed harvest days (0.7.138, migration 0123): none ticked = any working day
   const hd = new Set(data.harvest_days || []);
   const hdRow = el('div', 'row'); hdRow.style.marginTop = 'var(--space-3)'; hdRow.style.alignItems = 'center';

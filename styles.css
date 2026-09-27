@@ -1432,19 +1432,8 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .planner-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-height: 32px; }
 .planner-switch, .planner-top > .tl-info { flex: none; }
 
-/* ── a steady harvest and clearing a zone (0.7.121) ─────────────────────────── */
-.tl-steady { font-size: var(--text-xs); color: var(--text-muted); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-md);
-  padding: 4px 10px; white-space: nowrap; cursor: default; }
-.tl-steady.over { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.tl-steady.bad { border-color: var(--danger, #e5484d); background: rgba(229,72,77,.12); }
+/* ── clearing a zone (0.7.121); the steady meter (used by the steady window) ── */
 .tl-clear { color: var(--danger, #e5484d); }
-.tl-steady-list { display: grid; gap: var(--space-2); }
-.tl-steady-opt { display: grid; grid-template-columns: auto 1fr minmax(170px, auto); gap: var(--space-3); align-items: center;
-  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; }
-.tl-steady-opt.best { border-color: color-mix(in srgb, var(--success, #2e7d32) 70%, transparent); background: color-mix(in srgb, var(--success, #2e7d32) 10%, transparent); }
-.tl-steady-opt.on { outline: 2px solid var(--accent); outline-offset: 1px; }
-.tl-steady-opt .pill { margin-left: 6px; }
-.tl-steady-kg { text-align: right; }
 .tl-steady-meter { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 4px; }
 .tl-steady-meter i { display: block; height: 100%; background: var(--success, #2e7d32); }
 .tl-clear-list { margin: 0 0 var(--space-3); padding-left: 1.2em; }
@@ -1484,3 +1473,37 @@ body.ai-open .main { margin-right: min(420px, 90vw); }
 
 .tl-steady-legend { gap: var(--space-3); font-size: var(--text-xs); color: var(--text-muted); margin-top: 4px; }
 .tl-steady-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── a steady harvest over several zones (0.7.135): choosing, the group, the window ── */
+.tl-steady-banner { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: 8px 12px; margin-bottom: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface)); font-size: var(--text-sm); }
+.tl-zone .tl-label.pickable { cursor: pointer; }
+.tl-zone .tl-label input[type=checkbox] { margin: 0 6px 0 0; accent-color: var(--accent); flex: none; }
+.tl-row.steady .tl-track { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.tl-row.steady .tl-label { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.tl-zone.steady, .tl-zone.steady .tl-label { background: color-mix(in srgb, var(--accent) 12%, var(--surface-offset, var(--chip))); }
+.tl-zone.picked, .tl-zone.picked .tl-label { background: color-mix(in srgb, var(--accent) 22%, var(--surface-offset, var(--chip))); }
+.tl-group { border-top: 2px solid color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.tl-group, .tl-group .tl-label { background: color-mix(in srgb, var(--accent) 18%, var(--surface-offset, var(--chip))); }
+.tl-group-sum { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
+.tl-others .tl-label { color: var(--text-muted); font-weight: 600; }
+.tl-steady-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 600; white-space: nowrap; background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.tl-chip-x { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 50%; }
+.tl-chip-x:hover { background: var(--hover); color: var(--text); }
+.st-zones { display: grid; gap: 6px; }
+.st-zone { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(140px, 1.2fr) minmax(150px, 1.2fr); gap: var(--space-2); align-items: center; }
+.st-zone-head { font-size: var(--text-xs); }
+.st-series { display: grid; gap: 10px; margin-bottom: 8px; }
+.st-line { display: grid; grid-template-columns: minmax(120px, auto) 1fr 90px; gap: 10px; align-items: center; }
+.st-name { display: flex; align-items: center; gap: 6px; }
+.st-facts { display: flex; flex-direction: column; font-size: var(--text-xs); }
+.st-chart { display: flex; align-items: flex-end; gap: 2px; height: 110px; margin-top: 10px; padding: 4px; border-radius: var(--radius-md); background: var(--chip); }
+.st-col { flex: 1; min-width: 3px; height: 100%; display: flex; flex-direction: column-reverse; }
+.st-col span { display: block; width: 100%; }
+.st-col span:last-child { border-radius: 2px 2px 0 0; }
+.st-col.ramp { opacity: .4; }
+.st-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+@media (max-width: 700px) { .st-zone, .st-line { grid-template-columns: 1fr; } }
+.st-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }

@@ -14,7 +14,7 @@ import { rpc, fn } from './api.js';
 import { el, toast, pref } from './ui.js';
 
 // the changes a card may carry — the same list the function accepts
-const ALLOWED = new Set(['plan_position', 'plan_succession', 'plan_steady', 'move_batch', 'resize_batch', 'change_batch_crop',
+const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
   'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday']);
 const OPEN_KEY = 'fbc_ai_open';

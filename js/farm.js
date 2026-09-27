@@ -253,6 +253,34 @@ function weekCard(may) {
     'crop work, maintenance or treatments — to try the ordering before the farm runs fully. Seedlings sets where a new batch\'s ' +
     'seedlings come from when the planner is not told otherwise.'));
 
+  // the fixed harvest days (0.7.138, migration 0123): none ticked = any working day
+  const hd = new Set(data.harvest_days || []);
+  const hdRow = el('div', 'row'); hdRow.style.marginTop = 'var(--space-3)'; hdRow.style.alignItems = 'center';
+  hdRow.append(el('span', null, 'Harvest days'));
+  DAYS.forEach(([n, label]) => {
+    const b = el('button', 'toggle', label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(hd.has(n)));
+    b.disabled = !may;
+    b.onclick = () => { hd.has(n) ? hd.delete(n) : hd.add(n); b.setAttribute('aria-pressed', String(hd.has(n))); };
+    hdRow.append(b);
+  });
+  const saveHd = el('button', 'btn btn-sm', 'Save');
+  saveHd.onclick = async () => {
+    const days = [...hd].sort((a, b) => a - b);
+    busy(saveHd, true, 'Saving…');
+    try {
+      const rows = await patch('farm', `id=eq.${farm.id}`, { harvest_days: days.length ? days : null });
+      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+      toast(days.length ? 'Harvests on ' + days.map(d => DAYS[d - 1][1]).join(' and ') : 'Harvests on any working day', 'ok');
+      busy(saveHd, false, 'Save');
+    } catch (e) { busy(saveHd, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  if (may) hdRow.append(saveHd);
+  card.append(hdRow);
+  card.append(el('div', 'hint', 'The harvest tasks of the crop plan fall on these days (a holiday moves to the next one); none ticked = any working day. ' +
+    'Batches already validated follow on their next replan.'));
+
   const p = el('div', 'row');
   p.style.marginTop = 'var(--space-3)';
   p.append(el('span', 'pill',

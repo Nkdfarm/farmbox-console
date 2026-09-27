@@ -1,5 +1,5 @@
 {
-  "version": "0.7.137",
+  "version": "0.7.138",
   "released": "2026-09-28",
-  "note": "No whole-farm plan: one bay at a time."
+  "note": "Fixed harvest days."
 }

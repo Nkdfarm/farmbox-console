@@ -1,5 +1,5 @@
 {
-  "version": "0.7.136",
+  "version": "0.7.137",
   "released": "2026-09-28",
-  "note": "Seedling orders only: a farm can take just its seedling orders."
+  "note": "No whole-farm plan: one bay at a time."
 }

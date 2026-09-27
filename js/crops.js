@@ -87,12 +87,8 @@ function paint() {
   const cur = map.currency || 'ZAR';
 
   // the map's controls in the planner's top bar (0.7.120): its counts, then planning; the explanation behind ⓘ
+  // no "Plan the whole farm" (0.7.137): each bay has its own Plan this bay
   const controls = [...summary(cur).children, el('div', 'spacer')];
-  if (may) {
-    const b = el('button', 'btn btn-primary btn-sm', 'Plan the whole farm');
-    b.onclick = () => propose(b);
-    controls.push(b);
-  }
   if (shell && mount === shell.body) {
     shell.left.replaceChildren(...controls);
     shell.setHelp('One tile per growing position. The planner fills the empty ones with whatever earns most per day the ' +
@@ -386,7 +382,7 @@ function openPosition(p, s, cur) {
   d.footer.append(el('div', 'spacer', ''), close);
 }
 
-// scope is a system code for one bay, or nothing for the whole farm
+// scope is the system code of the bay to plan (the whole farm is not planned in one go since 0.7.137)
 async function propose(button, scope, label) {
   const back = button.textContent;
   busy(button, true, 'Planning…');

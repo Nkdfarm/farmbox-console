@@ -110,13 +110,11 @@ function paint() {
   const proposed = (data.batches || []).filter(b => b.status === 'proposed');
   const act = el('div', 'tl-actions');
   if (may) {
-    const all = el('button', 'btn btn-primary btn-sm', 'Plan the whole farm');
-    all.title = 'Fill every free position inside the window with what earns most per day';
-    all.onclick = () => propose(all);
+    // the whole farm is no longer planned in one go (0.7.137): Plan this bay on each zone
     const suc = el('button', 'btn btn-sm', 'Succession…');
     suc.title = 'The same crop planted again and again — every week, say — for a steady harvest';
     suc.onclick = () => succession();
-    act.append(all, suc);
+    act.append(suc);
     if (!steadyMode) {
       const st = el('button', 'btn btn-sm tl-steady-btn', data.steady ? 'Steady harvest: change zones…' : 'Steady harvest…');
       st.title = 'Pick the zones to plan together for an even harvest every week — zones with different crops may be mixed';

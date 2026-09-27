@@ -1,5 +1,5 @@
 {
-  "version": "0.7.135",
+  "version": "0.7.136",
   "released": "2026-09-28",
-  "note": "Steady harvest over several zones, and half rows."
+  "note": "Seedling orders only: a farm can take just its seedling orders."
 }

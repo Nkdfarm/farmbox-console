@@ -231,6 +231,28 @@ function weekCard(may) {
   card.append(sp);
   card.append(el('div', 'hint', 'Ordered on top of the places of each batch, for losses at transplant — at most 3 %.'));
 
+  // which tasks this FarmBox gets, and where its seedlings come from (0.7.136, migration 0121)
+  const mode = selectBox([['all', 'Every task'], ['seedlings', 'Seedling orders only'], ['none', 'No tasks']], data.task_mode || 'all');
+  const nurs = selectBox([['', 'As each crop says'], ['external', 'From a nursery'], ['internal', 'Our own nursery']], data.nursery_default || '');
+  const saveMode = el('button', 'btn btn-sm', 'Save');
+  saveMode.onclick = async () => {
+    busy(saveMode, true, 'Saving…');
+    try {
+      const rows = await patch('farm', `id=eq.${farm.id}`, { task_mode: mode.value, nursery_default: nurs.value || null });
+      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+      toast(mode.value === 'all' ? 'Every task is generated' : mode.value === 'seedlings'
+        ? 'Only the seedling orders and deliveries are generated' : 'No tasks are generated', 'ok');
+      busy(saveMode, false, 'Save');
+    } catch (e) { busy(saveMode, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  const tm = el('div', 'row'); tm.style.marginTop = 'var(--space-3)'; tm.style.alignItems = 'center';
+  tm.append(el('span', null, 'Tasks generated'), mode, el('span', null, 'Seedlings'), nurs);
+  if (may) tm.append(saveMode); else { mode.disabled = nurs.disabled = true; }
+  card.append(tm);
+  card.append(el('div', 'hint', 'Seedling orders only: validated batches make just their Order seedlings and Receive seedlings tasks — no routines, ' +
+    'crop work, maintenance or treatments — to try the ordering before the farm runs fully. Seedlings sets where a new batch\'s ' +
+    'seedlings come from when the planner is not told otherwise.'));
+
   const p = el('div', 'row');
   p.style.marginTop = 'var(--space-3)';
   p.append(el('span', 'pill',

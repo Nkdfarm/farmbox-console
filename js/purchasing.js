@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
-         num, shortDate } from './ui.js';
+         num, shortDate, selectBox, confirmDrawer } from './ui.js';
 
 let farm = null, data = null, mount = null, chosen = new Set(), tab = 'requests';
 
@@ -36,6 +36,7 @@ function paint() {
   mount.textContent = '';
   const may = data.may_order;
   const drafts = data.requests.filter(r => r.status === 'draft');
+  const toOrder = drafts.filter(r => !r.po_id);
   const ordered = data.requests.filter(r => r.status === 'ordered');
   const late = drafts.filter(r => r.late).length;
   const below = data.stock.filter(s => s.below).length;
@@ -45,7 +46,7 @@ function paint() {
   compute.onclick = () => recompute(compute);
 
   mount.append(pageHead('Purchasing',
-    `${drafts.length} to order${late ? `, ${late} already late` : ''}` +
+    `${toOrder.length} to order${late ? `, ${late} already late` : ''}` +
     `${ordered.length ? `, ${ordered.length} on the way` : ''}` +
     `${below ? `, ${below} item${below === 1 ? '' : 's'} below the reorder point` : ''}.`,
     may ? compute : null));
@@ -56,9 +57,11 @@ function paint() {
       'Those batches are at risk — order today, or move the transplant.'));
   }
 
+  const openPos = (data.orders || []).filter(o => ['draft', 'approved', 'sent'].includes(o.status));
   const tabs = el('div', 'chips');
   tabs.style.marginBottom = 'var(--space-4)';
-  [['requests', `To order · ${drafts.length}`],
+  [['requests', `To order · ${drafts.filter(r => !r.po_id).length}`],
+   ['orders', `Purchase orders · ${openPos.length}`],
    ['ordered', `On the way · ${ordered.length}`],
    ['stock', `Stock · ${data.stock.length}`],
    ['suppliers', `Suppliers · ${data.suppliers.length}`]].forEach(([k, label]) => {
@@ -68,7 +71,8 @@ function paint() {
   });
   mount.append(tabs);
 
-  if (tab === 'requests') mount.append(requestsCard(drafts, may));
+  if (tab === 'requests') mount.append(requestsCard(drafts.filter(r => !r.po_id), may));
+  if (tab === 'orders') mount.append(ordersCard(data.orders || [], may));
   if (tab === 'ordered') mount.append(orderedCard(ordered, may));
   if (tab === 'stock') mount.append(stockCard(may));
   if (tab === 'suppliers') mount.append(suppliersCard());
@@ -77,9 +81,13 @@ function paint() {
 function requestsCard(rows, may) {
   const c = card('To order');
   if (may && rows.length) {
-    const mark = el('button', 'btn btn-sm', 'Mark chosen as ordered');
+    const po = el('button', 'btn btn-sm btn-primary', 'Make purchase orders');
+    po.title = 'The ticked requests become one purchase order per supplier, to approve and send';
+    po.onclick = () => makeOrders(po);
+    const mark = el('button', 'btn btn-sm btn-ghost', 'Mark chosen as ordered');
+    mark.title = 'Already ordered some other way: skip the purchase order';
     mark.onclick = () => markOrdered(mark);
-    c._head.append(mark);
+    c._head.append(po, mark);
   }
 
   const pick = r => {
@@ -98,7 +106,7 @@ function requestsCard(rows, may) {
     { key: 'item', label: 'Item', fmt: (v, r) => {
         const b = el('div');
         b.append(el('b', null, v));
-        b.append(el('div', 'hint', r.category));
+        b.append(el('div', 'hint', r.category + (r.why === 'reorder' ? ' · below its reorder point' : r.why === 'plan' ? ' · for the crop plan' : '')));
         return b; } },
     { key: 'qty', label: 'Quantity', align: 'right',
       fmt: (v, r) => `${num(v, 2)} ${r.unit || ''}` },
@@ -134,20 +142,33 @@ function orderedCard(rows, may) {
 
 function stockCard(may) {
   const c = card('Stock on hand');
+  if (may) {
+    const add = el('button', 'btn btn-sm', 'New item');
+    add.onclick = () => editItem(null);
+    c._head.append(add);
+  }
+  const total = data.stock.reduce((a, s) => a + Number(s.value || 0), 0);
+  if (total) c._head.insertBefore(el('span', 'hint', `worth ${data.currency} ${num(total, 0)} at cost`), c._head.lastChild);
   c.append(table([
     { key: 'item', label: 'Item' },
     { key: 'category', label: 'Category' },
     { key: 'on_hand', label: 'On hand', align: 'right',
       fmt: (v, r) => `${num(v, 2)} ${r.unit || ''}` },
+    { key: 'used_30d', label: 'Used · 30 d', align: 'right', fmt: v => Number(v) ? num(v, 2) : '—' },
     { key: 'reorder_point', label: 'Reorder at', align: 'right',
-      fmt: v => v == null ? '—' : num(v, 2) },
+      fmt: (v, r) => v == null ? '—' : `${num(v, 2)}${r.own_rule ? ' ·' : ''}` },
+    { key: 'value', label: 'Value', align: 'right', fmt: v => Number(v) ? `${data.currency} ${num(v, 0)}` : '—' },
     { key: 'below', label: '', fmt: v => v ? el('span', 'pill bad', 'low') : '' },
     { key: 'item_id', label: '', align: 'right', fmt: (v, r) => {
         if (!may) return '';
+        const w = el('span', 'row');
         const b = el('button', 'btn btn-sm', 'Count');
         b.title = 'Correct the ledger after a stock count.';
         b.onclick = e => { e.stopPropagation(); countStock(r); };
-        return b; } },
+        const ed = el('button', 'btn btn-sm btn-ghost', 'Edit');
+        ed.onclick = e => { e.stopPropagation(); editItem(r); };
+        w.append(b, ed);
+        return w; } },
   ], data.stock, { rowClass: r => r.below ? 'warn-row' : '' }));
 
   if (data.movements.length) {
@@ -268,4 +289,121 @@ function countStock(row) {
     } catch (e) { busy(ok, false); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, ok);
+}
+
+// ── purchase orders (0132): per supplier, approved by the Admin or Farm manager, then sent ──
+function ordersCard(rows, may) {
+  const box = el('div', 'po-list');
+  if (!rows.length) { const c = card('Purchase orders'); c.append(el('div', 'empty', 'No purchase order yet. Tick requests under "To order" and press "Make purchase orders".')); return c; }
+  const ST = { draft: ['to approve', 'warn'], approved: ['approved — to send', 'info'], sent: ['sent', 'ok'], received: ['received', 'ok'], cancelled: ['cancelled', ''] };
+  rows.forEach(po => {
+    const c = el('div', 'card card-pad po');
+    const head = el('div', 'row');
+    const st = ST[po.status] || [po.status, ''];
+    head.append(el('b', null, po.number), el('span', 'pill ' + st[1], st[0]), el('span', null, po.supplier || 'no supplier'),
+                el('div', 'spacer'), el('b', null, `${data.currency} ${num(po.total, 2)}`));
+    c.append(head);
+    const sub = [po.expected_delivery ? `expected ${shortDate(po.expected_delivery)}` : null, po.reference ? `ref ${po.reference}` : null,
+                 po.approved_by ? `approved by ${po.approved_by}` : null, po.sent_at ? `sent ${shortDate(String(po.sent_at).slice(0, 10))}` : null].filter(Boolean);
+    if (sub.length) c.append(el('div', 'hint', sub.join(' · ')));
+    c.append(table([
+      { key: 'item', label: 'Item' },
+      { key: 'qty', label: 'Quantity', align: 'right', fmt: (v, r) => `${num(v, 2)} ${r.unit || ''}` },
+      { key: 'unit_cost', label: 'Unit cost', align: 'right', fmt: v => v == null ? '—' : num(v, 2) },
+      { key: 'cost', label: 'Cost', align: 'right', fmt: v => num(v, 2) },
+      { key: 'need_by', label: 'Needed', fmt: shortDate },
+      { key: 'status', label: '' },
+    ], po.lines || []));
+    if (may && ['draft', 'approved', 'sent'].includes(po.status)) {
+      const acts = el('div', 'row');
+      if (po.status === 'draft' && data.may_approve) {
+        const ap = el('button', 'btn btn-sm btn-primary', 'Approve');
+        ap.onclick = async () => { busy(ap, true, 'Approving…'); try { await rpc('approve_purchase_order', { p_po: po.id }); await load(); } catch (e) { busy(ap, false, 'Approve'); toast(e.message, 'bad'); } };
+        acts.append(ap);
+      } else if (po.status === 'draft') acts.append(el('span', 'hint', 'Waiting for the Admin or the Farm manager to approve it.'));
+      if (po.status === 'approved') {
+        const se = el('button', 'btn btn-sm btn-primary', 'Send…');
+        se.onclick = () => sendOrder(po);
+        acts.append(se);
+      }
+      if (po.status !== 'sent') {
+        const cx = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel');
+        cx.onclick = async () => {
+          if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel it')) return;
+          try { await rpc('cancel_purchase_order', { p_po: po.id }); await load(); } catch (e) { toast(e.message, 'bad'); }
+        };
+        acts.append(cx);
+      } else acts.append(el('span', 'hint', 'Receive each line under "On the way"; the order closes with the last one.'));
+      c.append(acts);
+    }
+    box.append(c);
+  });
+  return box;
+}
+
+async function makeOrders(button) {
+  if (!chosen.size) { toast('Tick the requests to order first', 'bad'); return; }
+  busy(button, true, 'Preparing…');
+  try {
+    const r = await rpc('make_purchase_orders', { p_farm: farm.id, p_requests: [...chosen] });
+    chosen = new Set(); tab = 'orders';
+    toast(`${(r.orders || []).length} purchase order${(r.orders || []).length === 1 ? '' : 's'} to approve`, 'ok');
+    await load();
+  } catch (e) { busy(button, false, 'Make purchase orders'); toast(e.message, 'bad'); }
+}
+
+// the message to the supplier: prepared here, sent by e-mail or WhatsApp by a person (supplier messaging is still an open decision)
+function sendOrder(po) {
+  const d = drawer(`Send ${po.number}`, `${po.supplier || 'Supplier'}${po.supplier_email ? ' · ' + po.supplier_email : ''}${po.supplier_phone ? ' · ' + po.supplier_phone : ''}`);
+  const text = [`Purchase order ${po.number}`, `From: ${farm.name}`, '', ...(po.lines || []).map(l => `- ${num(l.qty, 2)} ${l.unit || ''} ${l.item}${l.code ? ' (' + l.code + ')' : ''}`),
+    '', `Needed by: ${po.expected_delivery ? shortDate(po.expected_delivery) : 'as soon as possible'}`, '', 'Please confirm the delivery date. Thank you.'].join('\n');
+  const pre = el('textarea', 'input po-text'); pre.value = text; pre.rows = Math.min(18, text.split('\n').length + 1);
+  const copy = el('button', 'btn btn-sm', 'Copy');
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(pre.value); toast('Copied', 'ok'); } catch { pre.select(); } };
+  const links = el('div', 'row');
+  links.append(copy);
+  if (po.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${po.supplier_email}?subject=${encodeURIComponent(po.number)}&body=${encodeURIComponent(pre.value)}`; links.append(a); }
+  if (po.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${String(po.supplier_phone).replace(/[^0-9]/g, '').replace(/^0/, '27')}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; links.append(a); }
+  const ref = input({ placeholder: 'their confirmation, or how it was sent' });
+  const when = input({ type: 'date', value: po.expected_delivery ? String(po.expected_delivery).slice(0, 10) : '' });
+  d.body.append(field('The order', pre), links, field('Reference', ref), field('Expected delivery', when));
+  const cancel = el('button', 'btn', 'Not yet'); cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-primary', 'Mark as sent');
+  ok.onclick = async () => {
+    busy(ok, true, 'Saving…');
+    try { await rpc('send_purchase_order', { p_po: po.id, p_reference: ref.value.trim() || null, p_expected: when.value || null }); d.close(); toast('Sent — its lines are on the way', 'ok'); await load(); }
+    catch (e) { busy(ok, false, 'Mark as sent'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, el('div', 'spacer'), ok);
+}
+
+const ITEM_CATS = [['seed', 'Seed'], ['medium', 'Growing medium'], ['nutrient', 'Nutrient'], ['pot_cap', 'Pots and caps'], ['packaging', 'Packaging'],
+                   ['consumable', 'Consumable'], ['equipment', 'Equipment'], ['seedling', 'Seedlings']];
+function editItem(r) {
+  const own = !r || r.scope === 'farm';
+  const d = drawer(r ? r.item : 'New item', own ? 'An item of this FarmBox' : 'A standard item: this FarmBox sets its own reorder point and quantity');
+  const name = input({ value: r?.item || '' }), code = input({ value: r?.code || '', placeholder: 'optional' });
+  const cat = selectBox(ITEM_CATS, r?.category || 'consumable');
+  const unit = input({ value: r?.unit || 'unit' }), pack = input({ type: 'number', step: 'any', min: 0, value: r?.pack_size ?? 1 });
+  const cost = input({ type: 'number', step: '0.01', min: 0, value: r?.unit_cost ?? '' });
+  const rp = input({ type: 'number', step: 'any', min: 0, value: r?.reorder_point ?? '' });
+  const rq = input({ type: 'number', step: 'any', min: 0, value: r?.reorder_qty ?? '', placeholder: 'empty = up to twice the point' });
+  if (own) {
+    const g = el('div', 'grid2'); g.append(field('Name', name), field('Code', code));
+    const g2 = el('div', 'grid2'); g2.append(field('Category', cat), field('Unit', unit));
+    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'orders are rounded up to it'), field(`Unit cost (${data.currency})`, cost));
+    d.body.append(g, g2, g3);
+  }
+  const g4 = el('div', 'grid2'); g4.append(field('Reorder at', rp, 'below it, "Work out what to buy" tops it up'), field('Reorder quantity', rq));
+  d.body.append(g4);
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-primary', 'Save');
+  ok.onclick = async () => {
+    busy(ok, true, 'Saving…');
+    const p = { id: r?.item_id || null, reorder_point: rp.value, reorder_qty: rq.value };
+    if (own) Object.assign(p, { name: name.value, code: code.value, category: cat.value, unit: unit.value, pack_size: pack.value, unit_cost: cost.value });
+    try { await rpc('save_item', { p_farm: farm.id, p }); d.close(); toast('Saved', 'ok'); await load(); }
+    catch (e) { busy(ok, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, el('div', 'spacer'), ok);
 }

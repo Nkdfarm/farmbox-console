@@ -114,7 +114,7 @@ const READ_RPCS = new Set([
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
   'procedures', 'purchasing', 'reports', 'system_catalog', 'integration_status', 'task_families',
   'farm_holidays', 'scouting_day', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'crop_pests', 'scouting_dates', 'pest_dot', 'basket_plan',
-  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view',
+  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'crop_validations', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view',
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
 

@@ -1707,3 +1707,13 @@ table.table tr.off td { opacity: .5; }
 .fc-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fc-last { grid-column: 1 / -1; }
 @media (max-width: 900px) { .fc-row { grid-template-columns: 1fr; } .fc-acts { justify-content: flex-start; } }
+
+/* ── Grow › Field validation (0.7.149) ── */
+.va-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--space-3); }
+.va-card { display: flex; flex-direction: column; gap: 8px; }
+.va-card > .row { gap: 10px; }
+.va-change { display: flex; align-items: baseline; gap: 10px; font-size: var(--text-lg); }
+.va-from { color: var(--text-muted); text-decoration: line-through; }
+.va-arrow { color: var(--text-muted); }
+.va-acts { gap: 6px; }
+.va-acts .input { flex: 1; min-width: 120px; }

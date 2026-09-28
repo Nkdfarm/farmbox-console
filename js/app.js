@@ -21,6 +21,7 @@ import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
+import { renderBaskets, basketArgs } from './baskets.js';
 import { initAssistant, assistantFarmChanged } from './assistant.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -137,7 +138,8 @@ const SECTIONS = {
   // and the procedures; the trap setup is behind the page's "Traps…" button
   ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },
   office: { title: 'Office', tabs: [
-    ['sell', 'Sell', renderPrices], ['orders', 'Orders', renderOrders], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
+    // Sell is the basket planner since 0.7.141; the market prices are Market
+    ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
     ['equipment', 'Equipment', renderMaintenance], ['preventive', 'Preventive maintenance', lib('maintenance')]] },
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm], ['people', 'People', renderPeople]] },
@@ -157,7 +159,7 @@ const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${k
 
 const MOVED = {
   crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/procedures',
-  prices: 'office/sell', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
+  prices: 'office/market', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
   people: 'farm/people', harvest: 'grow/harvest',
 };
 
@@ -360,7 +362,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }],
+    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],

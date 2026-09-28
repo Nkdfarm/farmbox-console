@@ -22,6 +22,7 @@ import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update
 import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
 import { renderBaskets, basketArgs } from './baskets.js';
+import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { initAssistant, assistantFarmChanged } from './assistant.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -142,6 +143,10 @@ const SECTIONS = {
     ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
     ['equipment', 'Equipment', renderMaintenance], ['preventive', 'Preventive maintenance', lib('maintenance')]] },
+  // Connections (0.7.142, migration 0130): FarmNet, sensors and the fixed cameras, fed by the ingest endpoint
+  connect: { title: 'Connections', tabs: [
+    ['farmnet', 'FarmNet & sensors', renderFarmnet], ['heatmap', 'Heat map', renderHeatmap], ['growth', 'Crop growth', renderGrowth],
+    ['counting', 'Counting', renderCounting], ['devices', 'Devices & API', renderDevices]] },
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm], ['people', 'People', renderPeople]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
 };
@@ -362,7 +367,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)],
+    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],

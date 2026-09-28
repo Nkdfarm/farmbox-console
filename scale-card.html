@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scale cards</title>
+<!-- The daily scouting's scale card (console 0.7.153): the phone finds the magenta square in a growth photo
+     and, knowing it is exactly 5 cm, turns two taps into millimetres. Print at 100 %, laminate, check with a ruler. -->
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: #16161a; font-family: Inter, system-ui, sans-serif; }
+  .how { max-width: 190mm; margin: 8mm auto 4mm; font-size: 12px; line-height: 1.45; }
+  .how b { font-size: 15px; display: block; margin-bottom: 2mm; }
+  .how button { font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; border: 1px solid #16161a; background: #16161a; color: #fff; cursor: pointer; }
+  .sheet { width: 190mm; margin: 0 auto; display: grid; grid-template-columns: 95mm 95mm; grid-auto-rows: 68mm; }
+  .card { position: relative; width: 95mm; height: 68mm; border: 0.2mm dashed #bbb; }
+  .sq { position: absolute; left: 5mm; top: 5mm; width: 50mm; height: 50mm; background: #e6007e;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sq span { position: absolute; left: 0; right: 0; bottom: 3mm; text-align: center; color: #fff; font-weight: 800; font-size: 5mm; }
+  .txt { position: absolute; left: 59mm; top: 6mm; right: 3mm; font-size: 2.9mm; line-height: 1.35; }
+  .txt b { display: block; font-size: 3.6mm; margin-bottom: 1.5mm; }
+  .ruler { position: absolute; left: 5mm; top: 58mm; width: 80mm; height: 7mm; border-top: 0.25mm solid #16161a; }
+  .ruler i { position: absolute; top: 0; width: 0.2mm; background: #16161a; }
+  .ruler em { position: absolute; top: 3.6mm; font-style: normal; font-size: 2.4mm; transform: translateX(-50%); }
+  @media print { .how { display: none; } .sheet { margin: 0; } }
+</style>
+</head>
+<body>
+<div class="how">
+  <b>Scale cards for the daily scouting</b>
+  Print this page at <b style="display:inline;font-size:inherit">100 % (Actual size)</b>, not "fit to page", on a colour printer. Check one card with a ruler:
+  the magenta square must be 5.0 cm on each side and the ruler 8 cm long — if not, the printer scaled it and the sizes will be off. Cut, laminate,
+  and keep one in each scouting kit. In a growth photo, put the card flat beside the fruit or leaf, at the same distance from the phone.
+  <p><button onclick="print()">Print</button></p>
+</div>
+<div class="sheet" id="sheet"></div>
+<script>
+  const sheet = document.getElementById('sheet');
+  for (let n = 0; n < 8; n++) {
+    const c = document.createElement('div'); c.className = 'card';
+    c.innerHTML = '<div class="sq"><span>5 cm</span></div>' +
+      '<div class="txt"><b>FarmBox scale</b>The magenta square is exactly 5 × 5 cm.<br><br>Lay it flat beside the fruit or leaf, in the same plane, then take the growth photo.<br><br>Print at 100 %.</div>';
+    const r = document.createElement('div'); r.className = 'ruler';
+    for (let mm = 0; mm <= 80; mm++) {
+      const t = document.createElement('i');
+      t.style.left = mm + 'mm'; t.style.height = (mm % 10 === 0 ? 3.2 : mm % 5 === 0 ? 2.2 : 1.2) + 'mm';
+      r.append(t);
+      if (mm % 10 === 0) { const e = document.createElement('em'); e.style.left = mm + 'mm'; e.textContent = mm / 10; r.append(e); }
+    }
+    c.append(r);
+    sheet.append(c);
+  }
+</script>
+</body>
+</html>

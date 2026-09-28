@@ -1743,3 +1743,10 @@ table.table tr.off td { opacity: .5; }
 .dc-item b { font-size: var(--text-base); }
 .dc-item.warn { background: var(--warning-bg); border-color: transparent; }
 .dc-item.bad { background: var(--error-bg); color: var(--error); border-color: transparent; }
+
+/* ── Scouting in sections (0.7.153): where a photo was, its sizes, the day's finish ── */
+.sc-where { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-size: var(--text-xs); }
+.sc-where .mono { font-family: ui-monospace, monospace; font-weight: 700; }
+.sc-ai-line { margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sc-outcome { margin-bottom: var(--space-3); font-weight: 600; }
+.note.ok { background: var(--success-bg); border-color: transparent; color: var(--success); }

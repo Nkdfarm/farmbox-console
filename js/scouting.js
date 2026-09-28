@@ -14,6 +14,10 @@
 // menu: red a severe case or a trap over the threshold, orange a case open or a
 // trap on watch, green a case improving under treatment or resolved in 14 days.
 // The trap setup (add, move, thresholds) is behind "Traps…".
+// Since 0141 (console 0.7.153) the phone's scouting has sections: a plant photo
+// is Plant health or Growth, carries its position (3B8) or its GPS and, for
+// growth, the sizes measured on the printed scale card; the day ends OK or Not
+// OK with a note. A photo placed by GPS only has no zone: listed apart.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, pageHead, drawer, num, cropAvatar, toast } from './ui.js';
@@ -30,6 +34,7 @@ const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+const MEASURE_WORD = { diameter: 'Ø', length: 'L', width: 'W', height: 'H' };
 const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
 
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
@@ -69,12 +74,15 @@ function paint() {
   mount.textContent = '';
   const openBtn = el('button', 'btn btn-primary', 'Open a case');
   openBtn.onclick = () => newCase({ crop_id: cropFilter, crops: over.crops || [], onDone: reload });
+  const scaleBtn = el('a', 'btn', 'Scale card');
+  scaleBtn.href = 'scale-card.html'; scaleBtn.target = '_blank'; scaleBtn.rel = 'noopener';
+  scaleBtn.title = 'The printed card for growth photos: a 5 cm magenta square the phone measures against';
   const trapsBtn = el('button', 'btn', 'Traps…');
   trapsBtn.title = 'Add or move traps, set the thresholds, see every trap with its trend';
   trapsBtn.onclick = openTraps;
   mount.append(pageHead('Pest & diseases',
     'The daily scouting by date, zone by zone, with the traps and the photos. A dot says the worst thing inside: ' +
-    'red severe or over the threshold, orange open or on watch, green improving or resolved.', trapsBtn, openBtn));
+    'red severe or over the threshold, orange open or on watch, green improving or resolved.', scaleBtn, trapsBtn, openBtn));
 
   mount.append(dashboard());
   mount.append(caseStrip());
@@ -227,9 +235,22 @@ function dayRow(d, openFirst) {
     try { if (!day) { day = await rpc('scouting_day', { p_farm: farm.id, p_day: d.day }); dayData.set(d.day, day); } }
     catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); delete body.dataset.done; return; }
     body.textContent = '';
+    // the finish the phone sent: OK, or not OK with why (0141)
+    const tk = day.task;
+    if (tk?.outcome) {
+      body.append(el('div', 'note ' + (tk.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome',
+        (tk.outcome === 'nok' ? 'Not OK' : 'OK') + (tk.outcome_note ? ' — ' + tk.outcome_note : '') +
+        (tk.edited_at ? ` · changed ${shortDay(tk.edited_at)} ${hhmm(tk.edited_at)}` : '')));
+    }
     const zones = (day.zones || []).filter(z => !cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter));
-    if (!zones.length) body.append(el('div', 'hint', 'No zone with this crop.'));
-    zones.forEach(z => body.append(zoneBand(z, day)));
+    // a zone with nothing in it that day is one word, not a band
+    const has = z => z.traps.length || z.photos.length || (z.cases || []).length;
+    const full = zones.filter(has), empty = zones.filter(z => !has(z));
+    if (!full.length && !(day.unplaced || []).length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
+    full.forEach(z => body.append(zoneBand(z, day)));
+    const gps = (day.unplaced || []).filter(p => !cropFilter || p.crop_id === cropFilter);
+    if (gps.length) body.append(zoneBand({ zone_id: null, name: 'Placed by GPS', crops: [], traps: [], photos: gps, cases: [] }, day));
+    if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
   };
   det.addEventListener('toggle', () => { if (det.open) fill(); });
   if (openFirst) { det.open = true; fill(); }
@@ -252,8 +273,8 @@ function zoneBand(z, day) {
   left.append(cr);
   sum.append(left);
   const right = el('span', 'pd-day-facts');
-  right.append(el('span', 'pill', traps.length ? `${traps.length} trap${traps.length > 1 ? 's' : ''}` : (z.item?.done_at ? 'traps skipped' : 'traps —')),
-               el('span', 'pill', `${photos.length} photo${photos.length === 1 ? '' : 's'}`));
+  if (z.zone_id) right.append(el('span', 'pill', traps.length ? `${traps.length} trap${traps.length > 1 ? 's' : ''}` : (z.item?.done_at ? 'traps skipped' : 'traps —')));
+  right.append(el('span', 'pill', `${photos.length} photo${photos.length === 1 ? '' : 's'}`));
   (z.cases || []).forEach(k => {
     const full = (cases.cases || []).find(x => x.id === k.id);
     const b = el('button', 'pd-case small');
@@ -287,7 +308,7 @@ function zoneBand(z, day) {
 function viewerCtx(p, z, day) {
   return {
     farm, photo: p, catalog: catalog || [], aiReady: day.ai_ready, mayWrite: day.may_write !== false,
-    zonePhotos: () => rpc('zone_photos', { p_farm: farm.id, p_zone: z.zone_id }),
+    zonePhotos: () => z.zone_id ? rpc('zone_photos', { p_farm: farm.id, p_zone: z.zone_id }) : Promise.resolve([]),
     zoneId: z.zone_id, crops: z.crops || [],
     openCases: async () => (cases.cases || []).filter(c => c.zone_id === z.zone_id && c.status !== 'closed'),
     onChange: reload,
@@ -299,6 +320,7 @@ function trapCard(p, z, day) {
   const im = el('img'); im.src = p.photo_data || ''; im.alt = `trap ${p.code}`; im.loading = 'lazy';
   const head = el('div', 'pd-trap-head');
   head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
+  if (p.week_rate != null) { const r = el('span', 'hint', `${num(p.week_rate, 0)}/wk`); r.title = 'New insects a week since the reading before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
@@ -338,8 +360,20 @@ function photoFig(p, z, day) {
   const cap = el('figcaption');
   const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
   cap.append(title, tagChips(p));
+  // the section, where it was, the sizes on the scale card (0141)
+  const where = p.pos_code || (p.gps ? `GPS ±${p.gps.acc} m` : null);
+  const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
+  const line = el('div', 'sc-where');
+  if (p.section) line.append(el('span', 'pill ' + (p.section === 'growth' ? 'ok' : ''), p.section === 'growth' ? 'Growth' : 'Plant health'));
+  if (where) {
+    if (p.gps && !p.pos_code) { const a = el('a', null, where); a.href = `https://www.google.com/maps?q=${p.gps.lat},${p.gps.lng}`; a.target = '_blank'; a.rel = 'noopener'; a.onclick = e => e.stopPropagation(); line.append(a); }
+    else line.append(el('span', 'mono', where));
+  }
+  if (sizes) line.append(el('b', null, sizes));
+  if (line.children.length) cap.append(line);
   const st = p.ai_status === 'done' ? 'AI read' : p.ai_status === 'queued' ? 'AI asked' : p.ai_status === 'failed' ? 'AI failed' : null;
   cap.append(el('div', 'hint', [hhmm(p.taken_at), p.note, st].filter(Boolean).join(' · ')));
+  if (p.ai?.summary) cap.append(el('div', 'sc-ai-line', '✦ ' + p.ai.summary));
   fig.append(cap);
   fig.onclick = () => openViewer(viewerCtx(p, z, day));
   return fig;

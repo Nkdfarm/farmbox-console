@@ -283,18 +283,20 @@ export async function cachedRpc(name, args) {
 // fresh: after a change the kept copy is out of date — skip it, keep the screen until the answer.
 // Only the latest call draws (0.7.112): every page draws into the same #page, so a
 // page left behind — another page, another farm, an older period — must not paint over it.
+// A page that says where it draws (stillHere) is trusted with that instead (0.7.158): a site's
+// "Both" view draws two units' pages side by side, and neither may cancel the other.
 let openSeq = 0;
 export async function openFast(reads, { show, waiting, failed, stillHere, fresh = false }) {
   const mine = ++openSeq;
   const old = fresh ? reads.map(() => null) : await Promise.all(reads.map(([n, a]) => cachedRpc(n, a)));
-  if (mine !== openSeq) return;
+  if (stillHere ? !stillHere() : mine !== openSeq) return;
   const had = reads.every(([, , optional], i) => optional || old[i] != null) ? JSON.stringify(old) : null;
   if (had) show(old, false); else if (!fresh) waiting?.();
   let now;
   try {
     now = await Promise.all(reads.map(([n, a, optional]) => optional ? rpc(n, a).catch(() => null) : rpc(n, a)));
-  } catch (e) { if (!had && mine === openSeq) failed?.(e); return; }
-  if (mine !== openSeq || (stillHere && !stillHere())) return;
+  } catch (e) { if (!had && (stillHere ? stillHere() : mine === openSeq)) failed?.(e); return; }
+  if (stillHere ? !stillHere() : mine !== openSeq) return;
   if (had && JSON.stringify(now) === had) return;
   show(now, true);
 }

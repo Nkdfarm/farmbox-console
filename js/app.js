@@ -103,8 +103,9 @@ function paintZoom() {
 $('zoom').append(zoomOut, zoomLevel, zoomIn);
 setZoom(zoom);
 
-let farms = [];
-let farm = null;
+let farms = [];          // every unit this account may open
+let choices = [];        // what the switcher offers: a site for sister units (0.7.158), else the unit
+let farm = null;         // the site or the unit open now
 let myUserId = null;
 let myUser = null;
 let myRoles = [];
@@ -169,6 +170,65 @@ function mayManagePeople() {
 const mayMoney = () => !!farm && (mayManagePeople() || myRoles.some(r => r.farm_id === farm.id && r.role === 'office'));
 const TAB_GATE = { 'farm/people': mayManagePeople, 'office/money': mayMoney };
 const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${key}`] || TAB_GATE[`${sec}/${key}`]());
+
+// ── one site, two units (0.7.158) ───────────────────────────────────────────
+// Sister units (farm.sister_group) are ONE site in the switcher — "FarmLab + FarmBox1".
+// The pages the units share (Tasks, Office, People, the libraries) are drawn once for the
+// site; the pages that differ carry a unit selector: an overview page opens on Both — each
+// unit's view in turn, under its heading in the unit's colour — a working page on one unit.
+// Nothing is merged in the database: the units keep their zones, codes and settings.
+const PAGE_KIND = {
+  'dashboard/overview': 'overview', 'dashboard/yield': 'overview', 'dashboard/issues': 'overview', 'dashboard/reports': 'overview',
+  'grow/forecast': 'overview', 'grow/harvest': 'overview', 'grow/validation': 'overview',
+  'ipm/scouting': 'overview', 'ipm/traps': 'overview', 'office/money': 'overview', 'office/orders': 'overview',
+  'connect/farmnet': 'overview', 'connect/heatmap': 'overview', 'connect/growth': 'overview', 'connect/counting': 'overview',
+  'grow/planner': 'work', 'maintenance/equipment': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
+};
+// Both loads the page's module once per unit (./x.js?unit=…): each copy keeps its own state
+const PAGE_MOD = {
+  'dashboard/overview': ['./dashboard.js', 'renderDashboard'], 'dashboard/yield': ['./yield.js', 'renderYield'],
+  'dashboard/issues': ['./issues.js', 'renderIssues'], 'dashboard/reports': ['./reports.js', 'renderReports'],
+  'grow/forecast': ['./forecast.js', 'renderForecast'], 'grow/harvest': ['./harvest.js', 'renderHarvest'],
+  'grow/validation': ['./validation.js', 'renderValidation'], 'ipm/scouting': ['./scouting.js', 'renderScouting'],
+  'ipm/traps': ['./trapmap.js', 'renderTrapMap'], 'office/money': ['./money.js', 'renderMoney'], 'office/orders': ['./orders.js', 'renderOrders'],
+  'connect/farmnet': ['./connect.js', 'renderFarmnet'], 'connect/heatmap': ['./connect.js', 'renderHeatmap'],
+  'connect/growth': ['./connect.js', 'renderGrowth'], 'connect/counting': ['./connect.js', 'renderCounting'],
+};
+const unitsOf = f => f?.site ? f.units : f ? [f] : [];
+
+async function renderUnits(page, site, key, tab, kind) {
+  const units = site.units;
+  const pk = 'fbc_unit_' + key;
+  let choice = pref.get(pk) || (kind === 'overview' ? 'both' : units[0].id);
+  if (choice === 'both' ? kind !== 'overview' : !units.some(u => u.id === choice)) choice = kind === 'overview' ? 'both' : units[0].id;
+  page.textContent = '';
+  const bar = el('div', 'unit-bar');
+  bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Which unit');
+  [...(kind === 'overview' ? [['both', 'Both', null]] : []), ...units.map(u => [u.id, u.name, u])].forEach(([v, label, u]) => {
+    const b = el('button', 'unit-btn'); b.type = 'button';
+    if (u) { const d = el('span', 'unit-dot'); d.style.background = u.badge_colour || 'var(--text-muted)'; b.append(d); }
+    b.append(el('span', null, label));
+    b.setAttribute('aria-pressed', String(v === choice));
+    b.onclick = () => { if (v === choice) return; pref.set(pk, v); route(); };
+    bar.append(b);
+  });
+  const body = el('div', 'unit-body');
+  page.append(bar, body);
+  const ctx = { switchFarm, reloadFarms: loadFarms, site };
+  if (choice !== 'both') return tab[2](body, units.find(u => u.id === choice), ctx);
+  const [path, fn] = PAGE_MOD[key];
+  await Promise.all(units.map(async u => {
+    const block = el('section', 'unit-block');
+    block.style.setProperty('--u', u.badge_colour || 'var(--text-muted)');
+    const head = el('div', 'unit-head');
+    head.append(el('span', 'unit-badge', u.badge_label || u.code), el('b', null, u.name));
+    const inner = el('div', 'unit-inner');
+    block.append(head, inner);
+    body.append(block);
+    try { const m = await import(`${path}?unit=${u.id}`); await m[fn](inner, u, ctx); }
+    catch (err) { inner.textContent = ''; inner.append(el('div', 'note bad', err.message)); }
+  }));
+}
 
 const MOVED = {
   crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/procedures',
@@ -248,20 +308,29 @@ async function loadFarms() {
   // minutes ago cannot be configured: it is exactly the farm somebody needs
   // to open. Its state is shown beside the name rather than hidden.
   farms = await select('farm',
-    'select=id,name,code,status,org_id,operating_days&status=in.(active,setup)&order=name');
+    'select=id,name,code,status,org_id,operating_days,sister_group,badge_label,badge_colour,created_at&status=in.(active,setup)&order=name');
+  // sister units are one site (0.7.158): oldest first, its id the home unit's
+  const groups = new Map();
+  farms.filter(f => f.sister_group).forEach(f => { if (!groups.has(f.sister_group)) groups.set(f.sister_group, []); groups.get(f.sister_group).push(f); });
+  const sites = [...groups.values()].filter(g => g.length > 1).map(g => {
+    const units = g.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    return { ...units[0], name: units.map(u => u.name).join(' + '), code: units.map(u => u.code).join('+'), site: true, units };
+  });
+  const inSite = new Set(sites.flatMap(s => s.units.map(u => u.id)));
+  choices = [...sites, ...farms.filter(f => !inSite.has(f.id))].sort((a, b) => a.name.localeCompare(b.name));
   const pick = $('farmPick');
   pick.textContent = '';
-  farms.forEach(f => {
+  choices.forEach(f => {
     const o = el('option', null,
-      `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
+      f.site ? f.name : `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
     o.value = f.id;
     pick.append(o);
   });
   const wanted = pref.get(FARM_KEY);
-  farm = farms.find(f => f.id === wanted) || farms[0] || null;
+  farm = choices.find(f => f.id === wanted) || sites.find(s => s.units.some(u => u.id === wanted)) || choices[0] || null;
   if (farm) pick.value = farm.id;
-  pick.disabled = farms.length < 2;
-  pick.parentElement.hidden = farms.length === 0;
+  pick.disabled = choices.length < 2;
+  pick.parentElement.hidden = choices.length === 0;
 }
 
 // What am I here? Franchisor first — it outranks anything farm-level.
@@ -282,7 +351,7 @@ async function paintMyRole() {
 
 // Switching FarmBox from anywhere: the picker, or a row on All FarmBoxes.
 function switchFarm(id) {
-  const next = farms.find(f => f.id === id);
+  const next = choices.find(f => f.id === id) || choices.find(f => f.site && f.units.some(u => u.id === id));
   if (!next) return;
   farm = next;
   $('farmPick').value = farm.id;
@@ -292,7 +361,7 @@ function switchFarm(id) {
 }
 
 $('farmPick').addEventListener('change', e => {
-  farm = farms.find(f => f.id === e.target.value) || farm;
+  farm = choices.find(f => f.id === e.target.value) || farm;
   pref.set(FARM_KEY, farm.id);
   paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
 });
@@ -367,10 +436,16 @@ onConnection(state => {
 // Drawers (a crop's or a procedure's detail) are read only when opened.
 const warmed = new Set();
 async function warm() {
-  if (!farm || !connection().online || warmed.has(farm.id)) { finishUpdate(); return; }
-  const id = farm.id;
-  warmed.add(id);
+  if (!farm || !connection().online) { finishUpdate(); return; }
+  // a site: each unit's copies, the home unit first (0.7.158)
+  const ids = unitsOf(farm).map(u => u.id).filter(i => !warmed.has(i));
+  if (!ids.length) { finishUpdate(); return; }
   await new Promise(r => setTimeout(r, 1200));      // after the page itself
+  for (const id of ids) await warmOne(id);
+  finishUpdate();
+}
+async function warmOne(id) {
+  warmed.add(id);
   const p = { p_farm: id };
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
@@ -399,7 +474,6 @@ async function warm() {
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
   if (lost) warmed.delete(id);
-  finishUpdate();
 }
 
 // ── routing ────────────────────────────────────────────────────────────────
@@ -434,8 +508,10 @@ function paintTabs(sec, active) {
 async function paintPestDot() {
   const a = document.querySelector('.rail a[data-route="ipm"]');
   if (!a || !farm) return;
-  let d = null;
-  try { d = await rpcCall('pest_dot', { p_farm: farm.id }); } catch { d = null; }
+  // a site: the worst of its units (0.7.158)
+  const rank = { red: 3, orange: 2, green: 1 };
+  const ds = await Promise.all(unitsOf(farm).map(u => rpcCall('pest_dot', { p_farm: u.id }).catch(() => null)));
+  const d = ds.reduce((a, x) => (rank[x] || 0) > (rank[a] || 0) ? x : a, null);
   a.querySelector('.rail-dot')?.remove();
   if (d) {
     const s = el('span', 'rail-dot ' + d);
@@ -474,7 +550,9 @@ async function route() {
     return;
   }
   try {
-    await tab[2](page, farm, { switchFarm, reloadFarms: loadFarms });
+    const key = `${sec}/${tab[0]}`;
+    if (farm.site && PAGE_KIND[key]) await renderUnits(page, farm, key, tab, PAGE_KIND[key]);
+    else await tab[2](page, farm, { switchFarm, reloadFarms: loadFarms, site: farm.site ? farm : null });
   } catch (err) {
     page.textContent = '';
     page.append(el('div', 'note bad', err.message));

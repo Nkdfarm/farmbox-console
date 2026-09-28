@@ -1678,3 +1678,17 @@ table.table tr.off td { opacity: .5; }
 .hr-on { color: var(--success) !important; }
 .hr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
 .hr-day { display: flex; flex-direction: column; font-size: var(--text-sm); padding: 6px 8px; border-radius: 8px; background: var(--surface-offset, var(--chip)); }
+
+/* ── Office › Money (0.7.147) ── */
+.mo-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.mo-chart { display: flex; align-items: stretch; gap: 10px; height: 240px; overflow-x: auto; padding-top: 8px; }
+.mo-col { flex: 1 0 56px; display: flex; flex-direction: column; align-items: center; }
+.mo-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px; border-bottom: 1px solid var(--border); }
+.mo-bars i.rev { display: block; width: 36%; background: var(--success, #2e7d32); border-radius: 3px 3px 0 0; }
+.mo-cost { width: 36%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.mo-cost i { display: block; width: 100%; }
+.mo-cost i.dir { background: hsl(28 80% 55%); }
+.mo-cost i.ind { background: var(--text-faint, #888); opacity: .7; border-radius: 3px 3px 0 0; }
+.mo-lbl { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.mo-net { font-size: 11px; font-weight: 700; }
+.mo-net.neg { color: var(--error); }

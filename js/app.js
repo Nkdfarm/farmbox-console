@@ -24,6 +24,7 @@ import { renderOrders } from './orders.js';
 import { renderCustomers } from './customers.js';
 import { renderYield, yieldRange } from './yield.js';
 import { renderHours, hoursRange } from './hours.js';
+import { renderMoney, moneyRange } from './money.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { initAssistant, assistantFarmChanged } from './assistant.js';
@@ -143,7 +144,7 @@ const SECTIONS = {
   ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     // Sell is the basket planner since 0.7.141; the market prices are Market
-    ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['management', 'Farm management', lib('office')]] },
+    ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
     ['equipment', 'Equipment', renderMaintenance], ['preventive', 'Preventive maintenance', lib('maintenance')]] },
   // Connections (0.7.142, migration 0130): FarmNet, sensors and the fixed cameras, fed by the ingest endpoint
@@ -162,7 +163,8 @@ function mayManagePeople() {
     || (r.role === 'franchisee_admin' && r.org_id && r.org_id === farm.org_id)
     || (r.farm_id === farm.id && (r.role === 'farm_admin' || r.role === 'farm_manager')));
 }
-const TAB_GATE = { 'farm/people': mayManagePeople };
+const mayMoney = () => !!farm && (mayManagePeople() || myRoles.some(r => r.farm_id === farm.id && r.role === 'office'));
+const TAB_GATE = { 'farm/people': mayManagePeople, 'office/money': mayMoney };
 const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${key}`] || TAB_GATE[`${sec}/${key}`]());
 
 const MOVED = {
@@ -379,6 +381,7 @@ async function warm() {
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];
   if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
+  if (mayMoney()) calls.push(['money', { ...p, ...moneyRange() }]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
   // four at a time (0.7.107): one by one, 25 reads at ~0.2 s each from Cape Town to
   // Frankfurt took five seconds, and a page opened meanwhile had no copy to open from

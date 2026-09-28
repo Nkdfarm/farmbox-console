@@ -18,6 +18,13 @@ let farm = null, data = null, mount = null, chosen = new Set(), tab = 'requests'
 
 export async function renderPurchasing(container, currentFarm) {
   farm = currentFarm; mount = container; chosen = new Set();
+  if (tab === 'stock') tab = 'requests';          // Buy opens on what to order; Stock has its own tab (0.7.152)
+  await load();
+}
+// Office › Stock: the same page, opened on the stock (0.7.152)
+export async function renderStock(container, currentFarm) {
+  farm = currentFarm; mount = container; chosen = new Set();
+  tab = 'stock';
   await load();
 }
 

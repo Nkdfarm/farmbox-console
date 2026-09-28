@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.7.151';
+export const VERSION = '0.7.152';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';

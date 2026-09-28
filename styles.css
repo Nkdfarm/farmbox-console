@@ -1732,3 +1732,14 @@ table.table tr.off td { opacity: .5; }
 /* ── Sell: the direct-selling app link (0.7.151) ── */
 .bk-shop { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 8px; }
 .bk-shop .row { gap: 8px; }
+
+/* ── Dashboard: To decide (0.7.152) ── */
+.dc-strip:empty { display: none; }
+.dc-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 var(--space-3); }
+.dc-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin-right: 4px; }
+.dc-item { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px; border-radius: var(--radius-full); text-decoration: none;
+  background: var(--surface-offset, var(--chip)); color: var(--text); border: 1px solid var(--border); font-size: var(--text-sm); }
+.dc-item:hover { border-color: var(--accent); }
+.dc-item b { font-size: var(--text-base); }
+.dc-item.warn { background: var(--warning-bg); border-color: transparent; }
+.dc-item.bad { background: var(--error-bg); color: var(--error); border-color: transparent; }

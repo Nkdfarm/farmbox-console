@@ -52,6 +52,7 @@ function paint() {
   head.append(titles, el('div', 'spacer'));
   head.append(el('span', 'pill', data.farm.code));
   mount.append(head);
+  mount.append(decideStrip());
 
   mount.append(tiles());
   mount.append(calendarCard());
@@ -605,4 +606,35 @@ export const calendarView = () => cal.view;
 export function calendarRange() {
   const w = windowOf(cal.view, new Date());
   return { p_from: ymd(w.from), p_to: ymd(w.to) };
+}
+
+// ── To decide (0140): what the new modules left waiting for a person, each a link ──
+const DECIDE = [
+  ['alarms', 'sensor alarm', 'sensor alarms', '#/dashboard/issues', 'bad'],
+  ['pos_to_approve', 'purchase order to approve', 'purchase orders to approve', '#/office/buy', 'warn'],
+  ['pos_to_send', 'purchase order to send', 'purchase orders to send', '#/office/buy', ''],
+  ['shop', 'order from the selling app', 'orders from the selling app', '#/office/orders', 'warn'],
+  ['deliveries', 'delivery not recorded', 'deliveries not recorded', '#/office/orders', ''],
+  ['forecast', 'batch due for the forecast review', 'batches due for the forecast review', '#/grow/forecast', ''],
+  ['camera', 'camera estimate to decide', 'camera estimates to decide', '#/connect/growth', ''],
+  ['corrections', 'field correction to decide', 'field corrections to decide', '#/grow/validation', ''],
+];
+function decideStrip() {
+  const box = el('div', 'dc-strip');
+  const paintIt = j => {
+    box.textContent = '';
+    if (!j) return;
+    DECIDE.forEach(([k, one, many, href, tone]) => {
+      const n = Number(j[k] || 0);
+      if (!n) return;
+      const a = el('a', 'dc-item ' + tone); a.href = href;
+      a.append(el('b', null, String(n)), el('span', null, n === 1 ? one : many));
+      box.append(a);
+    });
+    if (box.children.length) box.prepend(el('span', 'dc-label', 'To decide'));
+  };
+  const args = { p_farm: farm.id };
+  cachedRpc('to_decide', args).then(paintIt).catch(() => {});
+  rpc('to_decide', args).then(paintIt).catch(() => {});
+  return box;
 }

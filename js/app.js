@@ -10,7 +10,7 @@ import { renderDashboard, calendarRange } from './dashboard.js';
 import { renderProcedures } from './procedures.js';
 import { renderCropDb } from './cropdb.js';
 import { renderMaintenance } from './maintenance.js';
-import { renderPurchasing } from './purchasing.js';
+import { renderPurchasing, renderStock } from './purchasing.js';
 import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
@@ -146,7 +146,7 @@ const SECTIONS = {
   ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     // Sell is the basket planner since 0.7.141; the market prices are Market
-    ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },
+    ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['stock', 'Stock', renderStock], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },
   maintenance: { title: 'Maintenance', tabs: [
     ['equipment', 'Equipment', renderMaintenance], ['preventive', 'Preventive maintenance', lib('maintenance')]] },
   // Connections (0.7.142, migration 0130): FarmNet, sensors and the fixed cameras, fed by the ingest endpoint
@@ -374,7 +374,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }], ['forecast_review', p], ['field_corrections', { ...p, p_status: null }],
+    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }], ['forecast_review', p], ['field_corrections', { ...p, p_status: null }], ['to_decide', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],

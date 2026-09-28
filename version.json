@@ -1,5 +1,5 @@
 {
-  "version": "0.7.159",
+  "version": "0.7.160",
   "released": "2026-09-28",
-  "note": "Seedling orders with every batch, trays of 210"
+  "note": "Cancel validated batches, steady start dates"
 }

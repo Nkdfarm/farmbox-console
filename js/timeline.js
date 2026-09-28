@@ -124,6 +124,10 @@ function paint() {
       st.onclick = () => startSteady(null);
       act.append(st);
     }
+    const cv = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel validated…');
+    cv.title = 'Cancel the validated batches of this unit or of a steady group — and plan the steady groups again';
+    cv.onclick = () => openCancelValidated();
+    act.append(cv);
     if (proposed.length) {
       const rev = proposed.reduce((a, b) => a + Number(b.revenue || 0), 0);
       act.append(el('span', 'pill', `${proposed.length} proposed · ${money(rev, cur)}`));
@@ -1194,6 +1198,81 @@ function drawSteadyPreview(box, r) {
 }
 
 // ── clearing a zone, after saying what goes ──────────────────────────────────
+// ── cancel the validated batches in bulk (0157): the whole unit or one steady group, then plan the groups again ──
+// Kept: batches whose seedlings are ordered, and those growing. One request a zone, so each stays inside the API's time.
+function openCancelValidated() {
+  const groups = steadyGroups();
+  const d = drawer('Cancel validated batches', 'What is cancelled is counted first; nothing changes until you confirm');
+  const scopes = [['all', 'The whole unit'], ...groups.map(g => [g.id, groupName(g)])];
+  const scope = selectBox(scopes, 'all');
+  const replan = el('input'); replan.type = 'checkbox'; replan.checked = true;
+  const rl = el('label', 'row'); rl.append(replan, el('span', null, 'Plan the steady groups again straight after — same crops, same positions, their own settings'));
+  const info = el('div');
+  d.body.append(field('Which batches', scope), info, rl,
+    el('div', 'note warn', 'Cancelled batches lose their open tasks and seedling orders. The new plan comes back as proposals: validate it to order the seedlings again.'));
+  const cancel = el('button', 'btn', 'Keep everything'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-danger', 'Cancel the batches');
+  d.footer.append(cancel, el('div', 'spacer'), go);
+
+  let dry = null;
+  const sysOf = v => v === 'all' ? null : (data.systems || []).filter(x => x.steady_group_id === v).map(x => x.id);
+  const groupsOf = v => v === 'all' ? groups : groups.filter(g => g.id === v);
+  const count = async () => {
+    info.replaceChildren(loading('Counting…'));
+    go.disabled = true;
+    try {
+      dry = await rpc('cancel_validated', { p_farm: farm.id, p_systems: sysOf(scope.value), p_dry: true });
+      const lines = el('ul', 'tl-clear-list');
+      lines.append(el('li', null, `${dry.to_cancel} validated batch${dry.to_cancel === 1 ? '' : 'es'} — cancelled`));
+      if (dry.kept_ordered) lines.append(el('li', null, `${dry.kept_ordered} with seedlings already ordered — kept`));
+      if (dry.growing) lines.append(el('li', null, `${dry.growing} growing — kept`));
+      const z = (dry.zones || []).filter(x => x.cancel > 0);
+      info.replaceChildren(lines);
+      if (z.length) info.append(el('div', 'hint', `${z.length} zone${z.length === 1 ? '' : 's'}: ` + z.map(x => `${x.zone} ${x.cancel}`).join(', ')));
+      const gs = groupsOf(scope.value);
+      rl.style.display = gs.length ? '' : 'none';
+      go.disabled = !dry.to_cancel && !(replan.checked && gs.length);
+      go.textContent = dry.to_cancel ? `Cancel ${dry.to_cancel} batch${dry.to_cancel === 1 ? '' : 'es'}` : 'Plan the groups again';
+    } catch (e) { info.replaceChildren(el('div', 'note bad', e.message)); }
+  };
+  scope.onchange = count;
+  replan.onchange = count;
+  count();
+
+  go.onclick = async () => {
+    if (!dry) return;
+    const zones = (dry.zones || []).filter(x => x.cancel > 0);
+    const gs = replan.checked ? groupsOf(scope.value) : [];
+    const steps = zones.length + gs.length;
+    let n = 0, cancelled = 0, planned = 0;
+    const done = () => busy(go, true, `${Math.round(100 * n / Math.max(steps, 1))} %…`);
+    done();
+    cancel.disabled = true; scope.disabled = true; replan.disabled = true;
+    try {
+      for (const z of zones) {
+        const r = await rpc('cancel_validated', { p_farm: farm.id, p_systems: [z.system_id], p_dry: false });
+        cancelled += Number(r.cancelled || 0); n++; done();
+      }
+      for (const g of gs) {
+        const zs = (data.systems || []).filter(x => x.steady_group_id === g.id && x.steady_crop_id);
+        if (zs.length) {
+          const r = await rpc('steady_apply', { p_farm: farm.id, p_group: g.id, p_objective: g.objective || 'per_crop',
+            p_horizon: Number(g.horizon) || 182,
+            p_zones: zs.map(x => ({ system_id: x.id, crop_id: x.steady_crop_id, n: (x.positions || []).length })) });
+          planned += Number(r.batches || 0);
+        }
+        n++; done();
+      }
+      d.close();
+      toast(`${cancelled} batch${cancelled === 1 ? '' : 'es'} cancelled` + (gs.length ? ` · ${planned} proposed again in ${gs.length} steady group${gs.length === 1 ? '' : 's'} — validate them to order the seedlings` : ''), 'ok');
+    } catch (e) {
+      d.close();
+      toast(`Stopped after ${cancelled} cancelled${planned ? `, ${planned} proposed` : ''}: ${e.message}`, 'bad');
+    }
+    await reload();
+  };
+}
+
 function clearButton(sys) {
   const b = el('button', 'btn btn-sm btn-ghost tl-clear', 'Clear zone');
   b.title = `Remove the crops planned in ${sys.name} (and, if you choose, the ones growing)`;

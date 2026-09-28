@@ -151,6 +151,14 @@ async function openProcedure(row) {
   if (p.variant_of) fact('Variant of', data.procedures.find(x => x.id === p.variant_of)?.title || '—');
   const variants = data.procedures.filter(x => x.variant_of === p.id && x.status === 'approved');
   if (variants.length) fact('Variants', variants.map(x => `${x.title} (${(x.systems || []).map(systemLabel).join(', ')})`).join(' · '));
+  // the daily scouting: its sections on their days (0145)
+  if (p.module === 'scouting' && p.sections) {
+    const DN = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = d => (d || []).length >= 7 ? 'every day' : (d || []).length ? d.map(x => DN[x]).join(', ') : 'off';
+    fact('Sections', [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']]
+      .filter(([k]) => p.sections[k]).map(([k, l]) => `${l} ${days(p.sections[k].days)} · ${p.sections[k].minutes} min a zone`).join(' — '));
+    fact('Minutes', `${p.minutes} + the day's sections a zone`);
+  } else
   fact('Minutes', p.minutes_per_unit
         ? `${p.minutes} + ${p.minutes_per_unit}/${p.unit || 'unit'}` : p.minutes);
   fact('People', p.min_workers);

@@ -1750,3 +1750,9 @@ table.table tr.off td { opacity: .5; }
 .sc-ai-line { margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .sc-outcome { margin-bottom: var(--space-3); font-weight: 600; }
 .note.ok { background: var(--success-bg); border-color: transparent; color: var(--success); }
+
+/* ── Procedures › Edit: the scouting's sections (0.7.154) ── */
+.sc-sections { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px; }
+.sc-sec-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2, var(--surface)); }
+@media (max-width: 700px) { .sc-sec-row { grid-template-columns: 1fr; } }

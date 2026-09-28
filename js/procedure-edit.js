@@ -101,6 +101,9 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
   // morning, afternoon or anytime: how the day is planned (0079); a rule's hour stays a detail
   const slot = selectBox([['any', 'Anytime'], ['am', 'Morning'], ['pm', 'Afternoon']], p.slot || 'any');
   const sched = schedulePicker(p, farm, freq);
+  // the daily scouting: which section on which day, and its minutes a zone (0145)
+  const module = p.module || p.attributes?.module;
+  const secs = module === 'scouting' ? sectionsPicker(p, farm) : null;
   const trigger = selectBox(TRIGGERS, p.trigger_kind || 'routine');
   const target = selectBox(p.trigger_kind === 'crop_plan' ? [...TARGETS, ...CROP_TARGETS] : TARGETS, p.target || 'farm');
   const areas = toggles(AREAS, p.area_kinds);
@@ -125,7 +128,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     areasF.style.display = target.value === 'area' || (target.value === 'farm' && cropPlan) ? '' : 'none';
     variantF.style.display = cropPlan ? '' : 'none';
     oneTaskF.style.display = !cropPlan && ['system', 'area'].includes(target.value) ? '' : 'none';
-    swipeF.style.display = !['harvest', 'scouting', 'ipm_traps'].includes(p.attributes?.module) && validation.value !== 'tick' ? '' : 'none';
+    swipeF.style.display = !['harvest', 'scouting', 'ipm_traps'].includes(module) && validation.value !== 'tick' ? '' : 'none';
     systemsF.style.display = (target.value === 'system' && !cropPlan) || (cropPlan && variantOf.value) ? '' : 'none';
   };
   target.onchange = showTarget;
@@ -154,6 +157,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
          field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
     grid('grid2', field('Repeats', freq), field('One task for', target)),
     sched.node,
+    ...(secs ? [secs.node] : []),
     areasF, variantF, systemsF, oneTaskF, swipeF,
     grid('grid3', field('Validation', validation), field('Status', status), field('Phone', appReady)),
     grid('grid3', field('Minutes', minutes), field('People', people),
@@ -293,6 +297,10 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     busy(save, true, 'Saving…');
     try {
       const r = await rpc('save_procedure', { p_sop: p.id, p: payload });
+      if (secs?.changed()) {
+        const q = await rpc('save_scouting_sections', { p_sop: p.id, p_sections: secs.value() });
+        if (q.tasks_retimed) toast(`Sections saved · ${q.tasks_retimed} open scouting task${q.tasks_retimed === 1 ? '' : 's'} re-timed`, 'ok');
+      }
       toast(r.new_version
         ? `Saved · checklist version ${r.version}` +
           (r.tasks_moved ? ` · ${r.tasks_moved} open task${r.tasks_moved === 1 ? '' : 's'} updated` : '')
@@ -302,6 +310,58 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);
+}
+
+// ── the daily scouting's sections (0145) ──────────────────────────────────
+// Traps · Plant health · Growth, each on its own weekdays with its minutes a zone.
+// The phone shows only the sections due that day (a holiday's move to the next
+// working day, a missed trap or growth day comes back the next day); a day's task
+// takes the minutes of its sections, so a trap day is longer than a growth day.
+// A section with no day ticked is switched off.
+const SCOUT_SECTIONS = [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']];
+function sectionsPicker(p, farm) {
+  const node = el('div', 'field');
+  const cfg = p.sections || {};
+  const start = JSON.stringify(cfg);
+  const open = new Set(farm?.operating_days?.length ? farm.operating_days : [1, 2, 3, 4, 5, 6, 7]);
+  const state = SCOUT_SECTIONS.map(([k, label]) => ({
+    k, label, days: new Set((cfg[k]?.days || []).map(Number)), minutes: cfg[k]?.minutes ?? 0 }));
+  const table = el('div', 'sc-sections');
+  const summary = el('div', 'hint');
+  const paint = () => {
+    const lines = WEEKDAYS.filter(([d]) => open.has(d)).map(([d, name]) => {
+      const on = state.filter(x => x.days.has(d));
+      const m = on.reduce((a, x) => a + (Number(x.minutes) || 0), 0);
+      return `${name} ${on.map(x => x.label).join(' + ') || 'nothing'} (${m} min a zone)`;
+    });
+    summary.textContent = `${lines.join(' · ')}. The task's time is ${p.minutes ?? 5} min + these minutes for each zone on it.`;
+  };
+  state.forEach(x => {
+    const row = el('div', 'sc-sec-row');
+    row.append(el('b', null, x.label));
+    const days = el('div', 'row'); days.style.flexWrap = 'wrap';
+    WEEKDAYS.forEach(([d, name]) => {
+      const b = el('button', 'toggle', name); b.type = 'button';
+      b.setAttribute('aria-pressed', String(x.days.has(d)));
+      if (!open.has(d)) { b.style.opacity = '.55'; b.title = 'The FarmBox is closed that day'; }
+      b.onclick = () => { x.days.has(d) ? x.days.delete(d) : x.days.add(d); b.setAttribute('aria-pressed', String(x.days.has(d))); paint(); };
+      days.append(b);
+    });
+    const all = el('button', 'btn btn-sm btn-ghost', 'Every working day'); all.type = 'button';
+    all.onclick = () => { open.forEach(d => x.days.add(d)); days.querySelectorAll('.toggle').forEach((b, i) => b.setAttribute('aria-pressed', String(x.days.has(WEEKDAYS[i][0])))); paint(); };
+    days.append(all);
+    const m = input({ type: 'number', min: 0, max: 240, step: '1', value: x.minutes });
+    m.style.width = '70px';
+    m.oninput = () => { x.minutes = Math.max(0, Number(m.value) || 0); paint(); };
+    const mm = el('span', 'row'); mm.style.gap = '6px'; mm.style.alignItems = 'center'; mm.append(m, el('span', 'hint', 'min a zone'));
+    row.append(days, mm);
+    table.append(row);
+  });
+  node.append(el('label', null, 'Sections — which day, how long'), table, summary,
+    el('div', 'hint', 'The phone shows only the sections due that day; the others can still be opened by hand. A public holiday moves a section to the next working day, and a trap or growth day that was missed comes back the next day. No day ticked = the section is off.'));
+  paint();
+  const value = () => Object.fromEntries(state.map(x => [x.k, { days: [...x.days].sort((a, b) => a - b), minutes: Number(x.minutes) || 0 }]));
+  return { node, value, changed: () => JSON.stringify(value()) !== start };
 }
 
 // ── the schedule of a routine (0093, 0094) ────────────────────────────────

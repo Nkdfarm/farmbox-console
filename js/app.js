@@ -16,6 +16,7 @@ import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderScouting } from './scouting.js';
+import { renderTrapMap } from './trapmap.js';
 import { rpc as rpcCall } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
@@ -143,7 +144,7 @@ const SECTIONS = {
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
   // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
   // and the procedures; the trap setup is behind the page's "Traps…" button
-  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },
+  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['traps', 'Traps', renderTrapMap], ['programs', 'Procedures', lib('ipm')]] },
   office: { title: 'Office', tabs: [
     // Sell is the basket planner since 0.7.141; the market prices are Market
     ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['stock', 'Stock', renderStock], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },
@@ -377,7 +378,7 @@ async function warm() {
     ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }], ['forecast_review', p], ['field_corrections', { ...p, p_status: null }], ['to_decide', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],
+    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['trap_map', p],
     ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],

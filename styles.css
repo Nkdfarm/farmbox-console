@@ -1650,3 +1650,22 @@ table.table tr.off td { opacity: .5; }
 .po .table-wrap table { min-width: 560px; }
 .po > .row { gap: var(--space-2); flex-wrap: wrap; }
 .po-text { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; width: 100%; }
+
+/* ── Dashboard › Yield (0.7.145) ── */
+.yd-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.yd-chart { display: flex; align-items: flex-end; gap: 4px; height: 220px; overflow-x: auto; padding-top: 8px; }
+.yd-col { flex: 1 0 26px; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.yd-col.ahead { opacity: .55; }
+.yd-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; border-bottom: 1px solid var(--border); }
+.yd-bars i.plan { display: block; width: 42%; border: 1.5px solid var(--text-muted); border-bottom: 0; border-radius: 3px 3px 0 0; box-sizing: border-box; }
+.yd-stack { width: 42%; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.yd-stack i { display: block; width: 100%; }
+.yd-stack i.harv { background: var(--success, #2e7d32); border-radius: 3px 3px 0 0; }
+.yd-stack i.waste { background: var(--error); }
+.yd-lbl { font-size: 10px; color: var(--text-muted); white-space: nowrap; margin-top: 3px; }
+.yd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: var(--space-3); margin: var(--space-3) 0; }
+.yd-name { display: flex; align-items: center; gap: 8px; }
+.yd-bar { display: inline-block; width: 80px; height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.yd-bar i { display: block; height: 100%; background: var(--success, #2e7d32); }
+.yd-bar.short i { background: var(--warning); }
+@media (max-width: 640px) { .yd-grid { grid-template-columns: 1fr; } }

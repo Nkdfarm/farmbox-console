@@ -22,6 +22,7 @@ import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update
 import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
 import { renderCustomers } from './customers.js';
+import { renderYield, yieldRange } from './yield.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { initAssistant, assistantFarmChanged } from './assistant.js';
@@ -130,7 +131,7 @@ const lib = key => (c, f, ctx) => renderProcedures(c, f, LIB[key]);
 
 const SECTIONS = {
   dashboard: { title: 'Dashboard', tabs: [
-    ['overview', 'Overview', renderDashboard], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
+    ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek]] },
   grow: { title: 'Grow', tabs: [
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
@@ -368,7 +369,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }],
+    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],

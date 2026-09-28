@@ -10,8 +10,8 @@
 // the day and what one basket holds (in pieces or bunches when the crop is sold
 // that way). Sister units are read together unless one is switched off.
 // ═══════════════════════════════════════════════════════════════════════════
-import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, toast, cropAvatar, pref } from './ui.js';
+import { openFast, rpc, URL_BASE } from './api.js';
+import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer } from './ui.js';
 
 const DAY = 86400000;
 const SPAN_KEY = 'fbc_basket_span', PROP_KEY = 'fbc_basket_proposed', UNITS_KEY = 'fbc_basket_units';
@@ -143,9 +143,49 @@ function paint() {
 
   tilesBox = el('div', 'tiles bk-tiles');
   chartBox = el('div', 'card card-pad bk-card');
-  mount.append(tilesBox, chartBox);
+  mount.append(tilesBox, chartBox, shopCard());
   paintTiles();
   paintChart();
+}
+
+// ── the link for the direct-selling app (0139): the key and how to call it ──
+function shopCard() {
+  const s = data.shop || {};
+  const c = el('div', 'card card-pad bk-shop');
+  const head = el('div', 'row');
+  head.append(el('div', 'sec-title', 'Direct-selling app link'), el('div', 'spacer'),
+              el('span', 'pill ' + (s.key_set ? 'ok' : ''), s.key_set ? `key •••• ${s.last4 || ''}` : 'no key yet'));
+  if (s.may_make) {
+    const b = el('button', 'btn btn-sm', s.key_set ? 'New key' : 'Make a key');
+    b.onclick = async () => {
+      if (s.key_set && !await confirmDrawer('A new shop key?', 'The key the app uses now stops working at once.', 'Make a new key')) return;
+      try {
+        const r = await rpc('shop_new_key', { p_farm: farm.id });
+        const d = drawer('The shop key', 'Shown once — give it to whoever builds the selling app');
+        d.body.append(el('pre', 'cx-code cx-key', r.key));
+        const copy = el('button', 'btn btn-primary', 'Copy');
+        copy.onclick = async () => { try { await navigator.clipboard.writeText(r.key); toast('Copied', 'ok'); } catch { toast('Select it and copy', ''); } };
+        const done = el('button', 'btn', 'Done'); done.onclick = () => { d.close(); load(true); };
+        d.footer.append(copy, el('div', 'spacer'), done);
+      } catch (e) { toast(e.message, 'bad'); }
+    };
+    head.append(b);
+  }
+  c.append(head, el('p', 'hint', 'The selling app reads what can be sold day by day — the kg of the batches decided (validated or growing), less what orders already take — ' +
+    'and sends orders, which arrive in Office › Orders as open, for a person to check and plan. The customer is found in the book or added to it.'));
+  const pre = el('pre', 'cx-code');
+  pre.textContent =
+`GET  ${URL_BASE}/functions/v1/shop?days=21        the catalogue
+POST ${URL_BASE}/functions/v1/shop                an order
+GET  ${URL_BASE}/functions/v1/shop?order=<id>     its status
+X-Shop-Key: fbs_…
+
+{ "client_ref": "app-123",
+  "customer": { "name": "Anna K.", "phone": "082 000 0000", "address": "…" },
+  "lines": [{ "crop_id": "…", "kg": 2.5, "day": "2026-10-06" }],
+  "note": "…" }`;
+  c.append(pre);
+  return c;
 }
 
 let tilesBox = null, chartBox = null;

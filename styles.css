@@ -1728,3 +1728,7 @@ table.table tr.off td { opacity: .5; }
 .ce-brow select:first-child { min-width: 220px; flex: 1; }
 .ce-brow input { width: 90px; }
 .ce-targets > .btn, .ce-bom > .btn { justify-self: start; }
+
+/* ── Sell: the direct-selling app link (0.7.151) ── */
+.bk-shop { margin-top: var(--space-3); display: flex; flex-direction: column; gap: 8px; }
+.bk-shop .row { gap: 8px; }

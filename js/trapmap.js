@@ -4,7 +4,7 @@
 // Each zone (a bay at FarmBox1) drawn to scale, the long side across the page
 // from the corridor, cut in half across its short side and in four along its
 // length (Farm setup of the map: Map size…). An area's colour is its worst trap
-// this week — new insects a week against the farm's watch / over; grey when no
+// this week — new insects a day against the farm's watch / over (0147); grey when no
 // trap hangs there — and its arrow the trend against the week before. The dots
 // are the traps where their code says they hang (1B6 = zone 1, row B, 6 m).
 // Click an area, a dot or a line of the list: each trap with its 8 weeks,
@@ -19,7 +19,10 @@ import { renderIpm } from './ipm.js';
 const TONE_WORD = { red: 'over the threshold', orange: 'watch', green: 'low' };
 const TREND = { up: '▲', down: '▼', flat: '–' };
 const TREND_WORD = { up: 'rising against last week', down: 'falling against last week', flat: 'about the same as last week' };
-const shortCode = c => String(c || '').replace(/^(.*D\d{4})\d{4}$/, '$1');
+const shortCode = c => String(c || '').replace(/D\d{4}(?:\d{4})?$/, '');
+const d1 = v => num(v, Number(v) >= 10 ? 0 : 1);                                   // insects a day: 1 decimal under 10
+const FAMILY = { whitefly: 'Whitefly', thrips: 'Thrips', fungus_gnat: 'Fungus gnats', shore_fly: 'Shore flies', aphid: 'Aphids',
+                 leafminer: 'Leaf miners', moth: 'Moths', beneficial: 'Beneficials', other: 'Other' };
 const dm = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
 const m1 = v => num(v, Number(v) % 1 ? 1 : 0);
 const when = ts => ts ? new Date(ts).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
@@ -52,18 +55,18 @@ function paint() {
   setup.onclick = openSetup;
   const head = pageHead(null,
     `Each ${String(cfg.label || 'zone').toLowerCase()} is ${m1(cfg.width_m)} × ${m1(cfg.length_m)} m, in ${cfg.cols} × ${cfg.rows} areas. ` +
-    `An area's colour is its worst trap this week, in new insects a week (watch ${th.watch ?? '—'}, over ${th.over ?? '—'}); the arrow is the trend against last week.`,
+    `An area's colour is its worst trap this week, in new insects a day (watch ${th.watch ?? '—'}, over ${th.over ?? '—'}); the arrow is the trend against last week. A card change keeps the curve going: after Replaced, or a hard drop in the count, the new card's insects are counted from nothing.`,
     ...(data.may_edit ? [size] : []), setup);
   mount.append(head);
 
   const legend = el('div', 'tm-legend');
-  [['green', 'Low'], ['orange', `Watch · ${th.watch ?? '—'}+ a week`], ['red', `Over · ${th.over ?? '—'}+ a week`], ['none', 'No trap']]
+  [['green', 'Low'], ['orange', `Watch · ${th.watch ?? '—'}+ a day`], ['red', `Over · ${th.over ?? '—'}+ a day`], ['none', 'No trap']]
     .forEach(([t, l]) => { const s = el('span', 'tm-key'); s.append(el('i', 'tm-sw ' + t), el('span', null, l)); legend.append(s); });
   legend.append(el('span', 'tm-key', '▲ rising · ▼ falling · – steady'));
   mount.append(legend);
 
   const spots = data.spots || [];
-  if (!spots.length) mount.append(el('div', 'note', 'No trap yet. The first scouting on the phone asks to photograph every trap; each card is added from the code written on it (1B6D0101 = zone 1, row B, 6 m, hung 1 January).'));
+  if (!spots.length) mount.append(el('div', 'note', 'No trap yet. The first scouting on the phone asks to photograph every trap; each is added from the position written on its card (1B6 = zone 1, row B, 6 m). The rates start with the second photo.'));
 
   const maps = el('div', 'tm-maps');
   (data.units || []).forEach(u => maps.append(unitMap(u, spots.filter(s => s.n === u.n))));
@@ -96,10 +99,10 @@ function unitMap(u, spots) {
     b.style.gridColumn = String(c.row + 1);
     b.style.gridRow = String(c.col + 1);
     const n = c.spots.length;
-    b.append(el('span', 'tm-trend', c.trend ? TREND[c.trend] : ''), el('b', null, c.level != null ? num(c.level, 0) : ''),
+    b.append(el('span', 'tm-trend', c.trend ? TREND[c.trend] : ''), el('b', null, c.level != null ? d1(c.level) : ''),
              el('span', 'tm-n', n ? `${n} trap${n > 1 ? 's' : ''}` : ''));
     const rows = (c.letters || []).length ? `rows ${c.letters[0]}–${c.letters[c.letters.length - 1]}` : 'rows —';
-    b.title = `${u.label} · ${rows} · ${num(c.from_m, 0)}–${num(c.to_m, 0)} m` + (c.level != null ? ` · ${num(c.level, 0)} new a week, ${TONE_WORD[c.tone]}` : n ? ' · not read in the last 10 days' : ' · no trap') +
+    b.title = `${u.label} · ${rows} · ${num(c.from_m, 0)}–${num(c.to_m, 0)} m` + (c.level != null ? ` · ${d1(c.level)} new a day, ${TONE_WORD[c.tone]}` : n ? ' · not read in the last 10 days' : ' · no trap') +
               (c.trend ? ` · ${TREND_WORD[c.trend]}` : '');
     b.onclick = () => openArea(u, c);
     grid.append(b);
@@ -111,7 +114,7 @@ function unitMap(u, spots) {
     d.type = 'button';
     d.style.left = `${Math.min(98, Math.max(2, 100 * Number(s.metres) / Number(cfg.length_m)))}%`;
     d.style.top = `${100 * (letters.indexOf(s.row) + 0.5) / letters.length}%`;
-    d.title = `${shortCode(s.code)} · ${s.level != null ? num(s.level, 0) + ' new a week' : 'not read lately'}`;
+    d.title = `${shortCode(s.code)} · ${s.level != null ? d1(s.level) + ' new a day' : 'not read lately'}`;
     d.onclick = e => { e.stopPropagation(); openSpots(`${u.label} · trap ${shortCode(s.code)}`, [s]); };
     grid.append(d);
   });
@@ -151,9 +154,9 @@ function spotCard(s) {
   const card = el('div', 'card card-pad tm-spot');
   const head = el('div', 'row');
   head.append(el('span', 'ipm-code ' + (s.colour || ''), shortCode(s.code)),
-              el('span', 'hint', `hung ${dm(s.hung_on)}${s.active ? '' : ' · taken down'}`));
+              el('span', 'hint', `card since ${dm(s.hung_on)}${s.active ? '' : ' · taken down'}`));
   if (s.tone) head.append(el('span', 'pill ' + (s.tone === 'red' ? 'bad' : s.tone === 'orange' ? 'warn' : 'ok'),
-                             `${num(s.level, 0)} new a week · ${TONE_WORD[s.tone]}`));
+                             `${d1(s.level)} new a day · ${TONE_WORD[s.tone]}`));
   if (s.trend) head.append(el('span', 'tm-trend-word', `${TREND[s.trend]} ${TREND_WORD[s.trend]}`));
   card.append(head);
 
@@ -165,6 +168,13 @@ function spotCard(s) {
   photo.disabled = !s.reading_id;
   const info = el('div', 'tm-info');
   info.append(weekBars(s));
+  // by insect family, the last two weeks: the reading's split (the AI note, else the person's pest) on its new insects
+  const fam = Object.entries(s.families || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
+  if (fam.length) {
+    const fr = el('div', 'tm-fam');
+    fam.forEach(([g, v]) => fr.append(el('span', 'pill', `${FAMILY[g] || g} ${d1(v)}/day`)));
+    info.append(fr);
+  } else info.append(el('div', 'hint', 'By insect family: ask the AI note on a photo, or name the insect.'));
   info.append(el('div', 'hint', `Last read ${when(s.read_at)}${s.total != null ? ` · ${num(s.total, 0)} on the card` : ''}`));
   if (s.ai_notes) info.append(el('div', 'tm-ai', '✦ ' + s.ai_notes));
   if (s.notes) info.append(el('div', 'tm-note', '“' + s.notes + '”'));
@@ -186,8 +196,8 @@ function spotCard(s) {
         f.type = 'button';
         const im = x.photo_data ? el('img') : el('span', 'tm-nophoto', 'no photo');
         if (x.photo_data) { im.src = x.photo_data; im.alt = ''; }
-        f.append(im, el('span', null, `${dm(x.taken_at)} · ${num(x.total, 0)}${x.week_rate != null ? ` · ${num(x.week_rate, 0)}/wk` : ''}`),
-                 el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced' : '')));
+        f.append(im, el('span', null, `${dm(x.taken_at)} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : ' · count starts'}`),
+                 el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced after' : '')));
         f.onclick = () => view(x, getReadings);
         hist.append(f);
       });
@@ -213,7 +223,7 @@ function view(photo, getReadings) {
   });
 }
 
-// eight weeks of new insects a week, a bar each; a new card is a mark under its week
+// eight weeks of new insects a day (each week's new insects over its days), a bar each; a new card is a mark under its week
 function weekBars(s) {
   const weeks = s.weeks || [];
   const th = data.threshold || {};
@@ -227,11 +237,11 @@ function weekBars(s) {
     bar.style.height = v == null ? '2px' : `${Math.max(3, 100 * v / max)}%`;
     const start = new Date(w.w + 'T12:00:00'), end = new Date(start); end.setDate(end.getDate() + 7);
     const newCard = changes.some(c => { const d = new Date(c + 'T12:00:00'); return d >= start && d < end; });
-    col.title = `Week of ${dm(w.w)}: ${v == null ? 'no reading' : num(v, 0) + ' new a week'}${newCard ? ' · new card' : ''}`;
+    col.title = `Week of ${dm(w.w)}: ${v == null ? 'no rate' : d1(v) + ' new a day'}${newCard ? ' · new card' : ''}`;
     col.append(bar, el('span', 'tm-wk' + (newCard ? ' new' : ''), newCard ? '↺' : ''));
     box.append(col);
   });
-  if (th.over) { const line = el('div', 'tm-over'); line.style.bottom = `${100 * th.over / max}%`; line.title = `over: ${th.over} a week`; box.append(line); }
+  if (th.over) { const line = el('div', 'tm-over'); line.style.bottom = `${100 * th.over / max}%`; line.title = `over: ${th.over} a day`; box.append(line); }
   return box;
 }
 
@@ -244,7 +254,7 @@ function trapList(spots) {
   card.append(head);
   const t = el('table', 'table');
   const tr = el('tr');
-  ['Trap', 'Where', 'New a week', 'Trend', '8 weeks', 'Last read'].forEach(h => tr.append(el('th', null, h)));
+  ['Trap', 'Where', 'New a day', 'Trend', '8 weeks', 'Last read'].forEach(h => tr.append(el('th', null, h)));
   const thead = el('thead'); thead.append(tr);
   const tb = el('tbody');
   spots.filter(s => s.active).forEach(s => {
@@ -253,7 +263,7 @@ function trapList(spots) {
     const cfg = data.config;
     const code = el('td'); code.append(el('span', 'ipm-code ' + (s.colour || ''), shortCode(s.code)));
     const lvl = el('td');
-    if (s.tone) lvl.append(el('span', 'pill ' + (s.tone === 'red' ? 'bad' : s.tone === 'orange' ? 'warn' : 'ok'), num(s.level, 0)));
+    if (s.tone) lvl.append(el('span', 'pill ' + (s.tone === 'red' ? 'bad' : s.tone === 'orange' ? 'warn' : 'ok'), d1(s.level)));
     else lvl.append(el('span', 'hint', 'not read lately'));
     const spark = el('td'); spark.append(weekBars(s)); spark.firstChild.classList.add('mini');
     r.append(code, el('td', null, `${cfg.label} ${s.n} · row ${s.row ?? '—'} · ${s.metres != null ? num(s.metres, 0) + ' m' : '—'}`), lvl,

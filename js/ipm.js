@@ -39,20 +39,21 @@ async function load() {
 }
 
 const when = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
+// insects a day since the photo before (0147) against watch / over
 const level = (n, th) => n == null ? '' : n >= th.over ? 'over' : n >= th.watch ? 'watch' : 'ok';
 
 function paint() {
   mount.textContent = '';
-  const th = data.threshold || { watch: 25, over: 50 };
+  const th = data.threshold || { watch: 3.5, over: 7 };
   const traps = data.zones.flatMap(z => z.traps.map(t => ({ ...t, zone: z })));
   const active = traps.filter(t => t.active);
-  const over = active.filter(t => level(t.last?.total, th) === 'over');
-  const watch = active.filter(t => level(t.last?.total, th) === 'watch');
+  const over = active.filter(t => level(t.last?.day_rate, th) === 'over');
+  const watch = active.filter(t => level(t.last?.day_rate, th) === 'watch');
   const stale = active.filter(t => !t.last || (Date.now() - new Date(t.last.read_at)) > 10 * 86400000);
 
   const add = data.may_edit ? el('button', 'btn btn-primary', 'Add a trap') : null;
   if (add) add.onclick = () => editTrap(null);
-  const thr = data.may_edit ? el('button', 'btn', `Thresholds ${th.watch} / ${th.over}`) : el('span', 'pill', `watch ${th.watch} · over ${th.over}`);
+  const thr = data.may_edit ? el('button', 'btn', `Limits ${th.watch} / ${th.over} a day`) : el('span', 'pill', `watch ${th.watch} · over ${th.over} a day`);
   if (data.may_edit) thr.onclick = () => editThreshold(th);
   mount.append(pageHead('Traps',
     'The sticky traps and their counts. They are counted during the daily scouting when the person opens the trap cards; ' +
@@ -68,8 +69,8 @@ function paint() {
     tiles.append(t);
   };
   tile(active.length, `trap${active.length === 1 ? '' : 's'} hung`);
-  tile(over.length, `over ${th.over}`, over.length ? 'is-bad' : '');
-  tile(watch.length, `to watch (≥ ${th.watch})`, watch.length ? 'is-warn' : '');
+  tile(over.length, `over ${th.over} a day`, over.length ? 'is-bad' : '');
+  tile(watch.length, `to watch (≥ ${th.watch} a day)`, watch.length ? 'is-warn' : '');
   tile(stale.length, 'not read in 10 days', stale.length ? 'is-warn' : '');
   mount.append(tiles);
 
@@ -148,7 +149,7 @@ function paint() {
           const im = el('img', 'ipm-thumb'); im.src = v.photo_data; im.alt = `trap ${t.code}`;
           im.onclick = e => { e.stopPropagation(); viewReading(t, v, z); };
           return im; } },
-      { key: 'active', label: 'Status', fmt: (v, t) => el('span', 'pill' + (v ? (level(t.last?.total, th) === 'over' ? ' bad' : level(t.last?.total, th) === 'watch' ? ' warn' : ' ok') : ''),
+      { key: 'active', label: 'Status', fmt: (v, t) => el('span', 'pill' + (v ? (level(t.last?.day_rate, th) === 'over' ? ' bad' : level(t.last?.day_rate, th) === 'watch' ? ' warn' : ' ok') : ''),
                                                         v ? (level(t.last?.total, th) || 'no reading') : 'taken down') },
     ], z.traps, { onRow: t => data.may_edit ? editTrap(t, z) : (t.last ? openReading(t, t.last) : null),
                   rowClass: t => t.active ? '' : 'off' }));
@@ -402,17 +403,17 @@ function editTrap(t, zone) {
 }
 
 function editThreshold(th) {
-  const d = drawer('Count thresholds', 'Insects on one trap in one reading. Over raises an issue; watch is a warning on this page.');
-  const watch = input({ type: 'number', min: 0, step: 1, value: th.watch });
-  const over = input({ type: 'number', min: 0, step: 1, value: th.over });
+  const d = drawer('Limits', 'New insects a day on one trap, since the photo before. Over raises an issue for the manager; watch colours the trap orange.');
+  const watch = input({ type: 'number', min: 0, step: 0.5, value: th.watch });
+  const over = input({ type: 'number', min: 0, step: 0.5, value: th.over });
   const g = el('div', 'grid2'); g.append(field('Watch from', watch), field('Over (issue) from', over));
-  d.body.append(g, el('div', 'hint', 'Typical: whitefly on yellow cards, 20–30 a week is worth a look, 50 means act. Adjust to what your traps normally show.'));
+  d.body.append(g, el('div', 'hint', 'Typical: whitefly on yellow cards, 3 to 4 a day is worth a look, 7 a day means act. Adjust to what your traps normally show.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Save');
   save.onclick = async () => {
     busy(save, true, 'Saving…');
     try {
-      await rpc('save_ipm_threshold', { p_farm: farm.id, p_watch: parseInt(watch.value, 10) || 0, p_over: parseInt(over.value, 10) || 0 });
+      await rpc('save_ipm_threshold', { p_farm: farm.id, p_watch: parseFloat(watch.value) || 0, p_over: parseFloat(over.value) || 0 });
       d.close(); toast('Thresholds saved — sync the phones', 'ok'); await load();
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };

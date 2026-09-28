@@ -320,7 +320,7 @@ function trapCard(p, z, day) {
   const im = el('img'); im.src = p.photo_data || ''; im.alt = `trap ${p.code}`; im.loading = 'lazy';
   const head = el('div', 'pd-trap-head');
   head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
-  if (p.week_rate != null) { const r = el('span', 'hint', `${num(p.week_rate, 0)}/wk`); r.title = 'New insects a week since the reading before'; head.append(r); }
+  if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));

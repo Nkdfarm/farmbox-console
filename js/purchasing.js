@@ -14,7 +14,7 @@ import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
          num, shortDate, selectBox, confirmDrawer } from './ui.js';
 
-let farm = null, data = null, mount = null, chosen = new Set(), tab = 'requests';
+let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
 
 export async function renderPurchasing(container, currentFarm) {
   farm = currentFarm; mount = container; chosen = new Set();
@@ -31,8 +31,8 @@ export async function renderStock(container, currentFarm) {
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
   const here = mount;
-  await openFast([['purchasing', { p_farm: farm.id }]], {
-    show: ([d]) => { data = d; paint(); },
+  await openFast([['purchasing', { p_farm: farm.id }], ['seedling_orders', { p_farm: farm.id }]], {
+    show: ([d, s]) => { data = d; seed = s; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading purchasing…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
     stillHere: () => here.isConnected && mount === here,
@@ -67,7 +67,10 @@ function paint() {
   const openPos = (data.orders || []).filter(o => ['draft', 'approved', 'sent'].includes(o.status));
   const tabs = el('div', 'chips');
   tabs.style.marginBottom = 'var(--space-4)';
+  const seedOpen = (seed?.orders || []).filter(o => o.status !== 'done');
+  const seedNow = seedOpen.filter(o => o.day <= seed.today).length;
   [['requests', `To order · ${drafts.filter(r => !r.po_id).length}`],
+   ['seedlings', `Seedlings · ${seedOpen.length}${seedNow ? ` (${seedNow} today)` : ''}`],
    ['orders', `Purchase orders · ${openPos.length}`],
    ['ordered', `On the way · ${ordered.length}`],
    ['stock', `Stock · ${data.stock.length}`],
@@ -79,6 +82,7 @@ function paint() {
   mount.append(tabs);
 
   if (tab === 'requests') mount.append(requestsCard(drafts.filter(r => !r.po_id), may));
+  if (tab === 'seedlings') mount.append(seedlingsCard());
   if (tab === 'orders') mount.append(ordersCard(data.orders || [], may));
   if (tab === 'ordered') mount.append(orderedCard(ordered, may));
   if (tab === 'stock') mount.append(stockCard(may));
@@ -382,6 +386,122 @@ function sendOrder(po) {
     catch (e) { busy(ok, false, 'Mark as sent'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, el('div', 'spacer'), ok);
+}
+
+// ── seedlings from the nursery (0153): the "Order seedlings" tasks the validated plan made, with every batch ──
+// Purchasing never buys seedlings; an external nursery is ordered through these tasks, one per ordering day.
+function seedlingsCard() {
+  const box = el('div', 'po-list');
+  if (!seed) { box.append(el('div', 'note', 'Seedling orders need the latest database update.')); return box; }
+  const all = seed.orders || [];
+  if (!all.length) {
+    const c = card('Seedlings');
+    c.append(el('div', 'empty', 'No seedling order. Validated batches with an external nursery make one here, on the day to order.'));
+    return c;
+  }
+  const open = all.filter(o => o.status !== 'done');
+  const now = open.filter(o => o.day <= seed.today || o.late);
+  const later = open.filter(o => !now.includes(o));
+  const done = all.filter(o => o.status === 'done').sort((a, b) => String(b.done_at).localeCompare(String(a.done_at)));
+  if (now.length) now.forEach(o => box.append(seedOrder(o, true)));
+  else box.append(el('div', 'note', `Nothing to order today. Next: ${later.length ? shortDate(later[0].day) : '—'}.`));
+  if (later.length) {
+    const t = el('button', 'btn btn-ghost', `${laterOpen ? '▾' : '▸'} Later orders · ${later.length}`);
+    t.onclick = () => { laterOpen = !laterOpen; paint(); };
+    box.append(t);
+    if (laterOpen) later.forEach(o => box.append(seedOrder(o, false)));
+  }
+  if (done.length) {
+    box.append(el('h3', 'seed-head', 'Ordered in the last 30 days'));
+    done.forEach(o => box.append(seedOrder(o, false)));
+  }
+  return box;
+}
+
+function seedOrder(o, openBatches) {
+  const c = el('div', 'card card-pad po');
+  const head = el('div', 'row');
+  const trays = (o.crops || []).reduce((a, x) => a + Number(x.trays || 0), 0);
+  const st = o.status === 'done' ? [`ordered${o.done_by ? ' by ' + o.done_by : ''}`, 'ok']
+           : o.day < seed.today || o.late ? ['late — order today', 'bad']
+           : o.day === seed.today ? ['order today', 'warn'] : ['to order', 'info'];
+  const unit = el('span', 'pill', o.badge || o.unit);
+  if (o.colour) { unit.style.background = o.colour; unit.style.color = '#fff'; }
+  head.append(el('b', null, o.day === seed.today ? 'Today' : shortDate(o.day)), unit, el('span', 'pill ' + st[1], st[0]),
+              el('span', null, o.supplier || 'the nursery'), el('div', 'spacer'),
+              el('b', null, `${num(trays)} trays of ${o.tray_cells} · ${num(o.plants)} plants`));
+  c.append(head);
+  const dels = (o.deliveries || []).filter(Boolean).sort();
+  c.append(el('div', 'hint', `Delivery ${dels.map(shortDate).join(', ')} · ${(o.batches || []).length} batches` +
+    (o.contact ? ` · ${o.contact}` : '') + (o.supplier_phone ? ` · ${o.supplier_phone}` : '')));
+  c.append(table([
+    { key: 'crop', label: 'Crop' },
+    { key: 'batches', label: 'Batches', align: 'right' },
+    { key: 'plants', label: 'Plants needed', align: 'right', fmt: v => num(v) },
+    { key: 'trays', label: `Trays of ${o.tray_cells}`, align: 'right', fmt: v => el('b', null, num(v)) },
+    { key: 'you_get', label: 'Plants in the trays', align: 'right', fmt: v => num(v) },
+  ], o.crops || []));
+  const det = el('details', 'seed-batches');
+  det.open = openBatches;
+  det.append(el('summary', null, `All ${(o.batches || []).length} batches`));
+  det.append(table([
+    { key: 'crop', label: 'Crop', fmt: (v, r) => r.variety ? `${v} · ${r.variety}` : v },
+    { key: 'zone', label: 'Table', fmt: (v, r) => `${v || ''}${r.position && r.position !== v ? ' · ' + r.position : ''}` },
+    { key: 'places', label: 'Places', align: 'right', fmt: v => num(v) },
+    { key: 'plants', label: 'Plants (+ spare)', align: 'right', fmt: v => num(v) },
+    { key: 'trays', label: 'Of a tray', align: 'right', fmt: (v, r) => num(Number(r.plants) / (Number(o.tray_cells) || 1), 2) },
+    { key: 'delivery', label: 'Delivery', fmt: shortDate },
+    { key: 'transplant', label: 'Transplant', fmt: shortDate },
+  ], o.batches || []));
+  c.append(det);
+  if (o.status !== 'done' && seed.may_order) {
+    const acts = el('div', 'row');
+    const se = el('button', 'btn btn-sm', 'Message for the nursery…');
+    se.onclick = () => seedMessage(o);
+    const ok = el('button', 'btn btn-sm btn-primary', 'Mark as ordered');
+    ok.onclick = async () => {
+      if (!await confirmDrawer('Mark this order as placed?',
+        `${num(trays)} trays from ${o.supplier || 'the nursery'}. Its ${(o.batches || []).length} batches are then fixed: they can no longer be moved or switched to our own nursery.`,
+        'Mark as ordered')) return;
+      busy(ok, true, 'Saving…');
+      try { await rpc('complete_task', { p_task: o.task_id, p_minutes: null }); toast('Ordered', 'ok'); await load(); }
+      catch (e) { busy(ok, false, 'Mark as ordered'); toast(e.message, 'bad'); }
+    };
+    acts.append(se, el('div', 'spacer'), ok);
+    c.append(acts);
+  }
+  return c;
+}
+
+// the text for the nursery: whole trays per crop and delivery, sent by a person (e-mail or WhatsApp)
+function seedMessage(o) {
+  const d = drawer('Message for the nursery', `${o.supplier || ''}${o.supplier_email ? ' · ' + o.supplier_email : ''}${o.supplier_phone ? ' · ' + o.supplier_phone : ''}`);
+  const byDelivery = {};
+  (o.batches || []).forEach(b => {
+    const day = (byDelivery[b.delivery] ||= {});
+    day[b.crop] = (day[b.crop] || 0) + Number(b.plants || 0);
+  });
+  const cells = Number(o.tray_cells) || 1;
+  const lines = [`Seedling order — ${o.unit}`, `Hi${o.contact ? ' ' + String(o.contact).split(' ')[0] : ''}, please sow for us:`, ''];
+  Object.keys(byDelivery).sort().forEach(day => {
+    lines.push(`For delivery ${shortDate(day)}:`);
+    Object.entries(byDelivery[day]).sort().forEach(([crop, plants]) => {
+      const t = Math.ceil(plants / cells);
+      lines.push(`- ${crop}: ${t} tray${t === 1 ? '' : 's'} of ${cells} (${num(t * cells)} plants)`);
+    });
+    lines.push('');
+  });
+  lines.push('Please confirm. Thank you.');
+  const pre = el('textarea', 'input po-text'); pre.value = lines.join('\n'); pre.rows = Math.min(20, lines.length + 1);
+  const row = el('div', 'row');
+  const copy = el('button', 'btn btn-sm', 'Copy');
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(pre.value); toast('Copied', 'ok'); } catch { pre.select(); } };
+  row.append(copy);
+  if (o.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${o.supplier_email}?subject=${encodeURIComponent('Seedling order ' + o.unit)}&body=${encodeURIComponent(pre.value)}`; row.append(a); }
+  if (o.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${String(o.supplier_phone).replace(/[^0-9]/g, '').replace(/^0/, '27')}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; row.append(a); }
+  d.body.append(field('The order', pre), row, el('div', 'hint', 'Whole trays per crop and delivery. Once it is placed, press "Mark as ordered" on the order.'));
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close;
+  d.footer.append(el('div', 'spacer'), close);
 }
 
 const ITEM_CATS = [['seed', 'Seed'], ['medium', 'Growing medium'], ['nutrient', 'Nutrient'], ['pot_cap', 'Pots and caps'], ['packaging', 'Packaging'],

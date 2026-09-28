@@ -112,7 +112,7 @@ const READ_RPCS = new Set([
   'trap_map', 'trap_spot', 'crop_calendar', 'crop_detail', 'crop_library', 'crop_map', 'crop_timeline', 'orders', 'dashboard',
   'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvest_overview',
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
-  'procedures', 'purchasing', 'reports', 'system_catalog', 'integration_status', 'task_families',
+  'procedures', 'purchasing', 'seedling_orders', 'reports', 'system_catalog', 'integration_status', 'task_families',
   'farm_holidays', 'scouting_day', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'crop_pests', 'scouting_dates', 'pest_dot', 'basket_plan',
   'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'crop_validations', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view',
 ]);

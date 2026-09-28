@@ -1650,6 +1650,10 @@ table.table tr.off td { opacity: .5; }
 .po .table-wrap table { min-width: 560px; }
 .po > .row { gap: var(--space-2); flex-wrap: wrap; }
 .po-text { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; width: 100%; }
+.seed-batches { margin-top: var(--space-2); }
+.seed-batches > summary { cursor: pointer; font-weight: 600; padding: var(--space-2) 0; }
+.seed-batches .table-wrap table { min-width: 640px; }
+.seed-head { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--text-muted); font-weight: 600; }
 
 /* ── Dashboard › Yield (0.7.145) ── */
 .yd-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }

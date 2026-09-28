@@ -25,6 +25,7 @@ import { renderCustomers } from './customers.js';
 import { renderYield, yieldRange } from './yield.js';
 import { renderHours, hoursRange } from './hours.js';
 import { renderMoney, moneyRange } from './money.js';
+import { renderForecast } from './forecast.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { initAssistant, assistantFarmChanged } from './assistant.js';
@@ -137,7 +138,7 @@ const SECTIONS = {
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek], ['hours', 'Hours', renderHours]] },
   grow: { title: 'Grow', tabs: [
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
-    ['harvest', 'Harvest', renderHarvest]] },
+    ['forecast', 'Forecast review', renderForecast], ['harvest', 'Harvest', renderHarvest]] },
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
   // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
   // and the procedures; the trap setup is behind the page's "Traps…" button
@@ -372,7 +373,7 @@ async function warm() {
   const calls = [
     ['dashboard', p], ['crop_calendar', { ...p, ...calendarRange() }],
     ['labour_week', { ...p, p_week: defaultWeek() }], ['labour_week', { ...p, p_week: nextWeek() }], ['crop_map', p],
-    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }],
+    ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }], ['forecast_review', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p],

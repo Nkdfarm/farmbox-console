@@ -1692,3 +1692,18 @@ table.table tr.off td { opacity: .5; }
 .mo-lbl { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 .mo-net { font-size: 11px; font-weight: 700; }
 .mo-net.neg { color: var(--error); }
+
+/* ── Grow › Forecast review (0.7.148) ── */
+.fc-zone { margin-bottom: var(--space-3); display: grid; gap: 6px; }
+.fc-row { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(170px, 1fr) minmax(300px, 1.6fr) auto; gap: 8px 14px; align-items: center;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--divider); }
+.fc-row.due { border-left: 3px solid var(--warning); }
+.fc-who { display: flex; align-items: center; gap: 10px; }
+.fc-plan { display: flex; flex-direction: column; font-size: var(--text-sm); }
+.fc-fields { display: flex; gap: 8px; flex-wrap: wrap; }
+.fc-f { display: flex; flex-direction: column; gap: 2px; }
+.fc-f .input { width: 110px; padding: 4px 8px; }
+.fc-f select.input { width: 130px; }
+.fc-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.fc-last { grid-column: 1 / -1; }
+@media (max-width: 900px) { .fc-row { grid-template-columns: 1fr; } .fc-acts { justify-content: flex-start; } }

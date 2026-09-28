@@ -90,6 +90,13 @@ function paint() {
     catch (e) { toast(e.message, 'bad'); }
   };
   cl.append(el('span', null, 'Direct clients'), inp);
+  const subs = data.subscriptions || {};
+  if (Number(subs.clients) && Number(subs.clients) !== Number(clients) && data.may_edit) {
+    const use = el('button', 'btn btn-sm btn-ghost', `Use the ${subs.clients} subscriptions`);
+    use.title = `Office › Customers has ${subs.clients} active basket subscriptions (${Number(subs.kg || 0).toFixed(1)} kg a harvest day together)`;
+    use.onclick = () => { inp.value = subs.clients; inp.dispatchEvent(new Event('input')); inp.dispatchEvent(new Event('change')); use.remove(); };
+    cl.append(use);
+  }
 
   const seg = el('div', 'seg');
   SPANS.forEach(([n, label]) => {

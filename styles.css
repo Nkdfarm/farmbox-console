@@ -1634,3 +1634,13 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .cx-key { font-size: 14px; white-space: pre-wrap; word-break: break-all; user-select: all; }
 .cx-codes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 @media (max-width: 640px) { .hm-area { grid-template-columns: 1fr; } .cx-facts { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Office › Customers and deliveries (0.7.143) ── */
+.cu-tiles { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.cu-bar { gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.cu-bar input { max-width: 280px; }
+.cu-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+table.table tr.off td { opacity: .5; }
+.ord-deliveries { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 44px; }
+.ord-dchip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: var(--radius-full);
+  background: var(--success-bg); color: var(--success); font-size: var(--text-xs); font-weight: 600; }

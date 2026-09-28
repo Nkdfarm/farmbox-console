@@ -16,6 +16,7 @@ let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const KIND_WORD = { direct: 'direct client', super_user: 'super user', restaurant: 'restaurant', retailer: 'retailer', community: 'community', market_agent: 'market agent', other: 'other' };
 const STATUS = { open: ['open', ''], planned: ['planned', 'ok'], short: ['short', 'bad'], delivered: ['delivered', 'ok'], cancelled: ['cancelled', ''] };
 
 export async function renderOrders(container, currentFarm) {
@@ -61,6 +62,8 @@ function orderCard(o) {
   const head = el('div', 'row');
   const st = STATUS[o.status] || [o.status, ''];
   head.append(el('b', 'ord-customer', o.customer), el('span', 'pill ' + st[1], st[0]));
+  if (o.customer_kind) head.append(el('span', 'pill', KIND_WORD[o.customer_kind] || o.customer_kind));
+  if (Number(o.delivered_kg)) head.append(el('span', 'hint', `${kg(o.delivered_kg)} delivered · R ${Math.round(Number(o.revenue || 0)).toLocaleString()}`));
   if (o.notes) head.append(el('span', 'hint', o.notes));
   head.append(el('div', 'spacer'));
   if (data.may_edit && !['cancelled', 'delivered'].includes(o.status)) {
@@ -131,9 +134,58 @@ function lineRow(o, l) {
     }
     const see = el('a', 'btn btn-sm btn-ghost', 'On the planner'); see.href = '#/grow/planner';
     acts.append(see);
+    if (l.status !== 'delivered') {
+      const dv = el('button', 'btn btn-sm', 'Delivered…');
+      dv.title = 'Record what went out: the day, the kg and the price';
+      dv.onclick = () => deliver(o, l);
+      acts.append(dv);
+    }
     r.append(acts);
   }
+  // what went out
+  if ((l.delivered || []).length) {
+    const dl = el('div', 'ord-deliveries');
+    l.delivered.forEach(x => {
+      const chip = el('span', 'ord-dchip');
+      chip.append(el('span', null, `${nice(x.on)} · ${Number(x.kg).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` + (x.price != null ? ` · R ${Number(x.price).toFixed(2)}/kg = R ${Math.round(Number(x.amount || 0)).toLocaleString()}` : '')));
+      if (data.may_edit) {
+        const u = el('button', 'tl-chip-x', '✕'); u.title = 'Undo this delivery';
+        u.onclick = async () => {
+          if (!await confirmDrawer('Undo this delivery?', `${nice(x.on)} · ${kg(x.kg)} — the line opens again.`, 'Undo')) return;
+          try { await rpc('undo_delivery', { p_delivery: x.id }); await reload(); } catch (e) { toast(e.message, 'bad'); }
+        };
+        chip.append(u);
+      }
+      dl.append(chip);
+    });
+    r.append(dl);
+  }
   return r;
+}
+
+// a delivery against a line: the day, the kg, the price a kg (the price book times the customer's factor)
+function deliver(o, l) {
+  const d = drawer(`Delivered · ${l.crop}`, `${o.customer} — ${(l.delivered || []).length + 1} of ${l.deliveries || 1}`);
+  const on = input({ type: 'date', value: String(l.next_delivery || l.delivery_date || ymd(new Date())).slice(0, 10) });
+  const q = input({ type: 'number', min: 0, step: 'any', value: l.qty_kg });
+  const price = input({ type: 'number', min: 0, step: '0.01', value: l.price_hint ?? '' });
+  const note = input({ placeholder: 'optional' });
+  const total = el('div', 'hint');
+  const sum = () => { total.textContent = `R ${Math.round(Number(q.value || 0) * Number(price.value || 0)).toLocaleString()}`; };
+  [q, price].forEach(x => x.addEventListener('input', sum)); sum();
+  const g = el('div', 'grid2'); g.append(field('Day', on), field('Kilograms', q));
+  const g2 = el('div', 'grid2'); g2.append(field('Price a kg (R)', price, 'the price book for this customer; change it if it was sold at another price'), field('Amount', total));
+  d.body.append(g, g2, field('Note', note));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Record the delivery');
+  go.onclick = async () => {
+    busy(go, true, 'Saving…');
+    try {
+      await rpc('deliver_line', { p_line: l.id, p_on: on.value, p_kg: Number(q.value), p_price: price.value === '' ? null : Number(price.value), p_note: note.value || null });
+      d.close(); toast('Delivery recorded', 'ok'); await reload();
+    } catch (e) { busy(go, false, 'Record the delivery'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, el('div', 'spacer'), go);
 }
 
 // ── a new order, or a line added to one ──────────────────────────────────────
@@ -146,7 +198,13 @@ async function editOrder(o) {
     d.body.textContent = '';
   }
   const crops = (planMap.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  let book = [];
+  if (!o) { try { book = ((await cachedRpc('customers', { p_farm: farm.id, p_inactive: false })) || await rpc('customers', { p_farm: farm.id, p_inactive: false })).customers || []; } catch { book = []; } }
+  const who = selectBox([['', book.length ? 'Not in the book — type a name' : 'Type a name (the book is empty)'], ...book.map(c => [c.id, c.name])], book.length ? book[0].id : '');
   const customer = input({ value: o?.customer || '', placeholder: 'Restaurant, shop, market…' });
+  const customerF = field('Name', customer);
+  const showName = () => { customerF.style.display = who.value ? 'none' : ''; };
+  who.onchange = showName;
   const notes = input({ value: o?.notes || '', placeholder: 'optional' });
   const crop = selectBox(crops.map(c => [c.id, c.name]));
   const zone = selectBox([]);
@@ -169,7 +227,7 @@ async function editOrder(o) {
   crop.onchange = fillZones; repeat.onchange = showTimes;
   [zone, qty, when, times].forEach(x => x.addEventListener('change', () => { answer.textContent = ''; }));
 
-  if (!o) d.body.append(field('Customer', customer), field('Note', notes));
+  if (!o) { d.body.append(field('Customer', who, 'from Office › Customers'), customerF, field('Note', notes)); showName(); }
   const r1 = el('div', 'grid2'); r1.append(field('Crop', crop), field('Zone', zone));
   const r2 = el('div', 'grid2'); r2.append(field('Kilograms', qty), field('Delivery', when));
   const r3 = el('div', 'grid2'); r3.append(field('Repeats', repeat), timesF);
@@ -190,7 +248,7 @@ async function editOrder(o) {
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Save and plan');
   save.onclick = async () => {
-    if (!o && !customer.value.trim()) { toast('Who is it for?', 'bad'); return; }
+    if (!o && !who.value && !customer.value.trim()) { toast('Who is it for?', 'bad'); return; }
     if (!Number(qty.value)) { toast('How many kg?', 'bad'); return; }
     busy(save, true, 'Planning…');
     try {
@@ -199,7 +257,8 @@ async function editOrder(o) {
       const lines = o ? [...(o.lines || []).filter(l => l.status !== 'cancelled').map(l => ({ id: l.id, crop_id: l.crop_id, qty_kg: l.qty_kg,
                           delivery_date: l.delivery_date, repeat_weeks: l.repeat_weeks, repeat_times: l.repeat_times, system_code: l.system_code, notes: l.notes })), line]
                        : [line];
-      const saved = await rpc('save_order', { p: { id: o?.id ?? null, farm_id: farm.id, customer: o ? o.customer : customer.value.trim(),
+      const saved = await rpc('save_order', { p: { id: o?.id ?? null, farm_id: farm.id, customer: o ? o.customer : (who.value ? (book.find(c => c.id === who.value) || {}).name : customer.value.trim()),
+                                                   customer_id: o ? (o.customer_id || null) : (who.value || null),
                                                    notes: o ? o.notes : notes.value.trim() || null, lines } });
       const newLine = (saved.lines || []).filter(l => !(o?.lines || []).some(x => x.id === l.id)).pop();
       const p = newLine ? await rpc('plan_order_line', { p_line: newLine.id }) : null;

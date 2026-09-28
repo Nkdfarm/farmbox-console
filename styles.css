@@ -1807,3 +1807,4 @@ table.table tr.off td { opacity: .5; }
 .tm-trend-cell { font-weight: 800; text-align: center; }
 .tm-nophoto { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; font-size: 11px; color: var(--text-muted); background: var(--surface-2, var(--surface-offset)); border-radius: 4px; }
 .tm-fam { display: flex; flex-wrap: wrap; gap: 6px; }
+.tm-side.yellow { box-shadow: inset 3px 0 0 #e7c21a; } .tm-side.blue { box-shadow: inset 3px 0 0 #2f7de1; }

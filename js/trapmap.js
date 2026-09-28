@@ -168,6 +168,14 @@ function spotCard(s) {
   photo.disabled = !s.reading_id;
   const info = el('div', 'tm-info');
   info.append(weekBars(s));
+  // a two-sided card: each face its own figure, the trap's the two added (0149)
+  const sides = s.sides && typeof s.sides === 'object' ? Object.entries(s.sides).filter(([k]) => k === 'yellow' || k === 'blue') : [];
+  if (sides.length) {
+    const sr = el('div', 'tm-fam');
+    sides.sort((a, b) => (a[0] === 'yellow' ? -1 : 1)).forEach(([k, v]) =>
+      sr.append(el('span', 'pill tm-side ' + k, `${k === 'yellow' ? 'Yellow' : 'Blue'} side ${v.rate != null ? d1(v.rate) + '/day' : 'count starts'} · ${num(v.total, 0)} on it`)));
+    info.append(sr);
+  }
   // by insect family, the last two weeks: the reading's split (the AI note, else the person's pest) on its new insects
   const fam = Object.entries(s.families || {}).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
   if (fam.length) {
@@ -196,7 +204,7 @@ function spotCard(s) {
         f.type = 'button';
         const im = x.photo_data ? el('img') : el('span', 'tm-nophoto', 'no photo');
         if (x.photo_data) { im.src = x.photo_data; im.alt = ''; }
-        f.append(im, el('span', null, `${dm(x.taken_at)} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : ' · count starts'}`),
+        f.append(im, el('span', null, `${dm(x.taken_at)}${x.side ? ' · ' + x.side : ''} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : ' · count starts'}`),
                  el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced after' : '')));
         f.onclick = () => view(x, getReadings);
         hist.append(f);

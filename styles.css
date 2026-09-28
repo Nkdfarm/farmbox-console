@@ -1717,3 +1717,14 @@ table.table tr.off td { opacity: .5; }
 .va-arrow { color: var(--text-muted); }
 .va-acts { gap: 6px; }
 .va-acts .input { flex: 1; min-width: 120px; }
+
+/* ── crop editor: targets and materials (0.7.150) ── */
+.ce-targets, .ce-bom { display: grid; gap: 6px; margin-bottom: var(--space-3); }
+.ce-trow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--divider); border-radius: 10px; }
+.ce-trow select { width: 130px; }
+.ce-range { display: inline-flex; align-items: center; gap: 3px; }
+.ce-range input { width: 62px; padding: 3px 6px; }
+.ce-brow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ce-brow select:first-child { min-width: 220px; flex: 1; }
+.ce-brow input { width: 90px; }
+.ce-targets > .btn, .ce-bom > .btn { justify-self: start; }

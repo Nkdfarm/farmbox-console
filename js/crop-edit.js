@@ -255,6 +255,75 @@ export async function editCrop(c, onSaved, farm) {
   });
   d.body.append(yBox);
 
+  // ── targets per phase and the bill of materials (0138) ──
+  const PHASE_TYPES = [['germination', 'Germination'], ['nursery', 'Nursery'], ['transplant', 'Transplant'], ['vegetative', 'Vegetative'],
+                       ['flowering', 'Flowering'], ['harvest_window', 'Harvest'], ['cleanup', 'Clean-up']];
+  const TFIELDS = [['ec', 'EC'], ['ph', 'pH'], ['air_temp', 'Air °C'], ['rh', 'RH %'], ['water_temp', 'Water °C']];
+  const targets = (c.targets_raw || []).map(t => ({ ...t }));
+  let targetsTouched = false;
+  d.body.append(el('div', 'sec-title', 'Targets per phase'));
+  d.body.append(el('div', 'hint', 'Minimum and maximum the checklists and the sensors compare with. Empty = no target.'));
+  const tBox = el('div', 'ce-targets');
+  const paintTargets = () => {
+    tBox.textContent = '';
+    targets.forEach((t, i) => {
+      const line = el('div', 'ce-trow');
+      const ph = selectBox(PHASE_TYPES, t.phase_type || 'vegetative');
+      ph.onchange = () => { t.phase_type = ph.value; targetsTouched = true; };
+      line.append(ph);
+      TFIELDS.forEach(([k, label]) => {
+        const w = el('span', 'ce-range');
+        const lo = input({ type: 'number', step: 'any', value: t[k + '_min'] ?? '', placeholder: 'min' });
+        const hi = input({ type: 'number', step: 'any', value: t[k + '_max'] ?? '', placeholder: 'max' });
+        lo.oninput = () => { t[k + '_min'] = lo.value; targetsTouched = true; };
+        hi.oninput = () => { t[k + '_max'] = hi.value; targetsTouched = true; };
+        w.append(el('span', 'hint', label), lo, hi);
+        line.append(w);
+      });
+      const x = el('button', 'btn btn-sm btn-ghost', '✕'); x.title = 'Remove this phase\'s targets';
+      x.onclick = () => { targets.splice(i, 1); targetsTouched = true; paintTargets(); };
+      line.append(x);
+      tBox.append(line);
+    });
+    const add = el('button', 'btn btn-sm', 'Add a phase');
+    add.onclick = () => { targets.push({ phase_type: 'vegetative' }); targetsTouched = true; paintTargets(); };
+    tBox.append(add);
+  };
+  paintTargets();
+  d.body.append(tBox);
+
+  const bom = (c.bom_raw || []).map(b => ({ ...b }));
+  let bomTouched = false;
+  d.body.append(el('div', 'sec-title', 'Materials (bill of materials)'));
+  d.body.append(el('div', 'hint', 'What a batch uses, per plant, position, m² or batch, and in which phase — purchasing and the stock read it.'));
+  const bBox = el('div', 'ce-bom');
+  const itemOpts = (c.items || []).map(i => [i.id, `${i.name}${i.unit ? ' (' + i.unit + ')' : ''}`]);
+  const paintBom = () => {
+    bBox.textContent = '';
+    bom.forEach((b, i) => {
+      const line = el('div', 'ce-brow');
+      const it = selectBox(itemOpts, b.item_id || itemOpts[0]?.[0]);
+      if (!b.item_id) b.item_id = it.value;
+      it.onchange = () => { b.item_id = it.value; bomTouched = true; };
+      const q = input({ type: 'number', min: 0, step: 'any', value: b.quantity ?? '' });
+      q.oninput = () => { b.quantity = q.value; bomTouched = true; };
+      const per = selectBox([['plant', 'a plant'], ['position', 'a position'], ['m2', 'a m²'], ['batch', 'a batch']], b.per || 'plant');
+      per.onchange = () => { b.per = per.value; bomTouched = true; };
+      const ph = selectBox([['', 'any phase'], ...PHASE_TYPES], b.phase_type || '');
+      ph.onchange = () => { b.phase_type = ph.value; bomTouched = true; };
+      const x = el('button', 'btn btn-sm btn-ghost', '✕');
+      x.onclick = () => { bom.splice(i, 1); bomTouched = true; paintBom(); };
+      line.append(it, q, el('span', 'hint', 'per'), per, ph, x);
+      bBox.append(line);
+    });
+    const add = el('button', 'btn btn-sm', 'Add a material');
+    add.disabled = !itemOpts.length;
+    add.onclick = () => { bom.push({ per: 'plant', quantity: 1 }); bomTouched = true; paintBom(); };
+    bBox.append(add);
+  };
+  paintBom();
+  d.body.append(bBox);
+
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Save');
@@ -283,6 +352,11 @@ export async function editCrop(c, onSaved, farm) {
           .map(y => ({ system_type: y.system_type, yield_per_position: y.ypp ?? '',
                        yield_per_m2_cycle: y.ym2 ?? '' })),
       } });
+      if (targetsTouched || bomTouched) {
+        await rpc('save_crop_extras', { p_crop: c.id,
+          p_targets: targetsTouched ? targets.map(t => ({ ...t })) : null,
+          p_bom: bomTouched ? bom.map(b => ({ id: b.id || null, item_id: b.item_id, quantity: b.quantity, per: b.per, phase_type: b.phase_type || null, notes: b.notes || null })) : null });
+      }
       toast(`${name.value.trim()} saved · ${r.cycle_days} day cycle` + (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
       d.close();
       await onSaved?.();

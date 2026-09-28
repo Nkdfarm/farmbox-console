@@ -1669,3 +1669,12 @@ table.table tr.off td { opacity: .5; }
 .yd-bar i { display: block; height: 100%; background: var(--success, #2e7d32); }
 .yd-bar.short i { background: var(--warning); }
 @media (max-width: 640px) { .yd-grid { grid-template-columns: 1fr; } }
+
+/* ── Tasks › Hours (0.7.146) ── */
+.hr-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.hr-table tr.hr-row { cursor: pointer; }
+.hr-table tr.hr-row:hover td { background: var(--row-hover, var(--hover)); }
+.hr-who { display: flex; align-items: center; gap: 10px; }
+.hr-on { color: var(--success) !important; }
+.hr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.hr-day { display: flex; flex-direction: column; font-size: var(--text-sm); padding: 6px 8px; border-radius: 8px; background: var(--surface-offset, var(--chip)); }

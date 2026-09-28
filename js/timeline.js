@@ -34,7 +34,8 @@ const money = (n, cur) => n == null ? '—' : `${cur} ${Math.round(Number(n)).to
 // shell (0.7.120): the planner's top bar from crops.js — this view fills its left part and its ⓘ text
 let farm = null, mount = null, data = null, offset = 0, selected = new Set(), shell = null;
 // choosing the zones of a steady harvest (0.7.135): the mode, the zones ticked, the banner's live parts
-let steadyMode = false, steadyPick = new Set(), steadyBanner = null;
+// since 0.7.140 a FarmBox keeps several groups: steadyEdit is the group being changed (null = a new one)
+let steadyMode = false, steadyPick = new Set(), steadyBanner = null, steadyEdit = null;
 const span = () => Number(pref.get(SPAN_KEY)) || 91;
 
 // the window on screen: a week back from today, then the span (warm() reads the same)
@@ -45,7 +46,7 @@ export function timelineRange(off = 0) {
 }
 
 export async function renderTimeline(container, currentFarm, plannerShell) {
-  if (farm?.id !== currentFarm.id) { offset = 0; selected.clear(); steadyMode = false; steadyPick.clear(); }
+  if (farm?.id !== currentFarm.id) { offset = 0; selected.clear(); steadyMode = false; steadyPick.clear(); steadyEdit = null; }
   farm = currentFarm; mount = container; shell = plannerShell || null;
   await load();
 }
@@ -103,7 +104,8 @@ function paint() {
     'to change the harvest. Click a bar for the batch, an empty day to plan one there; Shift-click to select several. ' +
     'Each zone has its kg per week (forecast green, harvested orange) and its number of positions (whole or half rows). ' +
     'Steady harvest… picks zones to plan together: every position is replanted on a fixed weekly rhythm for an even harvest, ' +
-    'and changing a steady zone\'s positions plans the group again at once (with Undo). Nothing is planted until it is validated.'); }
+    'and changing a steady zone\'s positions plans its group again at once (with Undo). A FarmBox may keep several steady groups: ' +
+    '＋ Steady group… starts another, each with its own colour, crops, rhythm and Undo. Nothing is planted until it is validated.'); }
   else { const bar = el('div', 'tl-nav'); bar.append(...controls); mount.append(bar); }
 
   // proposals and a selection: the decisions in one place
@@ -116,9 +118,10 @@ function paint() {
     suc.onclick = () => succession();
     act.append(suc);
     if (!steadyMode) {
-      const st = el('button', 'btn btn-sm tl-steady-btn', data.steady ? 'Steady harvest: change zones…' : 'Steady harvest…');
-      st.title = 'Pick the zones to plan together for an even harvest every week — zones with different crops may be mixed';
-      st.onclick = () => startSteady();
+      const st = el('button', 'btn btn-sm tl-steady-btn', steadyGroups().length ? '＋ Steady group…' : 'Steady harvest…');
+      st.title = 'Pick zones to plan together for an even harvest every week — different crops may be mixed. ' +
+        'Each group has its own rhythm; the zones of an existing group are changed from its own bar.';
+      st.onclick = () => startSteady(null);
       act.append(st);
     }
     if (proposed.length) {
@@ -158,15 +161,19 @@ function paint() {
   const pinned = el('div', 'tl-sticky');
   pinned.append(scale(from, days, px, today), kgRow('All zones', W, null, from, px, true), plantsRow('All zones · plants', W, null, from, px, true));
   inner.append(pinned);
-  // the steady zones first, together under their own lines; then the others
+  // each steady group first, its zones under its own lines, in its own colour; then the others
   const systems = data.systems || [];
-  const steadyZones = systems.filter(s => s.steady_group_id), otherZones = systems.filter(s => !s.steady_group_id);
-  if (steadyZones.length) {
-    inner.append(...steadyHead(steadyZones, W, from, px));
-    steadyZones.forEach(sys => zoneBlock(inner, sys, W, from, to, px, today, cur, true));
-    if (otherZones.length) { const sep = el('div', 'tl-zone tl-others'); sep.append(el('div', 'tl-label', 'Other zones')); inner.append(sep); }
-  }
-  otherZones.forEach(sys => zoneBlock(inner, sys, W, from, to, px, today, cur, false));
+  const grouped = new Set();
+  steadyGroups().forEach(g => {
+    const zs = systems.filter(s => s.steady_group_id === g.id);
+    if (!zs.length) return;
+    zs.forEach(z => grouped.add(z.id));
+    inner.append(...steadyHead(g, zs, W, from, px));
+    zs.forEach(sys => zoneBlock(inner, sys, W, from, to, px, today, cur, g));
+  });
+  const otherZones = systems.filter(s => !grouped.has(s.id));
+  if (grouped.size && otherZones.length) { const sep = el('div', 'tl-zone tl-others'); sep.append(el('div', 'tl-label', 'Other zones')); inner.append(sep); }
+  otherZones.forEach(sys => zoneBlock(inner, sys, W, from, to, px, today, cur, null));
   board.append(inner);
   // the scroll bar on top: the same sideways position as the board, both ways
   const hs = el('div', 'tl-hscroll');
@@ -181,13 +188,22 @@ function paint() {
   mount.append(legend());
 }
 
-// one zone: its header (name, positions, buttons), its kg and plants lines, its positions
-function zoneBlock(inner, sys, W, from, to, px, today, cur, steady) {
-  const may = data.may_plan;
+// one zone: its header (name, positions, buttons), its kg and plants lines, its positions;
+// group = the steady group it belongs to (null: none)
+function zoneBlock(inner, sys, W, from, to, px, today, cur, group) {
+  const may = data.may_plan, steady = !!group;
   const zh = el('div', 'tl-zone' + (steady ? ' steady' : '') + (steadyMode && steadyPick.has(sys.id) ? ' picked' : ''));
   zh.dataset.sys = sys.id;
+  if (group) zh.style.setProperty('--g', groupColour(group));
   const lab = el('div', 'tl-label tl-zone-label');
-  if (steadyMode) {
+  // a zone is in one group at a time: while choosing another group's zones it cannot be ticked
+  const elsewhere = steadyMode && group && group.id !== steadyEdit;
+  if (elsewhere) {
+    const cb = el('input'); cb.type = 'checkbox'; cb.disabled = true;
+    cb.setAttribute('aria-label', `${sys.name} is in ${groupName(group)}`);
+    lab.append(cb);
+    lab.title = `${sys.name} is in ${groupName(group)} — take it out there first (✕ on its chip)`;
+  } else if (steadyMode) {
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = steadyPick.has(sys.id);
     cb.setAttribute('aria-label', `Keep ${sys.name} steady`);
     cb.onchange = () => pickZone(sys.id, cb.checked, zh);
@@ -196,11 +212,11 @@ function zoneBlock(inner, sys, W, from, to, px, today, cur, steady) {
     lab.onclick = e => { if (e.target !== cb) { cb.checked = !cb.checked; pickZone(sys.id, cb.checked, zh); } };
   }
   lab.append(el('b', null, sys.name), el('span', 'hint', ' ' + systemLabel(sys.type)));
-  lab.title = 'Growing medium: ' + (sys.media || []).map(mediumLabel).join(', ') +
+  if (!elsewhere) lab.title = 'Growing medium: ' + (sys.media || []).map(mediumLabel).join(', ') +
     ((sys.categories || []).length ? ' · kept for ' + sys.categories.join(', ').replace(/_/g, ' ') : '');
   zh.append(lab);
   const zt = el('div', 'tl-zone-track');
-  if (steady) zt.append(steadyChip(sys));
+  if (steady) zt.append(steadyChip(sys, group));
   if (may) zt.append(splitMenu(sys));
   if (may) {
     const pb = el('button', 'btn btn-sm btn-ghost', 'Plan this bay');
@@ -212,7 +228,7 @@ function zoneBlock(inner, sys, W, from, to, px, today, cur, steady) {
   inner.append(zh);
   const lines = [kgRow('kg / week', W, sys.id, from, px, false), plantsRow('plants / week', W, sys.id, from, px, false),
                  ...(sys.positions || []).map(p => row(sys, p, from, to, px, today, cur))];
-  if (steady) lines.forEach(r => r.classList.add('steady'));
+  if (steady) lines.forEach(r => { r.classList.add('steady'); r.style.setProperty('--g', groupColour(group)); });
   inner.append(...lines);
 }
 
@@ -662,7 +678,7 @@ function weeksOf(from, days) {
   const mon0 = from - (((new Date(from * DAY).getUTCDay() || 7) - 1));
   const end = from + days;
   const weeks = new Map();        // monday → { all: cell, bySys: Map(key → cell) }; a key is a zone id,
-                                  // 'steady' (the steady zones together) or 'steady:<crop>' (one crop in them)
+                                  // 'steady:<group>' (a steady group's zones together) or 'steady:<group>:<crop>' (one crop in them)
   const blank = () => ({ fc: 0, fcP: 0, real: 0, sow: 0, sowP: 0, ext: 0, tp: 0, tpP: 0, ord: 0, ordP: 0, tpCrops: new Map(), crops: new Map() });
   const cellOf = (d, keys) => {
     const m = d - (((new Date(d * DAY).getUTCDay() || 7) - 1));
@@ -671,8 +687,8 @@ function weeksOf(from, days) {
     return [w.all, ...keys.filter(Boolean).map(k => { if (!w.bySys.has(k)) w.bySys.set(k, blank()); return w.bySys.get(k); })];
   };
   for (let m = mon0; m < end; m += 7) cellOf(m, []);
-  const steadySys = new Set((data.systems || []).filter(s => s.steady_group_id).map(s => s.id));
-  const keysOf = (sys, crop) => !steadySys.has(sys) ? [sys] : crop ? [sys, 'steady', 'steady:' + crop] : [sys, 'steady'];
+  const groupOf = new Map((data.systems || []).filter(s => s.steady_group_id).map(s => [s.id, 'steady:' + s.steady_group_id]));
+  const keysOf = (sys, crop) => { const g = groupOf.get(sys); return !g ? [sys] : crop ? [sys, g, g + ':' + crop] : [sys, g]; };
   const both = (d, keys, f) => cellOf(d, keys).forEach(c => c && f(c));
   (data.batches || []).forEach(b => {
     const sys = keysOf(sysOf.get(b.position_id), b.crop_id), prop = b.status === 'proposed';
@@ -866,7 +882,7 @@ function splitMenu(sys) {
     if (sys.steady_group_id) {
       try {
         const r = await rpc('steady_set_positions', { p_system: sys.id, p_n: n });
-        toast(`${sys.name}: ${n} positions — the steady zones are planned again (${r.batches} batches). Undo is in the steady bar.`, 'ok');
+        toast(`${sys.name}: ${n} positions — its steady group is planned again (${r.batches} batches). Undo is in the group's bar.`, 'ok');
         await reload();
       } catch (e) { sel.value = String(cur); toast(e.message, 'bad'); }
       return;
@@ -897,9 +913,22 @@ const OBJECTIVES = [['per_crop', 'Each crop even on its own'], ['total', 'All cr
 const cropById = id => (data.crops || []).find(c => c.id === id);
 const pct = cv => cv == null ? '—' : `±${Math.round(Number(cv) * 100)}%`;
 
-function startSteady() {
+// the FarmBox's steady groups, oldest first (an older database sends only one, as steady)
+const steadyGroups = () => data?.steady_groups || (data?.steady ? [data.steady] : []);
+const groupById = id => steadyGroups().find(g => g.id === id) || null;
+const groupColour = g => `hsl(${g?.hue ?? 205} 60% 50%)`;
+// a group is called what somebody named it, else after its crops
+function groupName(g) {
+  if (!g) return 'New steady group';
+  if (g.name) return g.name;
+  const crops = [...new Set((data.systems || []).filter(s => s.steady_group_id === g.id).map(s => cropById(s.steady_crop_id)?.name).filter(Boolean))];
+  return crops.length ? 'Steady · ' + crops.join(' + ') : 'Steady group';
+}
+
+function startSteady(groupId) {
   steadyMode = true;
-  steadyPick = new Set((data.systems || []).filter(s => s.steady_group_id).map(s => s.id));
+  steadyEdit = groupId || null;
+  steadyPick = new Set(groupId ? (data.systems || []).filter(s => s.steady_group_id === groupId).map(s => s.id) : []);
   paint();
 }
 function pickZone(id, on, zh) {
@@ -908,13 +937,18 @@ function pickZone(id, on, zh) {
   paintBanner();
 }
 function steadyBar() {
+  const g = groupById(steadyEdit);
   const bar = el('div', 'tl-steady-banner');
+  if (g) bar.style.setProperty('--g', groupColour(g));
   const count = el('span', 'hint');
   const go = el('button', 'btn btn-sm btn-primary', 'Optimise…');
-  go.onclick = () => openSteadyOptions([...steadyPick]);
+  go.onclick = () => openSteadyOptions([...steadyPick], steadyEdit);
   const no = el('button', 'btn btn-sm', 'Cancel');
-  no.onclick = () => { steadyMode = false; steadyPick.clear(); paint(); };
-  bar.append(el('b', null, 'Pick the zones to keep steady'), count, el('div', 'spacer'), go, no);
+  no.onclick = () => { steadyMode = false; steadyPick.clear(); steadyEdit = null; paint(); };
+  const title = el('b');
+  if (g) { const sw = el('i', 'tl-group-swatch'); sw.style.background = groupColour(g); title.append(sw, `Zones of ${groupName(g)}`); }
+  else title.append('New steady group — pick its zones');
+  bar.append(title, count, el('div', 'spacer'), go, no);
   steadyBanner = { count, go };
   paintBanner();
   return bar;
@@ -922,66 +956,96 @@ function steadyBar() {
 function paintBanner() {
   if (!steadyBanner) return;
   const n = steadyPick.size;
-  steadyBanner.count.textContent = n ? ` · ${n} zone${n === 1 ? '' : 's'} ticked — tick the zones on the board; different crops may be mixed`
-                                     : ' · tick the zones on the board (the box beside each zone name)';
+  const others = steadyGroups().filter(g => g.id !== steadyEdit).length;
+  steadyBanner.count.textContent = (n ? ` · ${n} zone${n === 1 ? '' : 's'} ticked — different crops may be mixed`
+                                      : ' · tick the zones on the board (the box beside each zone name)') +
+    (others ? ` · zones of ${others === 1 ? 'the other group' : 'other groups'} cannot be ticked` : '');
   steadyBanner.go.disabled = !n;
 }
 
-// the group's head: what it is, how even it came out, its buttons; then its lines
-function steadyHead(zones, W, from, px) {
-  const g = data.steady || {}, res = g.result || {};
+// a group's head: its colour and name, how even it came out, its buttons; then its lines
+function steadyHead(g, zones, W, from, px) {
+  const res = g.result || {};
   const head = el('div', 'tl-zone tl-group');
+  head.style.setProperty('--g', groupColour(g));
   const lab = el('div', 'tl-label');
-  lab.append(el('b', null, 'Steady harvest'), el('span', 'hint', ` ${zones.length} zone${zones.length === 1 ? '' : 's'}`));
+  const sw = el('i', 'tl-group-swatch'); sw.style.background = groupColour(g);
+  lab.append(sw, el('b', 'tl-group-name', groupName(g)), el('span', 'hint', ` ${zones.length} zone${zones.length === 1 ? '' : 's'}`));
+  lab.title = groupName(g);
   head.append(lab);
   const track = el('div', 'tl-zone-track');
   const obj = OBJECTIVES.find(o => o[0] === g.objective);
   const sum = (res.series || []).map(s => `${s.crop} every ${s.cycle_weeks} wk ${pct(s.cv)}`).join(' · ');
   track.append(el('span', 'tl-group-sum', (obj ? obj[1] : 'Each crop even') + (sum ? ' — ' + sum : '')));
   if (data.may_plan) {
+    const ren = el('button', 'btn btn-sm btn-ghost', 'Rename…');
+    ren.onclick = () => renameGroup(g);
     const edit = el('button', 'btn btn-sm btn-ghost', 'Change zones…');
-    edit.onclick = () => startSteady();
+    edit.onclick = () => startSteady(g.id);
     const again = el('button', 'btn btn-sm btn-ghost', 'Options…');
-    again.title = 'The crops, positions and what "even" means for these zones';
-    again.onclick = () => openSteadyOptions(zones.map(z => z.id));
-    track.append(edit, again);
+    again.title = 'The crops, positions and what "even" means for this group';
+    again.onclick = () => openSteadyOptions(zones.map(z => z.id), g.id);
+    track.append(ren, edit, again);
     if (g.undo) {
       const undo = el('button', 'btn btn-sm', '↶ Undo last change');
-      undo.title = 'Put back the positions and proposals as they were before the last steady plan';
+      undo.title = `Put back the positions and proposals of ${groupName(g)} as they were before its last plan`;
       undo.onclick = async () => {
         busy(undo, true, 'Undoing…');
-        try { const r = await rpc('steady_undo', { p_farm: farm.id }); toast(`Put back as it was (${r.restored} proposals)`, 'ok'); await reload(); }
+        try { const r = await rpc('steady_undo', { p_group: g.id }); toast(`Put back as it was (${r.restored} proposals)`, 'ok'); await reload(); }
         catch (e) { busy(undo, false, '↶ Undo last change'); toast(e.message, 'bad'); }
       };
       track.append(undo);
     }
     const end = el('button', 'btn btn-sm btn-ghost tl-clear', 'End the group');
     end.onclick = async () => {
-      if (!await confirmDrawer('End the steady group?', 'The zones go back to planning on their own. Every proposal stays where it is.', 'End it')) return;
-      try { await rpc('steady_dissolve', { p_farm: farm.id }); toast('Steady group ended — the proposals stay', 'ok'); await reload(); }
+      if (!await confirmDrawer(`End ${groupName(g)}?`, 'Its zones go back to planning on their own. Every proposal stays where it is; the other steady groups are not touched.', 'End it')) return;
+      try { await rpc('steady_dissolve', { p_group: g.id }); toast('Steady group ended — the proposals stay', 'ok'); await reload(); }
       catch (e) { toast(e.message, 'bad'); }
     };
     track.append(end);
   }
   head.append(track);
-  const lines = [kgRow('Steady · kg / week', W, 'steady', from, px, false)];
+  const key = 'steady:' + g.id;
+  const lines = [kgRow('Group · kg / week', W, key, from, px, false)];
   const crops = [...new Set(zones.map(z => z.steady_crop_id).filter(Boolean))];
-  if (crops.length > 1) crops.forEach(id => lines.push(kgRow(`${cropById(id)?.name || 'Crop'} · kg`, W, 'steady:' + id, from, px, false)));
-  lines.push(plantsRow('Steady · plants', W, 'steady', from, px, false));
-  lines.forEach(r => r.classList.add('steady', 'group'));
+  if (crops.length > 1) crops.forEach(id => lines.push(kgRow(`${cropById(id)?.name || 'Crop'} · kg`, W, key + ':' + id, from, px, false)));
+  lines.push(plantsRow('Group · plants', W, key, from, px, false));
+  lines.forEach(r => { r.classList.add('steady', 'group'); r.style.setProperty('--g', groupColour(g)); });
   return [head, ...lines];
 }
 
-// the chip on a steady zone: its crop, and ✕ to take the zone out
-function steadyChip(sys) {
+function renameGroup(g) {
+  const d = drawer('Name the steady group', 'Left empty, it is named after its crops');
+  const name = el('input', 'input');
+  name.type = 'text';
+  name.value = g.name || '';
+  name.placeholder = groupName({ ...g, name: null });
+  name.maxLength = 60;
+  d.body.append(field('Name', name));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Save');
+  go.onclick = async () => {
+    busy(go, true, 'Saving…');
+    try { await rpc('steady_rename', { p_group: g.id, p_name: name.value }); d.close(); await reload(); }
+    catch (e) { busy(go, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  name.onkeydown = e => { if (e.key === 'Enter') go.click(); };
+  d.footer.append(cancel, el('div', 'spacer'), go);
+  setTimeout(() => name.focus(), 50);
+}
+
+// the chip on a steady zone: its group's colour and crop, and ✕ to take the zone out
+function steadyChip(sys, g) {
   const chip = el('span', 'tl-steady-chip');
+  chip.style.setProperty('--g', groupColour(g));
+  chip.title = groupName(g);
   chip.append(el('span', null, `Steady · ${cropById(sys.steady_crop_id)?.name || 'crop'}`));
   if (data.may_plan) {
     const x = el('button', 'tl-chip-x', '✕');
-    x.title = `Take ${sys.name} out of the steady group`;
+    x.title = `Take ${sys.name} out of ${groupName(g)}`;
     x.onclick = async () => {
-      if (!await confirmDrawer(`Take ${sys.name} out?`, 'Its proposals stay where they are; the other steady zones are planned again. Undo can put it back.', 'Take it out')) return;
-      try { await rpc('steady_leave', { p_system: sys.id }); toast(`${sys.name} left the steady group`, 'ok'); await reload(); }
+      if (!await confirmDrawer(`Take ${sys.name} out?`, `Its proposals stay where they are; the other zones of ${groupName(g)} are planned again. Undo can put it back.`, 'Take it out')) return;
+      try { await rpc('steady_leave', { p_system: sys.id }); toast(`${sys.name} left ${groupName(g)}`, 'ok'); await reload(); }
       catch (e) { toast(e.message, 'bad'); }
     };
     chip.append(x);
@@ -1000,10 +1064,11 @@ function defaultCrop(sys) {
   return top ? top[0] : fitting[0]?.id;
 }
 
-function openSteadyOptions(ids) {
-  const g = data.steady || {};
+function openSteadyOptions(ids, groupId) {
+  const g = groupById(groupId) || {};
   const zones = ids.map(id => (data.systems || []).find(s => s.id === id)).filter(Boolean);
-  const d = drawer('Steady harvest', `${zones.length} zone${zones.length === 1 ? '' : 's'} planned together: every position replanted on a fixed weekly rhythm, for an even harvest`);
+  const d = drawer(groupId ? groupName(g) : 'New steady group',
+    `${zones.length} zone${zones.length === 1 ? '' : 's'} planned together: every position replanted on a fixed weekly rhythm, for an even harvest`);
   const obj = selectBox(OBJECTIVES, g.objective || 'per_crop');
   const hz = selectBox([['91', '13 weeks'], ['182', '26 weeks'], ['364', '52 weeks']], String(g.horizon || 182));
   const top = el('div', 'grid2'); top.append(field('Keep even', obj), field('Plan ahead for', hz));
@@ -1033,7 +1098,7 @@ function openSteadyOptions(ids) {
 
   const prev = el('div', 'st-preview');
   d.body.append(el('div', 'sec-title', 'Preview'), prev);
-  const args = () => ({ p_farm: farm.id, p_objective: obj.value, p_horizon: Number(hz.value),
+  const args = () => ({ p_farm: farm.id, p_group: groupId || null, p_objective: obj.value, p_horizon: Number(hz.value),
                         p_zones: rows.map(r => ({ system_id: r.sys.id, crop_id: r.crop.value, n: Number(r.pos.value) })) });
   let seq = 0, timer = null;
   const preview = () => {
@@ -1065,9 +1130,9 @@ function openSteadyOptions(ids) {
     try {
       const r = await rpc('steady_apply', args());
       d.close();
-      steadyMode = false; steadyPick.clear();
+      steadyMode = false; steadyPick.clear(); steadyEdit = null;
       toast(`Steady harvest: ${r.batches} batches proposed over ${zones.length} zone${zones.length === 1 ? '' : 's'} · ≈ ${Math.round(r.expected_kg || 0).toLocaleString()} kg` +
-            ' · Undo is in the steady bar', 'ok');
+            " · Undo is in the group's bar", 'ok');
       await reload();
     } catch (e) { busy(go, false, 'Plan it'); toast(e.message, 'bad'); }
   };

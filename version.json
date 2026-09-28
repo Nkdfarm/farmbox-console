@@ -1,5 +1,5 @@
 {
-  "version": "0.7.160",
+  "version": "0.7.161",
   "released": "2026-09-28",
-  "note": "Cancel validated batches, steady start dates"
+  "note": "Steady replan within the time limit"
 }

@@ -1253,18 +1253,22 @@ function openCancelValidated() {
         const r = await rpc('cancel_validated', { p_farm: farm.id, p_systems: [z.system_id], p_dry: false });
         cancelled += Number(r.cancelled || 0); n++; done();
       }
-      for (const g of gs) {
+      const failed = [];
+      for (const g of gs) {           // one group failing does not stop the others
         const zs = (data.systems || []).filter(x => x.steady_group_id === g.id && x.steady_crop_id);
         if (zs.length) {
-          const r = await rpc('steady_apply', { p_farm: farm.id, p_group: g.id, p_objective: g.objective || 'per_crop',
-            p_horizon: Number(g.horizon) || 182,
-            p_zones: zs.map(x => ({ system_id: x.id, crop_id: x.steady_crop_id, n: (x.positions || []).length })) });
-          planned += Number(r.batches || 0);
+          try {
+            const r = await rpc('steady_apply', { p_farm: farm.id, p_group: g.id, p_objective: g.objective || 'per_crop',
+              p_horizon: Number(g.horizon) || 182,
+              p_zones: zs.map(x => ({ system_id: x.id, crop_id: x.steady_crop_id, n: (x.positions || []).length })) });
+            planned += Number(r.batches || 0);
+          } catch (e) { failed.push(`${groupName(g)}: ${e.message}`); }
         }
         n++; done();
       }
       d.close();
-      toast(`${cancelled} batch${cancelled === 1 ? '' : 'es'} cancelled` + (gs.length ? ` · ${planned} proposed again in ${gs.length} steady group${gs.length === 1 ? '' : 's'} — validate them to order the seedlings` : ''), 'ok');
+      toast(`${cancelled} batch${cancelled === 1 ? '' : 'es'} cancelled` + (gs.length ? ` · ${planned} proposed again in ${gs.length - failed.length} steady group${gs.length - failed.length === 1 ? '' : 's'} — validate them to order the seedlings` : '') +
+            (failed.length ? ` · not planned: ${failed.join('; ')} — try its Options… → Plan it` : ''), failed.length ? 'bad' : 'ok');
     } catch (e) {
       d.close();
       toast(`Stopped after ${cancelled} cancelled${planned ? `, ${planned} proposed` : ''}: ${e.message}`, 'bad');

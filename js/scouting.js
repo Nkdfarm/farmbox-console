@@ -17,7 +17,9 @@
 // Since 0141 (console 0.7.153) the phone's scouting has sections: a plant photo
 // is Plant health or Growth, carries its position (3B8) or its GPS and, for
 // growth, the sizes measured on the printed scale card; the day ends OK or Not
-// OK with a note. A photo placed by GPS only has no zone: listed apart.
+// OK with a note. Since 0172 (console 0.7.168) the scouting is one task a zone: each zone band carries its
+// own task (who, when, OK / not OK, the sections) from its zone line, and there is no GPS placing any more —
+// a photo's zone is its task's (photos once placed by GPS alone are no longer listed).
 // Since 0170 (console 0.7.166, owner: "the zones to select, to generate 5 reports") the unit's zones sit at
 // the top: a chosen zone turns the page into that zone's report — its pressure, cases, crops, and each date
 // with that zone's traps and photos only (scouting_dates.zone_counts). Remembered per unit.
@@ -340,13 +342,11 @@ function dayRow(d, openFirst) {
     const zones = (zoneFilter ? (day.units || day.zones || []) : (day.zones || [])).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
       && (!cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter)));
     // a zone with nothing in it that day is one word, not a band
-    const has = z => z.traps.length || z.photos.length || (z.cases || []).length;
+    const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done';
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
-    else if (!full.length && !(day.unplaced || []).length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
+    else if (!full.length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
     full.forEach(z => { const b = zoneBand(z, day); if (zoneFilter) b.open = true; body.append(b); });
-    const gps = zoneFilter ? [] : (day.unplaced || []).filter(p => !cropFilter || p.crop_id === cropFilter);
-    if (gps.length) body.append(zoneBand({ zone_id: null, name: 'Placed by GPS', crops: [], traps: [], photos: gps, cases: [] }, day));
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
   };
   det.addEventListener('toggle', () => { if (det.open) fill(); });
@@ -379,12 +379,29 @@ function zoneBand(z, day) {
     b.onclick = e => { e.preventDefault(); e.stopPropagation(); openCase(k.id, reload, farm); };
     right.append(b);
   });
-  if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
+  const zt = z.item?.task;                  // the zone's own task (0172)
+  if (zt) {
+    if (zt.outcome) right.append(el('span', 'pill ' + (zt.outcome === 'nok' ? 'bad' : 'ok'), zt.outcome === 'nok' ? 'Not OK' : 'OK'));
+    right.append(el('span', 'hint', zt.status === 'done'
+      ? [zt.workers?.length ? zt.workers.join(', ') : null, zt.done_at ? hhmm(zt.done_at) : null].filter(Boolean).join(' · ') || 'done'
+      : zt.status === 'skipped' ? 'cancelled' : 'not done'));
+  } else if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
   else if (z.item) right.append(el('span', 'hint', 'not done'));
   sum.append(right);
   det.append(sum);
 
   const body = el('div', 'pd-zone-body');
+  if (zt?.outcome_note) body.append(el('div', 'note ' + (zt.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome', zt.outcome_note));
+  if (zt?.section_outcomes && Object.keys(zt.section_outcomes).length) {
+    const row = el('div', 'sc-verdicts');
+    [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
+      const v = zt.section_outcomes[k]; if (!v) return;
+      const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
+      if (v.note) pill.title = v.note;
+      row.append(pill);
+    });
+    body.append(row);
+  }
   const shared = [...traps, ...photos].filter(p => p.shared).length;
   if (shared) body.append(el('div', 'hint pd-shared', `${shared} of these name ${z.zone_name || 'the zone'} without its table, so they are in each of its reports.`));
   if (traps.length) {
@@ -397,7 +414,7 @@ function zoneBand(z, day) {
     photos.forEach(p => grid.append(photoFig(p, z, day)));
     body.append(grid);
   }
-  if (!traps.length && !photos.length) body.append(el('div', 'hint', z.item?.done_at ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
+  if (!traps.length && !photos.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
   const answers = (z.answers || []).filter(a => a.note || a.value || a.result === 'nok');
   answers.forEach(a => body.append(el('div', 'sc-answer', `${a.result === 'nok' ? '✗ ' : ''}${a.title || 'step ' + a.seq}: ${[a.value, a.note].filter(Boolean).join(' · ')}`)));
   det.append(body);
@@ -460,14 +477,11 @@ function photoFig(p, z, day) {
   const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
   cap.append(title, tagChips(p));
   // the section, where it was, the sizes on the scale card (0141)
-  const where = p.pos_code || (p.gps ? 'GPS' + (p.gps.acc != null ? ` ±${Math.round(p.gps.acc)} m` : '') : null);
+  const where = p.pos_code || null;
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
   if (p.section) line.append(el('span', 'pill ' + (p.section === 'growth' ? 'ok' : ''), p.section === 'growth' ? 'Growth' : 'Plant health'));
-  if (where) {
-    if (p.gps && !p.pos_code) { const a = el('a', null, where); a.href = `https://www.google.com/maps?q=${p.gps.lat},${p.gps.lng}`; a.target = '_blank'; a.rel = 'noopener'; a.onclick = e => e.stopPropagation(); line.append(a); }
-    else line.append(el('span', 'mono', where));
-  }
+  if (where) line.append(el('span', 'mono', where));
   if (sizes) line.append(el('b', null, sizes));
   if (line.children.length) cap.append(line);
   const st = p.ai_status === 'done' ? 'AI read' : p.ai_status === 'queued' ? 'AI asked' : p.ai_status === 'failed' ? 'AI failed' : null;

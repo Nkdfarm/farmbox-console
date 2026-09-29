@@ -308,6 +308,14 @@ function dayRow(d, openFirst) {
   const nPhotos = zc && !cropFilter ? zc.photos : cropFilter ? ((d.photo_crops || {})[cropFilter] || 0) : d.photos;
   const nTraps = zc ? zc.traps : d.traps;
   facts.append(el('span', 'pill', `${nPhotos} photo${nPhotos === 1 ? '' : 's'}`), el('span', 'pill', `${nTraps} trap${nTraps === 1 ? '' : 's'} counted`));
+  // each section's result on the line itself (0174, owner: "more compact: the OK is not needed") — the unit's, so not in a zone's report
+  const so = !zoneFilter && d.summary?.section_outcomes;
+  if (so) [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
+    const v = so[k]; if (!v) return;
+    const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
+    if (v.note) pill.title = v.note;
+    facts.append(pill);
+  });
   sum.append(facts);
   det.append(sum);
   const body = el('div', 'pd-day-body');
@@ -320,25 +328,11 @@ function dayRow(d, openFirst) {
     try { if (!day) { day = await rpc('scouting_day', { p_farm: farm.id, p_day: d.day }); dayData.set(d.day, day); } }
     catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); delete body.dataset.done; return; }
     body.textContent = '';
-    // the finish the phone sent: OK, or not OK with why (0141)
+    // only a Not OK says anything here, in one line: its why (0174; the sections are on the date's line)
     const tk = day.task;
-    if (tk?.outcome) {
-      body.append(el('div', 'note ' + (tk.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome',
-        (tk.outcome === 'nok' ? 'Not OK' : 'OK') + (tk.outcome_note ? ' — ' + tk.outcome_note : '') +
-        (tk.edited_at ? ` · changed ${shortDay(tk.edited_at)} ${hhmm(tk.edited_at)}` : '')));
-      // each section's own result, as the phone closes every tab (0169, Naked Brain 0.11.63)
-      const so = tk.section_outcomes;
-      if (so && Object.keys(so).length) {
-        const row = el('div', 'sc-verdicts');
-        [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
-          const v = so[k]; if (!v) return;
-          const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
-          if (v.note) pill.title = v.note;
-          row.append(pill);
-        });
-        body.append(row);
-      }
-    }
+    const why = tk?.outcome === 'nok' ? (tk.outcome_note || '') : (!zoneFilter && d.summary?.outcome === 'nok' ? (d.summary.notes || '') : null);
+    if (why != null) body.append(el('div', 'note bad sc-outcome', 'Not OK' + (why ? ' — ' + why : '') +
+      (tk?.edited_at ? ` · changed ${shortDay(tk.edited_at)} ${hhmm(tk.edited_at)}` : '')));
     const zones = (zoneFilter ? (day.units || day.zones || []) : (day.zones || [])).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
       && (!cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter)));
     // a zone with nothing in it that day is one word, not a band
@@ -386,7 +380,7 @@ function zoneBand(z, day) {
       ? [zt.workers?.length ? zt.workers.join(', ') : null, zt.done_at ? hhmm(zt.done_at) : null].filter(Boolean).join(' · ') || 'done'
       : zt.status === 'skipped' ? 'cancelled' : 'not done'));
   } else if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
-  else if (z.item) right.append(el('span', 'hint', 'not done'));
+  else if (z.item && day.task?.status !== 'done') right.append(el('span', 'hint', 'not done'));   // a day scouted as one task never ticked its zones
   sum.append(right);
   det.append(sum);
 

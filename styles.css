@@ -1832,4 +1832,13 @@ table.table tr.off td { opacity: .5; }
 .unit-badge { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: #fff; background: var(--u, #888); border-radius: 6px; padding: 2px 7px; }
 /* in Both the tab already names the page and the heading the unit: no repeated title */
 .unit-inner .page-head h1 { display: none; }
-.sc-sections { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 var(--space-3); }
+.sc-verdicts { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 var(--space-3); }
+/* Pest & diseases: one report per zone (0.7.166) */
+.pd-zones { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 var(--space-4); }
+.pd-zonechip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.pd-zonechip .dot.none { display: none; }
+.pd-zonechip.on { background: var(--accent-soft); border-color: var(--accent); }
+.pd-zone-head { font-weight: 700; margin: 0 0 var(--space-2); }
+.pd-zone-crops { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: var(--space-3); }
+.pd-zone-crop { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); }

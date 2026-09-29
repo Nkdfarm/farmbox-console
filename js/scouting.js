@@ -301,13 +301,13 @@ function dayRow(d, openFirst) {
   sum.append(dotEl(d.dot), el('b', null, longDay(d.day) + (d.day === String(over.today) ? ' · today' : '')));
   const facts = el('span', 'pd-day-facts');
   const t = d.task;
-  if (t) facts.append(el('span', 'pill ' + (t.status === 'done' ? 'ok' : parse(d.day) < parse(over.today) ? 'bad' : 'warn'),
-    t.status === 'done' ? `scouted${t.workers?.length ? ' by ' + t.workers.join(', ') : ''}${t.done_at ? ' · ' + hhmm(t.done_at) : ''}`
-      : t.zones ? `${t.zones_done}/${t.zones} zones` : t.status));
-  const zc = zoneFilter ? ((d.unit_counts || d.zone_counts || {})[zoneFilter] || { photos: 0, traps: 0 }) : null;
-  const nPhotos = zc && !cropFilter ? zc.photos : cropFilter ? ((d.photo_crops || {})[cropFilter] || 0) : d.photos;
-  const nTraps = zc ? zc.traps : d.traps;
-  facts.append(el('span', 'pill', `${nPhotos} photo${nPhotos === 1 ? '' : 's'}`), el('span', 'pill', `${nTraps} trap${nTraps === 1 ? '' : 's'} counted`));
+  // how many zones were scouted (0.7.170, owner): green all, orange some, red none — the photos and traps are inside
+  if (t) {
+    const total = t.zones || 1, done = t.per_zone ? (t.zones_done || 0) : t.status === 'done' ? total : (t.zones_done || 0);
+    const pill = el('span', 'pill ' + (done >= total ? 'ok' : done > 0 ? 'warn' : 'bad'), `${done}/${total} scouted`);
+    pill.title = [t.workers?.length ? t.workers.join(', ') : null, t.done_at ? 'last at ' + hhmm(t.done_at) : null].filter(Boolean).join(' · ');
+    facts.append(pill);
+  }
   // each section's result on the line itself (0174, owner: "more compact: the OK is not needed") — the unit's, so not in a zone's report
   const so = !zoneFilter && d.summary?.section_outcomes;
   if (so) [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
@@ -333,7 +333,7 @@ function dayRow(d, openFirst) {
     const why = tk?.outcome === 'nok' ? (tk.outcome_note || '') : (!zoneFilter && d.summary?.outcome === 'nok' ? (d.summary.notes || '') : null);
     if (why != null) body.append(el('div', 'note bad sc-outcome', 'Not OK' + (why ? ' — ' + why : '') +
       (tk?.edited_at ? ` · changed ${shortDay(tk.edited_at)} ${hhmm(tk.edited_at)}` : '')));
-    const zones = (zoneFilter ? (day.units || day.zones || []) : (day.zones || [])).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
+    const zones = (day.units || day.zones || []).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
       && (!cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter)));
     // a zone with nothing in it that day is one word, not a band
     const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done';

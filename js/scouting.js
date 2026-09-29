@@ -241,6 +241,18 @@ function dayRow(d, openFirst) {
       body.append(el('div', 'note ' + (tk.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome',
         (tk.outcome === 'nok' ? 'Not OK' : 'OK') + (tk.outcome_note ? ' — ' + tk.outcome_note : '') +
         (tk.edited_at ? ` · changed ${shortDay(tk.edited_at)} ${hhmm(tk.edited_at)}` : '')));
+      // each section's own result, as the phone closes every tab (0169, Naked Brain 0.11.63)
+      const so = tk.section_outcomes;
+      if (so && Object.keys(so).length) {
+        const row = el('div', 'sc-sections');
+        [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
+          const v = so[k]; if (!v) return;
+          const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
+          if (v.note) pill.title = v.note;
+          row.append(pill);
+        });
+        body.append(row);
+      }
     }
     const zones = (day.zones || []).filter(z => !cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter));
     // a zone with nothing in it that day is one word, not a band

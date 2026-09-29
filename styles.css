@@ -1832,3 +1832,4 @@ table.table tr.off td { opacity: .5; }
 .unit-badge { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: #fff; background: var(--u, #888); border-radius: 6px; padding: 2px 7px; }
 /* in Both the tab already names the page and the heading the unit: no repeated title */
 .unit-inner .page-head h1 { display: none; }
+.sc-sections { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 var(--space-3); }

@@ -21,15 +21,19 @@ import { roleLabel } from './people.js';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const FAM_ICON = { Agriculture: 'sprout', Maintenance: 'wrench', Office: 'clipboard' };
 const PRIO = { critical: ['‼', 'Critical'], high: ['▲', 'High'], normal: ['', 'Normal'], low: ['▽', 'Low'] };
-const STATUS = [['open', 'Open tasks'], ['done', 'Done'], ['skipped', 'Not done'], ['all', 'All']];
+const STATUS = [['open', 'Open tasks'], ['done', 'Done'], ['skipped', 'Cancelled'], ['all', 'All']];
 // the status of a task at a glance (0.7.103): planned · done · not done
-const STATE = { done: ['done', '✓', 'Done'], skipped: ['skipped', '✕', 'Not done'] };
+// 0.7.164: a skipped task is Cancelled (a choice, with its reason); Not done is an open task whose day has passed
+const STATE = { done: ['done', '✓', 'Done'], skipped: ['skipped', '✕', 'Cancelled'] };
 const stateOf = t => STATE[t.status] || ['planned', '', 'Planned'];
-const REASON_WORD = { no_time: 'No time', not_needed: 'Not needed today', blocked: 'Weather or equipment' };
+// why a task is cancelled (FarmBox 0168): real choices; no_time and blocked are older reasons, still shown
+const REASON_WORD = { not_needed: 'Not needed', equipment: 'Equipment not available', weather: 'Weather or access', other: 'Other' };
+const OLD_REASON = { no_time: 'No time', blocked: 'Weather or equipment' };
+const reasonText = r => REASON_WORD[r] || OLD_REASON[r] || r || '';
 function stateMark(t) {
   const [k, glyph, word] = stateOf(t);
   const s = el('span', 'tk-state ' + k, glyph);
-  s.title = word + (t.skip_reason ? ' — ' + (REASON_WORD[t.skip_reason] || t.skip_reason) + (t.skip_note ? ': ' + t.skip_note : '') : '')
+  s.title = word + (t.skip_reason ? ' — ' + reasonText(t.skip_reason) + (t.skip_note ? ': ' + t.skip_note : '') : '')
           + (t.closed_by ? ' · ' + t.closed_by : '');
   return s;
 }
@@ -149,10 +153,12 @@ const fmtWork = m => { m = Math.round(Number(m) || 0); return m < 60 ? `${m} min
 // the same words as the phone: Done in 42 min · ▶ 12 min · 12 min so far · Not finished · 12 min (an earlier day)
 function timeWord(t) {
   const x = timeOf(t), m = Number(x?.minutes || t.actual_minutes || 0);
-  if (t.status === 'done') return m >= 1 ? { text: `Done in ${fmtWork(m)}`, cls: m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok' } : null;
-  if (t.status === 'skipped' || m < 1) return null;
-  if (x?.running) return { text: `▶ ${fmtWork(m)}`, cls: 'run' };
-  return t.date < today() ? { text: `Not finished · ${fmtWork(m)}`, cls: 'late' } : { text: `${fmtWork(m)} so far`, cls: '' };
+  if (t.status === 'done') return m >= 1 ? { text: `Done · ${fmtWork(m)}`, cls: m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok' } : null;
+  if (t.status === 'skipped') return null;                       // the ✕ mark and its title say Cancelled and why
+  if (t.date < today()) return { text: 'Not done' + (m >= 1 ? ` · ${fmtWork(m)}` : ''), cls: 'late' };
+  if (m < 1) return null;
+  if (x?.running) return { text: `In progress · ${fmtWork(m)}`, cls: 'run' };
+  return { text: `Paused · ${fmtWork(m)}`, cls: '' };
 }
 // a day's line: 5 of 8 done · 3 h 10 worked
 function dayWorked(list) {
@@ -694,7 +700,7 @@ function taskRow(task) {
   tr.append(cell(subFamilyTag(task.category || task.family)));
   const who = el('div', 'assignees');
   if (task.status === 'done') who.append(el('span', 'pill ok', 'done'));
-  else if (task.status === 'skipped') who.append(el('span', 'pill bad', 'not done · ' + (REASON_WORD[task.skip_reason] || task.skip_reason || '').toLowerCase()));
+  else if (task.status === 'skipped') who.append(el('span', 'pill bad', 'cancelled · ' + reasonText(task.skip_reason).toLowerCase()));
   else if (!task.workers.length) who.append(el('span', 'pill bad', 'nobody'));
   else {
     const stack = el('div', 'avatars');
@@ -727,7 +733,7 @@ function openTask(t) {
   { const tw = timeWord(t); if (tw) fact('Worked', tw.text + (timeOf(t)?.running ? ' · the timer is running on the phone' : '')); }
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
-    : t.status === 'skipped' ? 'Not done · ' + (REASON_WORD[t.skip_reason] || t.skip_reason || '') + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')
+    : t.status === 'skipped' ? 'Cancelled · ' + reasonText(t.skip_reason) + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')
     : 'Planned · ' + t.status.replace('_', ' '));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') : 'nobody yet');
   if (t.harvest_kg != null) fact('Harvested', `${Number(t.harvest_kg)} kg`);
@@ -774,8 +780,8 @@ function openTask(t) {
     d.footer.append(re);
   }
   if (t.status !== 'done' && t.status !== 'skipped') {
-    // not done, with one of three reasons and a note — the Admin or the task's own people (0100)
-    const nd = el('button', 'btn', 'Not done…');
+    // cancelled, with a reason and a note — the Admin or the task's own people (0100, 0168)
+    const nd = el('button', 'btn', 'Cancel this task…');
     nd.onclick = () => notDone(t, d);
     d.footer.append(nd);
   }
@@ -812,8 +818,8 @@ function markManual(c, t) {
 }
 
 function notDone(t, parent) {
-  const d = drawer('Not done', t.title);
-  let reason = 'no_time';
+  const d = drawer('Cancel this task', t.title);
+  let reason = null;
   const row = el('div', 'row');
   const btns = Object.entries(REASON_WORD).map(([v, l]) => {
     const b = el('button', 'toggle', l); b.type = 'button';
@@ -822,17 +828,19 @@ function notDone(t, parent) {
     row.append(b);
     return [v, b];
   });
-  const note = el('input', 'input'); note.placeholder = 'Note (optional)';
+  const note = el('input', 'input'); note.placeholder = 'Why? (required — the people on the task read it)';
   d.body.append(el('div', 'sec-title', 'Why'), row, note,
-    el('div', 'hint', 'Marked on the board as not done, with this reason. Only the Admin or the person the task is assigned to may do it.'));
-  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
-  const ok = el('button', 'btn btn-danger', 'Mark not done');
+    el('div', 'hint', 'Cancelled is a decision: the task shows as cancelled with this reason and note. A task simply not finished on its day shows as Not done by itself. Only the Admin or the people on the task may cancel it.'));
+  const cancel = el('button', 'btn', 'Keep it'); cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-danger', 'Cancel the task');
   ok.onclick = async () => {
+    if (!reason) { toast('Choose why it is cancelled', 'bad'); return; }
+    if (!note.value.trim()) { toast('Say why in the note', 'bad'); note.focus(); return; }
     busy(ok, true, 'Saving…');
     try {
       await rpc('skip_task', { p_task: t.id, p_reason: reason, p_note: note.value.trim() || null });
-      d.close(); parent?.close(); toast('Marked not done', 'ok'); await load();
-    } catch (e) { busy(ok, false, 'Mark not done'); toast(e.message, 'bad'); }
+      d.close(); parent?.close(); toast('Cancelled', 'ok'); await load();
+    } catch (e) { busy(ok, false, 'Cancel the task'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, ok);
 }

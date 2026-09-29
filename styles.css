@@ -982,6 +982,12 @@ html { zoom: var(--zoom, 1); }
   padding: 2px 4px 6px; display: flex; justify-content: space-between; }
 .tk-col.today .tk-col-head { color: var(--accent); }
 .tk-count { color: var(--text-faint); }
+/* the time worked (0.7.163): on a task's right, and a day's line in its head */
+.tk-time { flex: none; font-size: 11px; font-weight: 600; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-time.ok { color: var(--success, #2e7d32); }
+.tk-time.over, .tk-time.late { color: var(--danger, #e5484d); }
+.tk-time.run { color: var(--accent); }
+.tk-worked { display: block; width: 100%; font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
 .tk-none { color: var(--text-faint); font-size: var(--text-xs); padding: 4px; }
 .tk { display: flex; align-items: center; gap: 6px; padding: 5px 4px 5px 8px; border-radius: 8px; cursor: pointer; min-width: 0;
   background: hsl(var(--h) 70% 50% / 0.16); color: var(--text); border-left: 3px solid hsl(var(--h) 65% 55%); font-size: var(--text-sm); }

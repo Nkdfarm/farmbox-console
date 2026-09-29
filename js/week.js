@@ -140,6 +140,27 @@ function unitMark(t, big) {
   return m;
 }
 
+// the time worked on a task (the phone's timer, FarmBox 0161): labour_week's task_times of the weeks read
+function timeOf(t) {
+  for (const w of weeks.values()) { const x = (w?.task_times || []).find(y => y.task_id === t.id); if (x) return x; }
+  return null;
+}
+const fmtWork = m => { m = Math.round(Number(m) || 0); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
+// the same words as the phone: Done in 42 min · ▶ 12 min · 12 min so far · Not finished · 12 min (an earlier day)
+function timeWord(t) {
+  const x = timeOf(t), m = Number(x?.minutes || t.actual_minutes || 0);
+  if (t.status === 'done') return m >= 1 ? { text: `Done in ${fmtWork(m)}`, cls: m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok' } : null;
+  if (t.status === 'skipped' || m < 1) return null;
+  if (x?.running) return { text: `▶ ${fmtWork(m)}`, cls: 'run' };
+  return t.date < today() ? { text: `Not finished · ${fmtWork(m)}`, cls: 'late' } : { text: `${fmtWork(m)} so far`, cls: '' };
+}
+// a day's line: 5 of 8 done · 3 h 10 worked
+function dayWorked(list) {
+  const done = list.filter(t => t.status === 'done').length;
+  const w = list.reduce((a, t) => a + Number(timeOf(t)?.minutes || (t.status === 'done' ? t.actual_minutes : 0) || 0), 0);
+  return { done, worked: w, text: `${done} of ${list.length} done` + (w >= 1 ? ` · ${fmtWork(w)} worked` : '') };
+}
+
 // every task on screen, once
 function tasksOnScreen() {
   const seen = new Set(), out = [];
@@ -455,6 +476,9 @@ function weekBoard(tasks) {
     const head = el('div', 'tk-col-head tk-cell' + (date === tod ? ' today' : '') + (hol ? ' holiday' : ''));
     head.append(el('span', null, shortDay(date)), el('span', 'tk-count', n ? String(n) : ''));
     if (hol) head.append(el('span', 'tk-hol', hol));
+    // what the day came to: done and worked, once anything is done or timed (0.7.163)
+    const dw = dayWorked(tasks.filter(t => t.date === date));
+    if (dw.done || dw.worked >= 1) { const x = el('span', 'tk-worked', dw.text); head.append(x); }
     grid.append(head);
   }
   BANDS.forEach(slot => {
@@ -478,7 +502,7 @@ function dayView(tasks) {
   const list = tasks.filter(t => t.date === day).sort(byTime);
   if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
-  box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h`));
+  box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h planned · ${dayWorked(list).text}`));
   BANDS.forEach(slot => {
     const part = list.filter(t => bandOf(t) === slot);
     const band = el('div', 'tk-band ' + slot);
@@ -533,6 +557,8 @@ function listView(tasks) {
     head.append(el('b', null, longDate(date)));
     const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
     head.append(el('span', 'pill', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h`));
+    const dw = dayWorked(list);
+    if (dw.done || dw.worked >= 1) head.append(el('span', 'pill ok', dw.text));
     const none = list.filter(t => !t.workers.length && t.status !== 'done').length;
     if (none) head.append(el('span', 'pill bad', `${none} with nobody`));
     card.append(head);
@@ -572,6 +598,8 @@ function chip(t, opts = {}) {
   }
   const p = PRIO[t.priority];
   if (p && p[0]) { const s = el('span', 'tk-prio ' + t.priority, p[0]); s.title = p[1] + ' priority'; c.append(s); }
+  const tw = timeWord(t);
+  if (tw) { const s = el('span', 'tk-time ' + tw.cls, tw.text); if (tw.cls === 'over') s.title = `planned ${hrs(t.minutes)} h`; c.append(s); }
   const who = el('span', 'tk-who');
   if (t.status === 'done' || t.status === 'skipped') { /* the mark at the start says it */ }
   else if (!t.workers.length) { const n = el('span', 'tk-nobody', '?'); n.title = 'Nobody yet'; who.append(n); }
@@ -696,6 +724,7 @@ function openTask(t) {
   if (t.crop) fact('Crop', t.crop);
   fact('When', SLOT_WORD[slotOf(t)] + (slotOf(t) === 'any' ? ' · drawn in the ' + SLOT_WORD[bandOf(t)].toLowerCase() : ''));
   fact('Takes', hrs(t.minutes) + ' h');
+  { const tw = timeWord(t); if (tw) fact('Worked', tw.text + (timeOf(t)?.running ? ' · the timer is running on the phone' : '')); }
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
     : t.status === 'skipped' ? 'Not done · ' + (REASON_WORD[t.skip_reason] || t.skip_reason || '') + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')

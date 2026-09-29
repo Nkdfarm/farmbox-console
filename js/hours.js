@@ -51,20 +51,20 @@ function paint() {
   });
   const add = data.may_edit ? el('button', 'btn btn-sm', 'Add hours') : null;
   if (add) add.onclick = () => editEntry(null);
-  mount.append(pageHead(null, 'Hours clocked on the phone against the hours of the tasks planned for each person and the tasks they finished. ' +
+  mount.append(pageHead(null, 'Hours worked — the task timers on the phone — against the hours of the tasks planned for each person and the tasks they finished. ' +
     'The Admin and the Farm manager correct the record and set what an hour costs.', add, seg));
 
   const ppl = data.people || [];
   const tot = k => ppl.reduce((a, p) => a + Number(p[k] || 0), 0);
   const tiles = el('div', 'tiles hr-tiles');
   const tile = (v, l, s) => { const x = el('div', 'tile'); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); x.append(b); return x; };
-  tiles.append(tile(h(tot('clocked')), 'Clocked'), tile(h(tot('planned')), 'Tasks planned'), tile(h(tot('done')), 'Tasks done', `${tot('tasks_done')} of ${tot('tasks')} tasks`),
-               tile(tot('cost') ? `${data.currency} ${Math.round(tot('cost')).toLocaleString()}` : '—', 'Cost of the hours clocked'));
+  tiles.append(tile(h(tot('clocked')), 'Worked'), tile(h(tot('planned')), 'Tasks planned'), tile(h(tot('done')), 'Tasks done', `${tot('tasks_done')} of ${tot('tasks')} tasks`),
+               tile(tot('cost') ? `${data.currency} ${Math.round(tot('cost')).toLocaleString()}` : '—', 'Cost of the hours worked'));
   mount.append(tiles);
 
   const card = el('div', 'card');
   const t = el('table', 'table hr-table');
-  t.innerHTML = '<thead><tr><th>Person</th><th class="num">Clocked</th><th class="num">Planned</th><th class="num">Done</th><th>Done ÷ clocked</th><th class="num">Tasks</th><th class="num">Per hour</th><th class="num">Cost</th></tr></thead>';
+  t.innerHTML = '<thead><tr><th>Person</th><th class="num">Worked</th><th class="num">Planned</th><th class="num">Done</th><th>Done ÷ worked</th><th class="num">Tasks</th><th class="num">Per hour</th><th class="num">Cost</th></tr></thead>';
   const tb = el('tbody');
   ppl.forEach(p => {
     const tr = el('tr', 'hr-row');
@@ -91,7 +91,7 @@ function paint() {
       const g = el('div', 'hr-grid');
       (p.days || []).forEach(d => {
         const c = el('div', 'hr-day');
-        c.append(el('b', null, dayShort(d.d)), el('span', null, `clocked ${h(d.clocked)}`), el('span', 'hint', `planned ${h(d.planned)}`), el('span', 'hint', `done ${h(d.done)}`));
+        c.append(el('b', null, dayShort(d.d)), el('span', null, `worked ${h(d.clocked)}`), el('span', 'hint', `planned ${h(d.planned)}`), el('span', 'hint', `done ${h(d.done)}`));
         g.append(c);
       });
       td.append(g); dr.append(td); tb.append(dr);

@@ -21,6 +21,9 @@
 // Since 0170 (console 0.7.166, owner: "the zones to select, to generate 5 reports") the unit's zones sit at
 // the top: a chosen zone turns the page into that zone's report — its pressure, cases, crops, and each date
 // with that zone's traps and photos only (scouting_dates.zone_counts). Remembered per unit.
+// Since 0171 (console 0.7.167, owner: "split zone 4 in 4.1 and 4.2 report") the chips are report units: a zone,
+// or each table of a zone reported by table (FarmLab Zone 4.1 and 4.2) — pest_overview.pressure_units,
+// scouting_dates.unit_counts, scouting_day.units. A card or photo of the zone that names no table is in both.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, pageHead, drawer, num, cropAvatar, toast } from './ui.js';
@@ -43,11 +46,17 @@ const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digi
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 const zoneKey = () => 'fbc_pd_zone_' + farm.id;
-const zones = () => over?.pressure_zones || [];
-const zoneName = id => zones().find(z => z.zone_id === id)?.zone || 'this zone';
+// the report units (0171): a zone, or one table of a zone reported table by table; an older database gives zones
+const zones = () => (over?.pressure_units || over?.pressure_zones || []).map(z => ({ ...z, unit_id: z.unit_id || z.zone_id }));
+const cur = () => zones().find(z => z.unit_id === zoneFilter) || null;
+const zoneName = id => zones().find(z => z.unit_id === id)?.zone || 'this zone';
+// a row of (zone, table) in a unit: its table's rows, and the zone's rows that name none of its tables
+const inUnit = (u, zoneId, sysId) => !!u && zoneId === u.zone_id && (!u.system_id || !sysId || sysId === u.system_id
+  || !zones().some(x => x.zone_id === u.zone_id && x.system_id === sysId));
 // in the chosen zone: a crop standing there, a case opened there
-const cropInZone = c => !zoneFilter || (c.zones || []).some(z => z.id === zoneFilter);
-const caseInZone = k => !zoneFilter || k.zone_id === zoneFilter;
+const cropInZone = c => { const u = cur(); if (!u) return true;
+  return u.system_id ? (c.system_ids || []).includes(u.system_id) : (c.zones || []).some(z => z.id === u.zone_id); };
+const caseInZone = k => !zoneFilter || inUnit(cur(), k.zone_id, k.system_id);
 const dayData = new Map();          // day → scouting_day, read when the day is opened
 
 export async function renderScouting(container, currentFarm) {
@@ -96,7 +105,7 @@ function paint() {
     'The daily scouting by date, zone by zone, with the traps and the photos. A dot says the worst thing inside: ' +
     'red severe or over the threshold, orange open or on watch, green improving or resolved.', scaleBtn, trapsBtn, openBtn));
 
-  if (zoneFilter && !zones().some(z => z.zone_id === zoneFilter)) zoneFilter = null;   // a zone gone
+  if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());
   mount.append(zoneFilter ? zoneReport() : dashboard());
   mount.append(caseStrip());
@@ -141,15 +150,15 @@ function zoneBar() {
   all.onclick = () => pick(null);
   box.append(all);
   zones().forEach(z => {
-    const b = el('button', 'pd-zonechip' + (zoneFilter === z.zone_id ? ' on' : ''));
-    b.setAttribute('aria-pressed', String(zoneFilter === z.zone_id));
-    const d = worst((cases.cases || []).filter(k => k.zone_id === z.zone_id && k.status !== 'closed').map(k => k.dot));
+    const b = el('button', 'pd-zonechip' + (zoneFilter === z.unit_id ? ' on' : ''));
+    b.setAttribute('aria-pressed', String(zoneFilter === z.unit_id));
+    const d = worst((cases.cases || []).filter(k => inUnit(z, k.zone_id, k.system_id) && k.status !== 'closed').map(k => k.dot));
     b.append(dotEl(d), el('b', null, z.zone));
     if (z.now != null) b.append(el('span', 'hint', `${num(z.now, 1)}/day`));
     b.title = [z.now != null ? `${num(z.now, 1)} insects/trap/day this week` : 'no trap rate this week',
                z.cases ? `${z.cases} open case${z.cases === 1 ? '' : 's'}` : null,
                z.last_read ? 'last trap read ' + shortDay(z.last_read) : null].filter(Boolean).join(' · ');
-    b.onclick = () => pick(z.zone_id);
+    b.onclick = () => pick(z.unit_id);
     box.append(b);
   });
   return box;
@@ -157,11 +166,11 @@ function zoneBar() {
 
 // ── one zone's report head: its pressure, cases, crops and the latest reading ──
 function zoneReport() {
-  const z = zones().find(x => x.zone_id === zoneFilter) || {};
+  const z = cur() || {};
   const box = el('div', 'pd-dash');
   const tiles = el('div', 'pd-tiles');
   const tile = (n, label, cls) => { const t = el('div', 'pd-tile' + (cls ? ' ' + cls : '')); t.append(el('b', null, String(n ?? 0)), el('span', null, label)); tiles.append(t); };
-  const open = (cases.cases || []).filter(k => k.zone_id === zoneFilter && k.status !== 'closed');
+  const open = (cases.cases || []).filter(k => inUnit(z, k.zone_id, k.system_id) && k.status !== 'closed');
   const trend = z.now != null && z.before != null ? (z.now > z.before ? ' ▲' : z.now < z.before ? ' ▼' : '') : '';
   tile(z.now != null ? num(z.now, 1) + trend : '—', 'insects/trap/day this week', z.now != null && over.threshold?.over != null && z.now >= over.threshold.over ? 'bad'
     : z.now != null && over.threshold?.watch != null && z.now >= over.threshold.watch ? 'warn' : '');
@@ -293,7 +302,7 @@ function dayRow(d, openFirst) {
   if (t) facts.append(el('span', 'pill ' + (t.status === 'done' ? 'ok' : parse(d.day) < parse(over.today) ? 'bad' : 'warn'),
     t.status === 'done' ? `scouted${t.workers?.length ? ' by ' + t.workers.join(', ') : ''}${t.done_at ? ' · ' + hhmm(t.done_at) : ''}`
       : t.zones ? `${t.zones_done}/${t.zones} zones` : t.status));
-  const zc = zoneFilter ? ((d.zone_counts || {})[zoneFilter] || { photos: 0, traps: 0 }) : null;
+  const zc = zoneFilter ? ((d.unit_counts || d.zone_counts || {})[zoneFilter] || { photos: 0, traps: 0 }) : null;
   const nPhotos = zc && !cropFilter ? zc.photos : cropFilter ? ((d.photo_crops || {})[cropFilter] || 0) : d.photos;
   const nTraps = zc ? zc.traps : d.traps;
   facts.append(el('span', 'pill', `${nPhotos} photo${nPhotos === 1 ? '' : 's'}`), el('span', 'pill', `${nTraps} trap${nTraps === 1 ? '' : 's'} counted`));
@@ -328,7 +337,7 @@ function dayRow(d, openFirst) {
         body.append(row);
       }
     }
-    const zones = (day.zones || []).filter(z => (!zoneFilter || z.zone_id === zoneFilter)
+    const zones = (zoneFilter ? (day.units || day.zones || []) : (day.zones || [])).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
       && (!cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter)));
     // a zone with nothing in it that day is one word, not a band
     const has = z => z.traps.length || z.photos.length || (z.cases || []).length;
@@ -376,6 +385,8 @@ function zoneBand(z, day) {
   det.append(sum);
 
   const body = el('div', 'pd-zone-body');
+  const shared = [...traps, ...photos].filter(p => p.shared).length;
+  if (shared) body.append(el('div', 'hint pd-shared', `${shared} of these name ${z.zone_name || 'the zone'} without its table, so they are in each of its reports.`));
   if (traps.length) {
     const row = el('div', 'pd-traps');
     traps.forEach(p => row.append(trapCard(p, z, day)));

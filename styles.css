@@ -1394,8 +1394,8 @@ body.tl-dragging { cursor: grabbing; user-select: none; }
 .ord-verdict.no { background: rgba(229,72,77,.16); }
 .ord-plan { font-size: var(--text-xs); }
 .ord-alt { flex-wrap: wrap; gap: var(--space-2); }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-@media (max-width: 700px) { .ord-line { grid-template-columns: auto 1fr; } .grid2 { grid-template-columns: 1fr; } }
+/* 0.7.162: a second global .grid2 here overrode the narrow-screen rule for every form; the orders only need theirs on small screens */
+@media (max-width: 700px) { .ord-line { grid-template-columns: auto 1fr; } }
 /* the timeline: an order's batch and a rotation warning */
 .tl-flag { font-size: 10px; color: var(--accent); flex: none; }
 .tl-flag.warn { color: var(--warning); font-weight: 900; }
@@ -1612,6 +1612,7 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .hm-bars i.seen { background: hsl(205 70% 55%); }
 .hm-bars i.plan { background: var(--text-faint, #888); opacity: .5; }
 .hm-grid { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
+.card:has(> table.hm-grid) { overflow-x: auto; }   /* 13+ hour columns: the card scrolls, not the page */
 .hm-grid th { color: var(--text-muted); font-weight: 600; padding: 0 4px; text-align: center; }
 .hm-grid th.hm-row { text-align: right; white-space: nowrap; }
 .hm-grid td { width: 28px; height: 22px; border-radius: 4px; background: hsl(205 75% 50% / calc(0.06 + var(--a, 0) * 0.9)); }

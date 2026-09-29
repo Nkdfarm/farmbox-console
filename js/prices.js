@@ -51,7 +51,7 @@ function paint() {
   scan.title = 'Collect this week’s Cape Town Market prices now. It also runs by itself every Monday at 13:30.';
   scan.onclick = () => scanMarket(scan);
 
-  mount.append(pageHead('Prices & market',
+  mount.append(pageHead(null,
     `${data.currency} per kg in ${ci.name || data.country}, sold ` +
     `${data.channel === 'direct' ? 'direct to the consumer' : 'to a retailer'}. ` +
     `It is ${data.season_now} here now.`,

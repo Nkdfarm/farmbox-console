@@ -61,7 +61,7 @@ export function openViewer(ctx) {
   const panel = el('aside', 'vw-panel');
   root.append(stage, panel);
   document.body.append(root);
-  const close = () => { root.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
+  const close = () => { root.remove(); document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', onResize); };
 
   // ── a pane: one photo with its zoom ──
   const panes = [];
@@ -133,13 +133,18 @@ export function openViewer(ctx) {
   const zoomLabel = el('span', 'vw-zoom');
   const paintZoom = () => { zoomLabel.textContent = view.fit ? 'fit' : Math.round(view.scale * 100) + ' %'; };
   const onKey = e => {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') {
+      // a window opened from the viewer is on top: Escape is its own (ui.js drawer); else it closes the viewer,
+      // before a drawer underneath the viewer takes it (0.7.162 — the capture phase, see addEventListener below)
+      if ([...document.querySelectorAll('.drawer')].some(dr => root.compareDocumentPosition(dr) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+      e.stopImmediatePropagation(); close();
+    }
     else if (e.key === '+' || e.key === '=') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 1.25, panes[0]);
     else if (e.key === '-') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 0.8, panes[0]);
     else if (e.key === '0') fitAll();
     else if (e.key === '1') oneToOne(null, null, panes[0]);
   };
-  document.addEventListener('keydown', onKey);
+  document.addEventListener('keydown', onKey, true);
   const onResize = () => { if (view.fit) fitAll(); };   // removed on close: it kept every viewer and its photo alive
   window.addEventListener('resize', onResize);
   const main = makePane(photo);
@@ -289,7 +294,7 @@ export function openViewer(ctx) {
     if (!list.length) secCase.append(el('div', 'hint', 'No open case in this zone.'));
     list.forEach(c => {
       const row = el('div', 'vw-case');
-      const name = el('button', 'linkish', c.title); name.onclick = () => openCase(c.id, ctx.onChange);
+      const name = el('button', 'linkish', c.title); name.onclick = () => openCase(c.id, ctx.onChange, ctx.farm);
       row.append(name);
       if (mayWrite) {
         const sev = selectBox([[1, 'slight'], [2, 'clear'], [3, 'severe'], [0, 'none left']], firstSev || 1);
@@ -307,7 +312,7 @@ export function openViewer(ctx) {
     });
     if (mayWrite) {
       const open = el('button', 'btn btn-sm', 'Open a case from this photo…');
-      open.onclick = () => newCase({ zone_id: ctx.zoneId || null, crop_id: photo.crop_id || ctx.cropId || null, crops: ctx.crops || [],
+      open.onclick = () => newCase({ farm: ctx.farm, zone_id: ctx.zoneId || null, crop_id: photo.crop_id || ctx.cropId || null, crops: ctx.crops || [],
         from_kind: photo.kind, from_id: photo.id, code: firstCode, severity: firstSev || 1,
         onDone: () => { paintCases(); ctx.onChange?.(photo); } });
       secCase.append(open);

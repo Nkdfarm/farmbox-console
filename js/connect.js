@@ -38,11 +38,13 @@ const KINDS = [['climate', 'Climate'], ['water', 'Water'], ['irrigation', 'Irrig
 // the same open-fast load for every page
 function loader(mount, reads, paint, words) {
   const here = mount;
+  const my = String(Number(mount.dataset.load || 0) + 1);   // 24 h then 30 days clicked quickly: only the last one draws
+  mount.dataset.load = my;
   return openFast(reads, {
     show: d => paint(d),
     waiting: () => { mount.textContent = ''; mount.append(loading(words)); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected,
+    stillHere: () => here.isConnected && here.dataset.load === my,
   });
 }
 
@@ -544,12 +546,13 @@ async function newKey(mount, farm, v) {
   if (v.key_set && !await confirmDrawer(`A new key for ${v.name}?`, 'The key it uses now stops working at once.', 'Make a new key')) return;
   try {
     const r = await rpc('device_new_key', { p_device: v.id });
-    const dr = drawer(`Key for ${v.name}`, 'Shown once — copy it now and give it to whoever connects the device');
+    // closed any way (✕, Escape, outside): the list shows the new key's last four (0.7.162)
+    const dr = drawer(`Key for ${v.name}`, 'Shown once — copy it now and give it to whoever connects the device', { onClose: () => renderDevices(mount, farm) });
     const box = el('pre', 'cx-code cx-key', r.key);
     const copy = el('button', 'btn btn-primary', 'Copy');
     copy.onclick = async () => { try { await navigator.clipboard.writeText(r.key); toast('Copied', 'ok'); } catch { toast('Select the key and copy it', ''); } };
     dr.body.append(box, el('p', 'hint', 'Send it in the X-Device-Key header of every POST to the ingest endpoint. Only its last four characters are kept in sight here.'));
-    const done = el('button', 'btn', 'Done'); done.onclick = () => { dr.close(); renderDevices(mount, farm); };
+    const done = el('button', 'btn', 'Done'); done.onclick = () => dr.close();
     dr.footer.append(copy, el('div', 'spacer'), done);
   } catch (e) { toast(e.message, 'bad'); }
 }

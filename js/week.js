@@ -70,7 +70,12 @@ const shortDay = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'shor
 
 export async function renderWeek(container, currentFarm) {
   // another farm: its people are not this farm's, so no spotlight or half-made manual choice carries over (0.7.112)
-  if (farm && farm.id !== currentFarm.id) { spotlight = null; resetManual(false); }
+  // 0.7.162: nor its weeks (units, holidays) or its filters by person, zone, crop or unit — they would hide every task
+  if (farm && farm.id !== currentFarm.id) {
+    spotlight = null; resetManual(false); weeks.clear(); data = null;
+    filters = { ...EMPTY_FILTERS, status: filters.status, family: filters.family, priority: filters.priority };
+    try { pref.set(FILTER_KEY, JSON.stringify(filters)); } catch { /* the choice stays for this visit */ }
+  }
   farm = currentFarm;
   mount = container;
   if (!week) { day = today(); week = mondayOf(day); month = firstOfMonth(day); }
@@ -517,7 +522,7 @@ function monthView(tasks) {
 function listView(tasks) {
   const box = el('div');
   const days = [...new Set(tasks.map(t => t.date))].sort();
-  if (!days.length) { box.append(el('div', 'card card-pad')).append(el('div', 'empty', 'No task matches.')); return box; }
+  if (!days.length) { const c = el('div', 'card card-pad'); c.append(el('div', 'empty', 'No task matches these filters.')); box.append(c); return box; }
   days.forEach(date => {
     const list = tasks.filter(t => t.date === date).sort(byTime);
     const card = el('div', 'card');
@@ -859,9 +864,12 @@ function planDrawer() {
     d.body.append(rosterCard());
   }
   if (may) {
-    const redo = el('button', 'btn', plan ? 'Draft again' : 'Draft the week');
-    redo.onclick = () => draft(redo, d);
-    d.footer.append(redo);
+    // a validated or locked week refuses a new draft: offer it only while there is none or it is a draft
+    if (!plan || plan.status === 'draft') {
+      const redo = el('button', 'btn', plan ? 'Draft again' : 'Draft the week');
+      redo.onclick = () => draft(redo, d);
+      d.footer.append(redo);
+    }
     if (plan?.status === 'draft') {
       const ok = el('button', 'btn btn-primary', 'Validate the week');
       ok.onclick = async () => {
@@ -877,7 +885,7 @@ function planDrawer() {
         } catch (e) { busy(ok, false, 'Validate the week'); toast(e.message, 'bad'); }
       };
       d.footer.append(ok);
-    } else if (plan) d.footer.append(el('span', 'pill ok', 'Validated'));
+    } else if (plan) d.footer.append(el('span', 'pill ok', plan.status === 'locked' ? 'Locked' : 'Validated'));
   }
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;

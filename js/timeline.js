@@ -16,7 +16,7 @@
 //   · Shift-click bars to validate or remove several at once.
 // The database checks every drop again; the colours only say it in advance.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, openFast } from './api.js';
+import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
 import { loading, el, drawer, field, input, selectBox, toast, busy, confirmDrawer, pref, cropAvatar, cropHue,
          systemLabel, mediumLabel, nurseryLine } from './ui.js';
 
@@ -51,13 +51,14 @@ export async function renderTimeline(container, currentFarm, plannerShell) {
   await load();
 }
 
+let loadSeq = 0;   // ‹ › clicked quickly: only the last period asked for draws
 async function load(fresh = false) {
-  const here = mount;
+  const here = mount, my = ++loadSeq;
   await openFast([['crop_timeline', { p_farm: farm.id, ...timelineRange(offset) }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Drawing the plan…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here, fresh,
+    stillHere: () => here.isConnected && mount === here && my === loadSeq, fresh,
   });
 }
 const reload = () => load(true);
@@ -68,7 +69,8 @@ const fits = (crop, sys) => (crop.media || []).some(m => (sys.media || []).inclu
 function cycleOf(crop, tp) {       // a crop's days from a transplant day number: its bar
   const hs = tp + (crop.grow_days || 0);
   const he = hs + Math.max((crop.harvest_days || 1) - 1, 0);
-  return { sow: tp - Math.round(crop.nursery_days || 0), tp, hs, he, to: he + (crop.cleanup_days || 0) };
+  // sow = the day its seedlings must be started or ordered: the farm's lead (0.7.162 — an external nursery's 4–5 weeks), else the crop's nursery days
+  return { sow: tp - Math.round(crop.lead ?? crop.nursery_days ?? 0), tp, hs, he, to: he + (crop.cleanup_days || 0) };
 }
 const posBatches = pid => (data.batches || []).filter(b => b.position_id === pid && b.status !== 'harvested');
 function clashOn(pid, from, to, except) {
@@ -131,7 +133,9 @@ function paint() {
     if (proposed.length) {
       const rev = proposed.reduce((a, b) => a + Number(b.revenue || 0), 0);
       act.append(el('span', 'pill', `${proposed.length} proposed · ${money(rev, cur)}`));
-      const ok = el('button', 'btn btn-sm btn-accent', `Validate ${selected.size ? 'selected ' + selected.size : 'all ' + proposed.length}`);
+      // the proposals of the dates on screen only: a longer span shows the ones further ahead (0.7.162)
+      const ok = el('button', 'btn btn-sm btn-accent', `Validate ${selected.size ? 'selected ' + selected.size : proposed.length + ' on screen'}`);
+      ok.title = 'Validates the proposals in the dates on screen. Choose a longer span (6 months, Year) to include the ones further ahead.';
       ok.onclick = () => validate(ok, selected.size ? [...selected] : proposed.map(b => b.id));
       const no = el('button', 'btn btn-sm', selected.size ? `Remove selected ${selected.size}` : 'Discard proposals');
       no.onclick = () => discard(selected.size ? [...selected] : proposed.map(b => b.id));
@@ -429,7 +433,7 @@ function dropTarget(track, sys, p, from, px) {
     e.dataTransfer.dropEffect = prob ? 'none' : 'copy';
     const rot = prob ? null : rotationNote(dragCrop, p.id, d, null);
     showGhost(track, dragCrop, d, from, px, !!prob,
-      prob || `${dragCrop.name} · in ${nice(ds(c.tp))} · harvest ${nice(ds(c.hs))}` + (c.sow < dn(data.today) ? ' · sowing already past' : '')
+      prob || `${dragCrop.name} · in ${nice(ds(c.tp))} · harvest ${nice(ds(c.hs))}` + (c.sow < dn(data.today) ? ' · too soon for its seedlings' : '')
              + (rot ? ' · ↻ ' + rot : ''));
   });
   track.addEventListener('dragleave', e => { if (!track.contains(e.relatedTarget)) clearGhost(); });
@@ -626,7 +630,7 @@ function planHere(sys, p, day) {
   const crop = selectBox(fitting.map(c => [c.id, c.name]));
   const info = el('div', 'hint');
   const say = () => { const c = fitting.find(x => x.id === crop.value); const y = cycleOf(c, dn(day));
-    info.textContent = `Harvest ${nice(ds(y.hs))} – ${nice(ds(y.he))} · free again ${nice(ds(y.to + 1))}` + (y.sow < dn(data.today) ? ' · its sowing would already be past' : ''); };
+    info.textContent = `Harvest ${nice(ds(y.hs))} – ${nice(ds(y.he))} · free again ${nice(ds(y.to + 1))}` + (y.sow < dn(data.today) ? ' · too soon for its seedlings' : ''); };
   crop.onchange = say; say();
   d.body.append(field('Crop', crop), info);
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
@@ -654,18 +658,22 @@ async function propose(button, scope, label) {
 async function validate(button, ids) {
   busy(button, true, 'Validating…');
   try {
-    const r = await rpc('validate_crop_plan', { p_ids: ids });
+    const r = mergeValidated(await rpcInChunks('validate_crop_plan', ids, 'p_ids', 100,
+      (n, all) => { if (all > 100) busy(button, true, `Validating ${n} of ${all}…`); }));
     selected.clear();
     const c = r.conflicts || [];
     toast(`${r.validated} batch${r.validated === 1 ? '' : 'es'} validated · ${r.tasks_created} tasks` +
       (c.length ? ` · ${c.length} skipped: ${c.map(x => `${x.batch} overlaps ${x.overlaps}`).join(', ')}` : ''), c.length ? 'bad' : 'ok');
     await reload();
-  } catch (e) { busy(button, false, 'Validate'); toast(e.message, 'bad'); }
+  } catch (e) {
+    busy(button, false, 'Validate'); toast(e.message, 'bad');
+    reload();                         // the pieces that went through are validated: show them so
+  }
 }
 async function discard(ids) {
   if (!await confirmDrawer('Remove them?', `${ids.length} batch${ids.length === 1 ? '' : 'es'} will be removed. A validated one loses its open tasks; nothing growing is touched.`, 'Remove', true)) return;
-  try { await rpc('cancel_crop_plan', { p_ids: ids }); selected.clear(); toast('Removed', 'ok'); await reload(); }
-  catch (e) { toast(e.message, 'bad'); }
+  try { await rpcInChunks('cancel_crop_plan', ids); selected.clear(); toast('Removed', 'ok'); await reload(); }
+  catch (e) { toast(e.message, 'bad'); reload(); }
 }
 
 // ── the weeks: kg forecast and harvested, plants to sow or receive (0.7.114, 0.7.118) ──
@@ -825,7 +833,7 @@ function succession() {
     const room = zones.reduce((t, sy) => t + (sy.positions || []).length, 0);
     info.textContent = `${n} plantings × ${k} position${k > 1 ? 's' : ''} = ${n * k} batches · harvest from ${nice(ds(a.hs))} to ${nice(ds(z.he))}` +
       ` · each stays ${a.to - a.tp + 1} days, so about ${Math.ceil((a.to - a.tp + 1) / step) * k} positions are busy at once (${room} in ${zone.value ? 'this zone' : 'the zones it grows in'})` +
-      (a.sow < dn(data.today) ? ' · the first sowing would already be past' : '');
+      (a.sow < dn(data.today) ? ' · the first planting is too soon for its seedlings' : '');
   };
   crop.onchange = fillZones; [zone, every, unit, times, each].forEach(x => x.onchange = say); first.onchange = say;
   [every, times, each].forEach(x => x.oninput = say);

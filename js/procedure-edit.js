@@ -297,14 +297,16 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
     busy(save, true, 'Saving…');
     try {
       const r = await rpc('save_procedure', { p_sop: p.id, p: payload });
+      let retimed = '';
       if (secs?.changed()) {
         const q = await rpc('save_scouting_sections', { p_sop: p.id, p_sections: secs.value() });
-        if (q.tasks_retimed) toast(`Sections saved · ${q.tasks_retimed} open scouting task${q.tasks_retimed === 1 ? '' : 's'} re-timed`, 'ok');
+        if (q.tasks_retimed) retimed = ` · sections saved, ${q.tasks_retimed} open scouting task${q.tasks_retimed === 1 ? '' : 's'} re-timed`;
       }
-      toast(r.new_version
+      // one message: the second toast used to replace the first at once (0.7.162)
+      toast((r.new_version
         ? `Saved · checklist version ${r.version}` +
           (r.tasks_moved ? ` · ${r.tasks_moved} open task${r.tasks_moved === 1 ? '' : 's'} updated` : '')
-        : 'Saved', 'ok');
+        : 'Saved') + retimed, 'ok');
       d.close();
       await onSaved?.();
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }

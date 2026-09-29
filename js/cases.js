@@ -30,6 +30,7 @@ export function useFarm(f, cat) { farm = f; if (cat) catalog = cat; }
 // ── a new case, from a photo or by hand ───────────────────────────────────
 // ctx: { zone_id, crop_id, from_kind, from_id, code, severity, zones?, crops? , onDone }
 export async function newCase(ctx) {
+  if (ctx?.farm) farm = ctx.farm;      // the unit it was opened from (a site draws two units' pages side by side)
   const cat = catalog || await rpc('pest_catalog');
   const d = drawer('Open a case', ctx.from_id ? 'From this photo — it becomes the first point' : 'One problem, on one crop, in one zone');
   const opts = [];
@@ -66,7 +67,8 @@ export async function newCase(ctx) {
 }
 
 // ── the case window ───────────────────────────────────────────────────────
-export async function openCase(id, onChange) {
+export async function openCase(id, onChange, f) {
+  if (f) farm = f;
   const d = drawer('Case', 'Reading…');
   d.box.classList.add('case-drawer');
   let det;

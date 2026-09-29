@@ -99,6 +99,7 @@ function tiles() {
        : i.open ? `oldest ${i.oldest_days} day${i.oldest_days === 1 ? '' : 's'} old`
        : 'none raised',
     list: i.list.map(x => `${x.title} · ${x.severity}, ${x.days_open} d`),
+    go: '#/dashboard/issues',
   }));
 
   wrap.append(tile({
@@ -127,7 +128,7 @@ function tiles() {
     sub: h.d14.kg > h.d7.kg ? `${h.d14.kg} kg within 14` : 'nothing more within 14 days',
     tone: '',
     list: h.d7.by_crop.map(c => `${c.crop} · ${c.kg} kg`),
-    go: '#/grow/planner',
+    go: '#/grow/harvest',
   }));
 
   const planWords = {
@@ -153,6 +154,7 @@ function tiles() {
       tone: p.late ? 'bad' : 'warn',
       sub: p.late ? `${p.late} already past the order-by date`
                   : `next order by ${p.next_order_by ?? '—'}`,
+      go: '#/office/buy',
     }));
   }
 

@@ -139,7 +139,9 @@ async function doIt(v, btn) {
   save(); paint();
 }
 
+let sending = false;   // one question at a time: Enter or a chip during an answer used to start a second one
 async function send(text) {
+  if (sending) return;
   const c = convo();
   const f = ctx.farm();
   text = (text ?? input.value).trim();
@@ -151,7 +153,7 @@ async function send(text) {
   const messages = [...c.messages, { role: 'user', content: notes + (text || 'Here is a file.') }];
   c.view.push({ role: 'user', text: text || '(a file)', files: sent.map(x => x.name) });
   paint();
-  busyRow.hidden = false; sendBtn.disabled = true;
+  busyRow.hidden = false; sendBtn.disabled = true; sending = true;
   try {
     const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent });
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
@@ -163,7 +165,7 @@ async function send(text) {
     c.view.push({ role: 'error', text: e.message });
     if (text) input.value = text;
   }
-  busyRow.hidden = true; sendBtn.disabled = false;
+  busyRow.hidden = true; sendBtn.disabled = false; sending = false;
   save(); paint();
 }
 
@@ -245,4 +247,6 @@ export function initAssistant(context) {
 }
 
 // a farm switch shows that farm's conversation
+// sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
+export function forgetAssistant() { convos.clear(); if (panel && !panel.hidden) paint(); }
 export function assistantFarmChanged() { if (panel && !panel.hidden) paint(); }

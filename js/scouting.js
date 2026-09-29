@@ -73,7 +73,7 @@ const reload = () => load(true);   // after a change: the server's answer, not t
 function paint() {
   mount.textContent = '';
   const openBtn = el('button', 'btn btn-primary', 'Open a case');
-  openBtn.onclick = () => newCase({ crop_id: cropFilter, crops: over.crops || [], onDone: reload });
+  openBtn.onclick = () => newCase({ farm, crop_id: cropFilter, crops: over.crops || [], onDone: reload });
   const scaleBtn = el('a', 'btn', 'Scale card');
   scaleBtn.href = 'scale-card.html'; scaleBtn.target = '_blank'; scaleBtn.rel = 'noopener';
   scaleBtn.title = 'The printed card for growth photos: a 5 cm magenta square the phone measures against';
@@ -180,7 +180,7 @@ function caseStrip() {
   list.forEach(k => {
     const b = el('button', 'pd-case' + (k.status === 'closed' ? ' closed' : ''));
     b.append(dotEl(k.dot), el('b', null, k.label || k.title), el('span', 'hint', [k.crop, k.zone, k.status === 'in_progress' ? 'treating' : k.status === 'closed' ? String(k.outcome || 'closed').replace('_', ' ') : null].filter(Boolean).join(' · ')));
-    b.onclick = () => openCase(k.id, reload);
+    b.onclick = () => openCase(k.id, reload, farm);
     box.append(b);
   });
   const t = el('button', 'linkish', showClosed ? 'Hide closed' : 'Show closed');
@@ -262,7 +262,7 @@ function zoneBand(z, day) {
   const photos = z.photos.filter(p => !cropFilter || p.crop_id === cropFilter).map(p => ({ ...p, zone: z.name }));
   const traps = z.traps.map(p => ({ ...p, zone: z.name }));
   const caseDots = (z.cases || []).map(k => (cases.cases || []).find(x => x.id === k.id)?.dot).filter(Boolean);
-  const zd = worst([...photos.map(p => p.dot), ...traps.map(p => p.dot)]);
+  const zd = worst([...photos.map(p => p.dot), ...traps.map(p => p.dot), ...caseDots]);   // an open case colours its zone too
   const det = el('details', 'pd-zone-band');
   det.open = !!zd || photos.length > 0;
   const sum = el('summary');
@@ -279,7 +279,7 @@ function zoneBand(z, day) {
     const full = (cases.cases || []).find(x => x.id === k.id);
     const b = el('button', 'pd-case small');
     b.append(dotEl(full?.dot || 'orange'), el('span', null, (full?.label || k.title.replace(/ in .*$/, ''))));
-    b.onclick = e => { e.preventDefault(); e.stopPropagation(); openCase(k.id, reload); };
+    b.onclick = e => { e.preventDefault(); e.stopPropagation(); openCase(k.id, reload, farm); };
     right.append(b);
   });
   if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
@@ -361,7 +361,7 @@ function photoFig(p, z, day) {
   const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
   cap.append(title, tagChips(p));
   // the section, where it was, the sizes on the scale card (0141)
-  const where = p.pos_code || (p.gps ? `GPS ±${p.gps.acc} m` : null);
+  const where = p.pos_code || (p.gps ? 'GPS' + (p.gps.acc != null ? ` ±${Math.round(p.gps.acc)} m` : '') : null);
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
   if (p.section) line.append(el('span', 'pill ' + (p.section === 'growth' ? 'ok' : ''), p.section === 'growth' ? 'Growth' : 'Plant health'));

@@ -134,7 +134,7 @@ function farmBox(ctx, d) {
   pick.setAttribute('aria-label', 'FarmBox');
   farms.forEach(f => {
     const o = el('option', null,
-      `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
+      f.site ? f.name : `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
     o.value = f.id;
     pick.append(o);
   });
@@ -285,8 +285,8 @@ function notion(ctx) {
     fnName: 'notion-sync',
     title: 'From Notion to app',
     glyph: 'download',
-    hint: 'Procedures and their checklist steps. A changed checklist arrives as a new draft ' +
-          'version, and nothing goes live until it is approved in Notion.',
+    hint: 'Imports procedures that exist only in Notion, with their checklist steps. ' +
+          'Procedures edited in the console are left alone — the console owns them.',
     summary: r => [
       `${r.read ?? 0} read`, `${r.created ?? 0} new`, `${r.updated ?? 0} updated`,
       `${r.unchanged ?? 0} unchanged`,
@@ -300,8 +300,8 @@ function notion(ctx) {
     fnName: 'notion-push',
     title: 'From app to Notion',
     glyph: 'upload',
-    hint: 'Farms, people and recorded prices, into the Notion database twin. Procedures and ' +
-          'their approval are never written back — Notion owns those.',
+    hint: 'Farms, people and recorded prices, into the Notion database twin. ' +
+          'Procedures are never written back.',
     summary: r => Object.keys(SECTION_LABEL).filter(k => r[k]).map(k =>
       `${SECTION_LABEL[k]}: ${r[k].created} new, ${r[k].updated} changed, ${r[k].unchanged} same`
       + (r[k].skipped ? `, ${r[k].skipped} skipped` : '')).join(' · '),
@@ -543,6 +543,6 @@ function device() {
   fresh.type = 'button';
   fresh.onclick = () => updateNow(VERSION);
   list.append(row('Reload a fresh copy',
-    'Empties the offline copy and loads the console again from the server.', fresh));
+    'Loads the console again from the server. The offline copy of the pages stays.', fresh));
   return list;
 }

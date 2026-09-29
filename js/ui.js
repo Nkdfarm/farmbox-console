@@ -73,6 +73,8 @@ export function drawer(title, subtitle, opts = {}) {
   const body = el('div', 'body');
   const footer = el('footer');
   box.append(head, body, footer);
+  // opened from the photo viewer (z 60): above it, or it opened unseen behind the photo (0.7.162)
+  if (document.querySelector('.viewer')) { scrim.style.zIndex = '62'; box.style.zIndex = '63'; }
   document.body.append(scrim, box);
 
   let closed = false;
@@ -89,7 +91,8 @@ export function drawer(title, subtitle, opts = {}) {
   document.addEventListener('keydown', onKey);
   scrim.onclick = close;
   x.onclick = close;
-  setTimeout(() => box.querySelector('input, select, button')?.focus(), 30);
+  // the first field, not the header's ✕ (Enter used to close the drawer)
+  setTimeout(() => (body.querySelector('input:not([type=hidden]), select, textarea') || x).focus(), 30);
 
   return { box, body, footer, close };
 }
@@ -122,13 +125,15 @@ export function suggestPassword() {
 
 export function busy(button, on, label) {
   if (on) {
-    button.dataset.label = button.textContent;
+    // the label is kept only the first time: a progress text ("Validating 200 of 500…") must not become the label
+    if (!button.dataset.busy) { button.dataset.label = button.textContent; button.dataset.busy = '1'; }
     button.disabled = true;
     button.textContent = '';
     button.append(el('span', 'spin'), document.createTextNode(' ' + (label || 'Working…')));
   } else {
     button.disabled = false;
     button.textContent = button.dataset.label || label || 'Save';
+    delete button.dataset.busy;
   }
 }
 

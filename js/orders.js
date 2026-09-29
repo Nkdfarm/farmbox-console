@@ -200,7 +200,8 @@ async function editOrder(o) {
   const crops = (planMap.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   let book = [];
   if (!o) { try { book = ((await cachedRpc('customers', { p_farm: farm.id, p_inactive: false })) || await rpc('customers', { p_farm: farm.id, p_inactive: false })).customers || []; } catch { book = []; } }
-  const who = selectBox([['', book.length ? 'Not in the book — type a name' : 'Type a name (the book is empty)'], ...book.map(c => [c.id, c.name])], book.length ? book[0].id : '');
+  // no customer chosen for the person (0.7.162): the first of the book used to be taken unless somebody noticed
+  const who = selectBox([['', book.length ? 'Choose a customer, or type a new name' : 'Type a name (the book is empty)'], ...book.map(c => [c.id, c.name])], '');
   const customer = input({ value: o?.customer || '', placeholder: 'Restaurant, shop, market…' });
   const customerF = field('Name', customer);
   const showName = () => { customerF.style.display = who.value ? 'none' : ''; };

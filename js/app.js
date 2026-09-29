@@ -30,7 +30,7 @@ import { renderForecast } from './forecast.js';
 import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
-import { initAssistant, assistantFarmChanged } from './assistant.js';
+import { initAssistant, assistantFarmChanged, forgetAssistant } from './assistant.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
 import { openSettings, applyTheme, startPage } from './settings.js';
@@ -262,8 +262,15 @@ $('signinForm').addEventListener('submit', async e => {
   }
 });
 
+// the assistant's conversations stay with the person who had them (they may hold Money or People answers)
+function forgetConversations() {
+  forgetAssistant();
+  try { Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_') && k !== 'fbc_ai_open').forEach(k => localStorage.removeItem(k)); }
+  catch { /* storage off: nothing kept either */ }
+}
 function doSignOut() {
   warmed.clear();   // the next person on this tab gets their own offline copies
+  forgetConversations();
   signOut();
   location.hash = '';
   showSignin();
@@ -272,7 +279,7 @@ $('signout').addEventListener('click', doSignOut);
 // a session refused in the middle of the day: back to the form, the offline copies cleared (0.7.112)
 addEventListener('fbc:session-ended', () => {
   if ($('shell').hidden) return;
-  warmed.clear(); signOut(); location.hash = '';
+  warmed.clear(); forgetConversations(); signOut(); location.hash = '';
   showSignin('Your session has ended. Sign in again.');
 });
 
@@ -294,7 +301,7 @@ $('settingsBtn').addEventListener('click', () => {
     },
     signOut: doSignOut,
     refresh: () => { if (farm) route(); },
-    farms,
+    farms: choices,        // the switcher's list: sister units as one site (0.7.162)
     farmId: farm?.id,
     switchFarm,
   });
@@ -356,7 +363,8 @@ function switchFarm(id) {
   farm = next;
   $('farmPick').value = farm.id;
   pref.set(FARM_KEY, farm.id);
-  location.hash = '#/dashboard/overview';
+  // no hashchange (0.7.162): it drew the dashboard once with the old unit's roles before paintMyRole answered
+  history.replaceState(null, '', '#/dashboard/overview');
   paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
 }
 
@@ -549,10 +557,14 @@ async function route() {
     page.append(e);
     return;
   }
+  // a fresh box for every visit (0.7.162): an answer still on its way for the page just left finds its box
+  // detached and draws nothing — #page itself stays connected, so it used to paint over the new page
+  const view = el('div', 'page-view');
+  page.replaceChildren(view);
   try {
     const key = `${sec}/${tab[0]}`;
-    if (farm.site && PAGE_KIND[key]) await renderUnits(page, farm, key, tab, PAGE_KIND[key]);
-    else await tab[2](page, farm, { switchFarm, reloadFarms: loadFarms, site: farm.site ? farm : null });
+    if (farm.site && PAGE_KIND[key]) await renderUnits(view, farm, key, tab, PAGE_KIND[key]);
+    else await tab[2](view, farm, { switchFarm, reloadFarms: loadFarms, site: farm.site ? farm : null });
   } catch (err) {
     page.textContent = '';
     page.append(el('div', 'note bad', err.message));

@@ -6,7 +6,7 @@
 // to plan the next one. The planner proposes; a person validates; only then
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, openFast } from './api.js';
+import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
 import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref } from './ui.js';
 import { renderTimeline } from './timeline.js';
 
@@ -178,7 +178,7 @@ function proposalCard(proposed, cur, may) {
         `${proposed.length} proposed batches will be removed. Nothing that is already `
         + `growing or validated is touched.`, 'Discard', true)) return;
       try {
-        await rpc('cancel_crop_plan', { p_ids: proposed.map(b => b.id) });
+        await rpcInChunks('cancel_crop_plan', proposed.map(b => b.id));
         toast('Proposal discarded', 'ok'); await load();
       } catch (e) { toast(e.message, 'bad'); }
     };
@@ -186,10 +186,11 @@ function proposalCard(proposed, cur, may) {
     ok.onclick = async () => {
       busy(ok, true, 'Validating…');
       try {
-        const r = await rpc('validate_crop_plan', { p_ids: proposed.map(b => b.id) });
+        const r = mergeValidated(await rpcInChunks('validate_crop_plan', proposed.map(b => b.id), 'p_ids', 100,
+          (n, all) => { if (all > 100) busy(ok, true, `Validating ${n} of ${all}…`); }));
         toast(`${r.validated} batches, ${r.tasks_created} tasks created`, 'ok');
         await load();
-      } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); }
+      } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); load(); }
     };
     row.append(drop, el('div', 'spacer', ''), ok);
     card.append(row);
@@ -244,7 +245,7 @@ function tile(p, s, cur) {
   if (b) t.classList.add('fam-' + (CAT[b.category] || 'ag'), 'is-' + b.status);
   else t.classList.add('is-empty');
 
-  t.append(el('span', 'plot-code', p.code.replace(/^FL-/, '')));
+  t.append(el('span', 'plot-code', p.code.replace(/^[A-Z0-9]+-(Z[0-9]+-|B[0-9A-Z]+-)?/, '')));
   if (b) {
     // the full name, truncated by CSS — "English" alone does not say cucumber
     const name = el('span', 'plot-crop', b.crop);
@@ -367,6 +368,10 @@ function openPosition(p, s, cur) {
       const rm = el('button', 'btn btn-danger');
       rm.textContent = 'Remove ' + (cancellable.length > 1 ? 'these batches' : 'this batch');
       rm.onclick = async () => {
+        // a validated batch loses its tasks and seedling order with it: ask first, as the timeline does
+        const val = cancellable.filter(b => b.status === 'validated').length;
+        if (val && !await confirmDrawer('Remove them?',
+          `${val} of them ${val === 1 ? 'is' : 'are'} validated: ${val === 1 ? 'its' : 'their'} open tasks and seedling orders go too.`, 'Remove', true)) return;
         d.close();
         try {
           await rpc('cancel_crop_plan', { p_ids: cancellable.map(b => b.id) });

@@ -120,7 +120,7 @@ function paint() {
         return s; } },
   ], shown, {
     onRow: r => openProcedure(r),
-    empty: filter.q ? 'No procedure matches that.' : 'No procedures yet — run the Notion sync.',
+    empty: filter.q ? 'No procedure matches that.' : 'No procedure in this library yet.',
   }));
 }
 

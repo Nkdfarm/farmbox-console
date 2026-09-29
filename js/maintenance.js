@@ -48,7 +48,7 @@ function paint() {
   const add = el('button', 'btn', 'Add equipment');
   add.onclick = () => editAsset(null);
 
-  mount.append(pageHead('Maintenance',
+  mount.append(pageHead(null,
     `${data.assets.length} pieces of equipment, ${rules.length} routines. ` +
     (overdue ? `${overdue} overdue, ` : '') + `${due} due within a fortnight.`,
     may ? add : null, may ? sched : null));
@@ -146,7 +146,7 @@ async function schedule(button) {
     const r = await rpc('generate_maintenance_tasks', { p_farm: farm.id, p_horizon_days: 30 });
     toast(r.created
       ? `${r.created} maintenance task${r.created === 1 ? '' : 's'} added to the plan`
-      : 'Nothing new — everything due is already scheduled', r.created ? 'ok' : '');
+      : 'Nothing new — everything due is already scheduled (a unit set to seedling orders only makes no maintenance tasks: Farm setup › The week)', r.created ? 'ok' : '');
     await load();
   } catch (e) { busy(button, false); toast(e.message, 'bad'); }
 }
@@ -195,10 +195,11 @@ function editAsset(a) {
   d.footer.append(cancel, save);
 }
 
-let maintProcs = null;   // the Maintenance procedures a routine may run, read once
+let maintProcs = null, maintProcsFarm = null;   // the Maintenance procedures a routine may run, read once per farm
 async function editRule(asset, r) {
   const d = drawer((r ? 'Routine' : 'New routine') + ' on ' + asset.name, 'What has to be done, and how often');
-  if (!maintProcs) {
+  if (!maintProcs || maintProcsFarm !== farm.id) {
+    maintProcsFarm = farm.id;
     try {
       const all = await rpc('procedures', { p_farm: farm.id });
       maintProcs = (all.procedures || []).filter(p => p.family === 'Maintenance' && p.status === 'approved')

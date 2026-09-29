@@ -103,8 +103,11 @@ export async function editCrop(c, onSaved, farm) {
     busy(pickBtn, true, 'Uploading…');
     try {
       const blob = await shrink(f, 512);
-      await api(`/storage/v1/object/crop-photos/${c.id}.jpg`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob });
-      photoUrl = `${URL_BASE}/storage/v1/object/public/crop-photos/${c.id}.jpg?t=${Date.now()}`;
+      // a new file each time (0.7.162): the crop keeps showing its old picture until Save; Cancel really cancels.
+      // The storage policy reads the crop id before the first dot (app.path_crop), so <id>.<time>.jpg is allowed.
+      const name = `${c.id}.${Date.now()}.jpg`;
+      await api(`/storage/v1/object/crop-photos/${name}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      photoUrl = `${URL_BASE}/storage/v1/object/public/crop-photos/${name}`;
       busy(pickBtn, false, 'Choose a picture'); picNow();
       toast('Picture uploaded — Save to keep it', 'ok');
     } catch (e) { busy(pickBtn, false, 'Choose a picture'); toast(e.message, 'bad'); }

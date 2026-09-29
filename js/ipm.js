@@ -55,7 +55,7 @@ function paint() {
   if (add) add.onclick = () => editTrap(null);
   const thr = data.may_edit ? el('button', 'btn', `Limits ${th.watch} / ${th.over} a day`) : el('span', 'pill', `watch ${th.watch} · over ${th.over} a day`);
   if (data.may_edit) thr.onclick = () => editThreshold(th);
-  mount.append(pageHead('Traps',
+  mount.append(pageHead(null,
     'The sticky traps and their counts. They are counted during the daily scouting when the person opens the trap cards; ' +
     'a trap over the threshold has raised an issue. The curves are drawn by date, so a gap is a gap.', thr, add));
 
@@ -127,8 +127,9 @@ function paint() {
       { key: 'last', label: 'Last count', align: 'right', fmt: v => {
           if (!v) return el('span', 'hint', 'not read yet');
           const b = el('div');
-          b.append(el('b', 'ipm-' + level(v.total, th), num(v.total, 0)));
-          b.append(el('div', 'hint', when(v.read_at) + (v.replaced ? ' · replaced' : '')));
+          // the colour is insects a day (the limits' unit since 0147), not the card's running total
+          b.append(el('b', 'ipm-' + level(v.day_rate, th), num(v.total, 0)));
+          b.append(el('div', 'hint', (v.day_rate != null ? `${num(v.day_rate, 1)} a day · ` : '') + when(v.read_at) + (v.replaced ? ' · replaced' : '')));
           return b; } },
       { key: 'previous', label: 'Change', align: 'right', fmt: (v, t) => {
           if (v == null || !t.last) return '—';
@@ -150,7 +151,7 @@ function paint() {
           im.onclick = e => { e.stopPropagation(); viewReading(t, v, z); };
           return im; } },
       { key: 'active', label: 'Status', fmt: (v, t) => el('span', 'pill' + (v ? (level(t.last?.day_rate, th) === 'over' ? ' bad' : level(t.last?.day_rate, th) === 'watch' ? ' warn' : ' ok') : ''),
-                                                        v ? (level(t.last?.total, th) || 'no reading') : 'taken down') },
+                                                        v ? (level(t.last?.day_rate, th) || (t.last ? 'count starts' : 'no reading')) : 'taken down') },
     ], z.traps, { onRow: t => data.may_edit ? editTrap(t, z) : (t.last ? openReading(t, t.last) : null),
                   rowClass: t => t.active ? '' : 'off' }));
     mount.append(c);
@@ -205,7 +206,7 @@ function sparkline(points, th, since) {
   const t0 = Math.min(...ts, since ? new Date(since).getTime() : Infinity), t1 = Math.max(...ts);
   const span = (t1 - t0) || 1;
   const ys = points.map(p => Number(p.total));
-  const max = Math.max(...ys, th.over), yspan = max || 1;
+  const max = Math.max(...ys), yspan = max || 1;   // insects on the card: no per-day limit line on this scale (0.7.162)
   const xy = points.map((p, i) => [pad + (ts[i] - t0) * (w - 2 * pad) / span, h - pad - ys[i] * (h - 2 * pad) / yspan]);
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.setAttribute('width', w); svg.setAttribute('height', h);
@@ -214,13 +215,9 @@ function sparkline(points, th, since) {
   svg.setAttribute('aria-label', `${ys.join(', ')} insects over ${days} day${days === 1 ? '' : 's'}`);
   const title = document.createElementNS(SVG_NS, 'title');
   title.textContent = points.map(p => `${when(p.read_at)}: ${p.total}`).join('\n');
-  const rule = document.createElementNS(SVG_NS, 'line');
-  const ry = h - pad - th.over * (h - 2 * pad) / yspan;
-  rule.setAttribute('x1', pad); rule.setAttribute('x2', w - pad); rule.setAttribute('y1', ry); rule.setAttribute('y2', ry);
-  rule.setAttribute('class', 'ipm-rule');
   const line = document.createElementNS(SVG_NS, 'polyline');
   line.setAttribute('points', xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '));
-  svg.append(title, rule, line);
+  svg.append(title, line);
   xy.forEach(([x, y], i) => {
     const dot = document.createElementNS(SVG_NS, 'circle');
     dot.setAttribute('cx', x.toFixed(1)); dot.setAttribute('cy', y.toFixed(1)); dot.setAttribute('r', i === xy.length - 1 ? '2.4' : '1.4');
@@ -411,9 +408,13 @@ function editThreshold(th) {
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Save');
   save.onclick = async () => {
+    // an emptied box used to save 0 and turn every trap red
+    const w = parseFloat(String(watch.value).replace(',', '.')), o = parseFloat(String(over.value).replace(',', '.'));
+    if (!(w > 0) || !(o > 0)) { toast('Both limits, in insects a day, please', 'bad'); return; }
+    if (w >= o) { toast('Watch has to be below Over', 'bad'); return; }
     busy(save, true, 'Saving…');
     try {
-      await rpc('save_ipm_threshold', { p_farm: farm.id, p_watch: parseFloat(watch.value) || 0, p_over: parseFloat(over.value) || 0 });
+      await rpc('save_ipm_threshold', { p_farm: farm.id, p_watch: w, p_over: o });
       d.close(); toast('Thresholds saved — sync the phones', 'ok'); await load();
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };

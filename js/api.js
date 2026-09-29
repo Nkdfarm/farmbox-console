@@ -60,7 +60,13 @@ export function signOut() {
   forgetAll();
 }
 
-async function refresh() {
+// one refresh at a time (0.7.162): after an hour idle the page and warm()'s readers all asked at once with the same token
+let refreshing = null;
+function refresh() {
+  refreshing ||= doRefresh().finally(() => { refreshing = null; });
+  return refreshing;
+}
+async function doRefresh() {
   if (!session?.refresh_token) throw new ApiError('signed out', 401);
   let s;
   try {
@@ -72,6 +78,8 @@ async function refresh() {
     // used to land here too and throw a good session away, so an hour offline
     // meant signing in again — which cannot be done offline.
     if (!(e instanceof ApiError)) throw e;
+    // a server that is busy or down (5xx, 429) has not refused anybody: keep the session and try later
+    if (!(e.status === 400 || e.status === 401 || e.status === 403)) throw e;
     // A refused refresh is a dead session however it is worded: the token
     // expired, somebody revoked it, or the account itself is gone. Auth answers
     // 400 for that, and a 400 used to leave the console sitting in an empty
@@ -267,6 +275,23 @@ export const rpc = (name, args) =>
 
 // The copy of a read kept from last time, without asking the server (0.7.106): a page
 // may draw it at once and replace it when the fresh answer comes. null when none.
+// a long list of batches goes in pieces, so no single request meets the API's 8 s limit (0.7.162):
+// validating FarmBox1's ~500 steady batches in one call took ~4 s and grows with the tasks it makes
+export async function rpcInChunks(name, ids, key = 'p_ids', size = 100, progress) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) {
+    out.push(await rpc(name, { [key]: ids.slice(i, i + size) }));
+    progress?.(Math.min(i + size, ids.length), ids.length);
+  }
+  return out;
+}
+// the validate_crop_plan answers of several pieces, added up
+export const mergeValidated = rs => ({
+  validated: rs.reduce((a, r) => a + Number(r?.validated || 0), 0),
+  tasks_created: rs.reduce((a, r) => a + Number(r?.tasks_created || 0), 0),
+  conflicts: rs.flatMap(r => r?.conflicts || []),
+});
+
 export async function cachedRpc(name, args) {
   if (!READ_RPCS.has(name)) return null;
   const hit = await recall(keyOf('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) }));

@@ -52,7 +52,7 @@ function paint() {
   compute.title = 'From the validated crop plan, the bill of materials, stock and open orders.';
   compute.onclick = () => recompute(compute);
 
-  mount.append(pageHead('Purchasing',
+  mount.append(pageHead(null,        // the tab already says Buy / Stock (0.7.162)
     `${toOrder.length} to order${late ? `, ${late} already late` : ''}` +
     `${ordered.length ? `, ${ordered.length} on the way` : ''}` +
     `${below ? `, ${below} item${below === 1 ? '' : 's'} below the reorder point` : ''}.`,
@@ -214,6 +214,7 @@ async function recompute(button) {
   busy(button, true, 'Working it out…');
   try {
     const r = await rpc('compute_purchase_requests', { p_farm: farm.id, p_horizon_days: 60 });
+    chosen = new Set();   // the run may have dropped ticked requests (0.7.162)
     toast(r.requests
       ? `${r.requests} request${r.requests === 1 ? '' : 's'}${r.late ? `, ${r.late} already late` : ''}`
       : 'Nothing needed — stock and open orders cover the plan',
@@ -422,6 +423,7 @@ function seedOrder(o, openBatches) {
   const c = el('div', 'card card-pad po');
   const head = el('div', 'row');
   const trays = (o.crops || []).reduce((a, x) => a + Number(x.trays || 0), 0);
+  o.tray_cells = o.tray_cells || o.crops?.[0]?.cells || 72;   // an order made before the tray size was set
   const st = o.status === 'done' ? [`ordered${o.done_by ? ' by ' + o.done_by : ''}`, 'ok']
            : o.day < seed.today || o.late ? ['late — order today', 'bad']
            : o.day === seed.today ? ['order today', 'warn'] : ['to order', 'info'];

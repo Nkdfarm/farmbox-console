@@ -10,7 +10,7 @@
 // standard"). Every decision stays: who proposed, on what evidence, who decided.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, api, cachedRpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref, systemTypes } from './ui.js';
 
 const ENTITY = { phase_days: 'Phase length', yield: 'Yield', target: 'EC / pH / climate target', procedure_step: 'Procedure step',
                  pest: 'Pest identification', material: 'Material quantity', other: 'Other' };
@@ -118,7 +118,7 @@ async function propose() {
   const entity = selectBox(Object.entries(ENTITY), 'phase_days');
   const crop = selectBox(crops.map(c => [c.id, c.name]));
   const phase = selectBox([]);
-  const sys = selectBox([['nft', 'NFT'], ['ngs', 'NGS'], ['drip_substrate', 'Drip-irrigated substrate'], ['ebb_flow', 'Ebb & flow'], ['vertical_tower', 'Vertical tower'], ['dwc', 'DWC']]);
+  const sys = selectBox(systemTypes());   // the catalogue (Available systems and media), no list of its own
   const tgt = selectBox(TARGETS);
   const proc = selectBox((procs.procedures || []).map(p => [p.id, p.title]).sort((a, b) => a[1].localeCompare(b[1])));
   const value = el('input', 'input'); value.placeholder = 'e.g. 26 days';

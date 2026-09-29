@@ -224,7 +224,7 @@ function spotCard(s) {
 
 function view(photo, getReadings) {
   openViewer({
-    farm, photo: { ...photo, kind: 'trap' }, catalog: [], aiReady: true, mayWrite: true,
+    farm, photo: { ...photo, kind: 'trap' }, catalog: [], aiReady: true, mayWrite: !!data.may_edit,   // a worker only looks (0.7.162)
     zonePhotos: getReadings,                                  // Compare with… = this spot's other photos
     zoneId: photo.zone_id || null, crops: [], openCases: async () => [],
     onChange: () => load(true),

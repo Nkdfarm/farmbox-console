@@ -7,6 +7,7 @@
 // a manager closes it, and the dashboard counts it while it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
+import { openCase } from './cases.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, confirmDrawer,
          toast, busy, shortDate } from './ui.js';
 
@@ -39,7 +40,7 @@ function paint() {
   const raise = el('button', 'btn btn-primary', 'Raise an issue');
   raise.onclick = () => raiseIssue();
 
-  mount.append(pageHead('Issues',
+  mount.append(pageHead(null,
     open.length
       ? `${open.length} open${critical ? `, ${critical} critical` : ''}. ` +
         `The oldest has been open ${Math.max(...open.map(i => i.days_open))} days.`
@@ -63,7 +64,7 @@ function paint() {
         if (r.kind === 'pest_case') {
           const a = el('a', 'linkish', 'pest case — open it in Pest & diseases');
           a.href = '#/ipm/scouting';
-          b.append(el('div', 'hint')).append(a);
+          const h = el('div', 'hint'); h.append(a); b.append(h);   // append() returns nothing: the old chain threw
         }
         return b; } },
     { key: 'severity', label: 'Severity', fmt: v =>
@@ -75,6 +76,12 @@ function paint() {
     { key: 'corrective_task', label: 'Corrective job' },
     { key: 'status', label: 'Status', fmt: (v, r) => {
         if (v === 'closed') return el('span', 'pill ok', 'closed');
+        // a pest case closes with its outcome and stops its treatments: that is the case window's job (close_case)
+        if (r.kind === 'pest_case') {
+          const o = el('button', 'btn btn-sm', 'Open the case');
+          o.onclick = e => { e.stopPropagation(); openCase(r.id, load, farm); };
+          return o;
+        }
         if (!data.may_close) return el('span', 'pill warn', v);
         const b = el('button', 'btn btn-sm', 'Close');
         b.onclick = e => { e.stopPropagation(); close(r); };

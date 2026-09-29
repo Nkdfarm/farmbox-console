@@ -259,7 +259,7 @@ function weekCard(may) {
     sr.append(el('span', null, 'Sister units'));
     const mark = (label, colour) => { const m = el('span', 'tk-unit big', label); m.style.setProperty('--u', colour || 'var(--text-muted)'); return m; };
     data.sisters.forEach(u => { const x = el('span', 'pill'); x.append(mark(u.badge, u.colour), ' ' + u.name + (u.home ? ' · home' : '')); sr.append(x); });
-    const lab = input({ value: data.badge_label || farm.code || '', maxlength: 6 }); lab.style.width = '6em'; lab.setAttribute('aria-label', 'This unit’s mark');
+    const lab = input({ value: data.badge_label || farm.code || '', maxLength: 6 }); lab.style.width = '6em'; lab.setAttribute('aria-label', 'This unit’s mark');
     const col = el('input', 'input'); col.type = 'color'; col.value = data.badge_colour || '#6d8cf0'; col.setAttribute('aria-label', 'This unit’s colour');
     col.style.width = '3em'; col.style.padding = '2px';
     const saveU = el('button', 'btn btn-sm', 'Save mark');

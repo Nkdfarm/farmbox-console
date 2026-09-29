@@ -313,7 +313,8 @@ async function openPlan(full) {
   const crops = (map.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   const crop = selectBox(crops.map(c => [c.id, c.name]), full?.id ?? crops[0]?.id);
   const zone = selectBox([], '');
-  const when = input({ type: 'date', value: ymd(new Date()) });
+  // empty = the earliest day its seedlings can be ready (the farm's nursery lead): today was impossible with an external nursery
+  const when = input({ type: 'date', value: '' });
   const posBox = el('div', 'cropdb-positions');
   const chosen = new Set();
 
@@ -356,7 +357,7 @@ async function openPlan(full) {
   paintZones();
 
   d.body.append(field('Crop', crop), field('Zone', zone),
-    field('Transplant on', when, 'The sowing date follows from the cycle; work before today is not created.'),
+    field('Transplant on', when, 'Leave it empty for the earliest day its seedlings can be ready. The sowing date follows from the cycle.'),
     nurs.field, field('Positions', posBox));
 
   const cancel = el('button', 'btn', 'Cancel');
@@ -365,19 +366,24 @@ async function openPlan(full) {
   go.onclick = async () => {
     if (!chosen.size) { toast('Tick at least one position', 'bad'); return; }
     busy(go, true, 'Planning…');
-    try {
-      const ids = [];
-      for (const pid of chosen) {
+    // one refused position does not strand the ones before it as unvalidated proposals (0.7.162)
+    const ids = [], refused = [];
+    const code = pid => (map.systems || []).flatMap(s => s.positions || []).find(p => p.id === pid)?.code || '?';
+    for (const pid of chosen) {
+      try {
         const r = await rpc('plan_position', { p_position: pid, p_crop: crop.value, p_transplant: when.value || null });
         if (r?.id && nurs.value() && r.nursery !== nurs.value())
           await rpc('set_batch_nursery', { p_plan: r.id, p_nursery: nurs.value() });
         if (r?.id) ids.push(r.id);
-      }
-      const v = await rpc('validate_crop_plan', { p_ids: ids });
+      } catch (e) { refused.push(`${code(pid)}: ${e.message}`); }
+    }
+    try {
+      const v = ids.length ? await rpc('validate_crop_plan', { p_ids: ids }) : { validated: 0, tasks_created: 0 };
       d.close();
-      toast(`${v.validated} batch${v.validated === 1 ? '' : 'es'} planned · ${v.tasks_created} task${v.tasks_created === 1 ? '' : 's'} created`, 'ok');
+      toast(`${v.validated} batch${v.validated === 1 ? '' : 'es'} planned · ${v.tasks_created} task${v.tasks_created === 1 ? '' : 's'} created` +
+            (refused.length ? ` · ${refused.length} refused — ${refused.join('; ')}` : ''), refused.length ? 'bad' : 'ok');
       await load();
-    } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); }
+    } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); await load(); }
   };
   d.footer.append(cancel, go);
 }

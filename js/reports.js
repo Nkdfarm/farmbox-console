@@ -46,7 +46,7 @@ async function load() {
 
 function paint() {
   mount.textContent = '';
-  mount.append(pageHead('Reports',
+  mount.append(pageHead(null,
     `${shortDate(data.from)} to ${shortDate(data.to)} · ` +
     `${num(data.harvest_total, 1)} kg harvested.`));
 

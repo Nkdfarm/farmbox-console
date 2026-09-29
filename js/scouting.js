@@ -303,7 +303,10 @@ function dayRow(d, openFirst) {
   const t = d.task;
   // how many zones were scouted (0.7.170, owner): green all, orange some, red none — the photos and traps are inside
   if (t) {
-    const total = t.zones || 1, done = t.per_zone ? (t.zones_done || 0) : t.status === 'done' ? total : (t.zones_done || 0);
+    // a zone task is scouted when done; a day scouted as one task (before 0172) never ticked its zones — there a zone
+    // counts as scouted when it has a trap read or a photo that day (owner: "today scouting is 1/5 not 5/5")
+    const withData = Object.values(d.unit_counts || {}).filter(c => (c.photos || 0) + (c.traps || 0) > 0).length;
+    const total = t.zones || 1, done = Math.min(total, t.per_zone ? (t.zones_done || 0) : Math.max(t.zones_done || 0, withData));
     const pill = el('span', 'pill ' + (done >= total ? 'ok' : done > 0 ? 'warn' : 'bad'), `${done}/${total} scouted`);
     pill.title = [t.workers?.length ? t.workers.join(', ') : null, t.done_at ? 'last at ' + hhmm(t.done_at) : null].filter(Boolean).join(' · ');
     facts.append(pill);

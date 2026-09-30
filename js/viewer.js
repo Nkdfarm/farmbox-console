@@ -23,7 +23,7 @@ import { newCase, openCase } from './cases.js';
 const when = ts => ts ? new Date(ts).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
 const SEV = ['none', 'slight', 'clear', 'severe'];
-export const partLabel = p => ({ leaf: 'leaf', fruit: 'fruit', root: 'root', stem: 'stem', whole: 'whole plant', other: 'other' })[p] || p || '';
+export const partLabel = p => ({ leaf: 'leaf', fruit: 'fruit', head: 'head', root: 'root', stem: 'stem', whole: 'whole plant', other: 'other' })[p] || p || '';
 
 // a signed URL (one hour) for a full photo in the private evidence bucket
 export async function fullPhotoUrl(path) {

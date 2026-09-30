@@ -54,7 +54,8 @@ let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
 // 0.7.111: `drop` = the tasks to take a name off — the chosen person's, or everybody's when no face is chosen
 const manual = { on: false, worker: null, tasks: new Set(), drop: new Set() };
-const onTask = (t, w) => (t.workers || []).some(x => x.id === w);
+const onTask = (t, w) => t.hub ? openIds(t).length > 0 && t.members.filter(isOpenTask).every(m => (m.workers || []).some(x => x.id === w))
+                            : (t.workers || []).some(x => x.id === w);
 const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); };
 let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
 let dragging = null;      // the task being dragged, while it is
@@ -146,6 +147,10 @@ function unitMark(t, big) {
 
 // the time worked on a task (the phone's timer, FarmBox 0161): labour_week's task_times of the weeks read
 function timeOf(t) {
+  if (t.hub) {
+    const xs = t.members.map(timeOf).filter(Boolean);
+    return xs.length ? { minutes: xs.reduce((a, x) => a + Number(x.minutes || 0), 0), running: xs.some(x => x.running) } : null;
+  }
   for (const w of weeks.values()) { const x = (w?.task_times || []).find(y => y.task_id === t.id); if (x) return x; }
   return null;
 }
@@ -162,6 +167,7 @@ function timeWord(t) {
 }
 // a day's line: 5 of 8 done · 3 h 10 worked
 function dayWorked(list) {
+  list = flatTasks(list);
   const done = list.filter(t => t.status === 'done').length;
   const w = list.reduce((a, t) => a + Number(timeOf(t)?.minutes || (t.status === 'done' ? t.actual_minutes : 0) || 0), 0);
   return { done, worked: w, text: `${done} of ${list.length} done` + (w >= 1 ? ` · ${fmtWork(w)} worked` : '') };
@@ -193,6 +199,61 @@ function visible(tasks) {
     && (!filters.worker || (filters.worker === 'nobody' ? !t.workers.length : t.workers.some(w => w.id === filters.worker)))
     && (!q || [t.title, t.area, t.crop, t.category, ...(t.workers || []).map(w => w.name)].join(' ').toLowerCase().includes(q)));
 }
+// ── the daily scouting as one card (0.7.180, owner: "an aggregator for the daily scouting, to see only one task to
+// assign"). Since FarmBox 0172 the scouting is one task a zone; the board folds a unit's zone tasks of a day into one
+// card, as the phone does (Naked Brain 0.11.67): its zones on the card, one assignment for all of them (Assign manually,
+// Change who, drag), and its window lists the zones, each opening its own task. A filter that leaves one zone shows the
+// zone's own task. The tasks themselves stay one a zone, so the phone, the report and the hours are unchanged.
+const HUB_MODULES = new Set(['scouting']);
+const isOpenTask = t => !['done', 'skipped', 'cancelled'].includes(t.status);
+const openIds = t => (t.hub ? t.members : [t]).filter(isOpenTask).map(m => m.id);
+const flatTasks = list => list.flatMap(t => t.hub ? t.members : [t]);
+const hubKey = t => HUB_MODULES.has(t.module) ? [t.module, t.farm_id, t.date, t.sop_id].join('|') : null;
+// "Zone 4-1" → "4.1", "Bay 2A" → "2A": the card says "Zones 1 · 2 · 3 · 4.1 · 4.2"
+const zoneShort = a => (a || '').replace(/^(Zone|Bay)s?\s+/i, '').replace(/-/g, '.');
+function zonesWord(ms) {
+  const areas = ms.map(m => m.area || '').filter(Boolean);
+  if (!areas.length) return '';
+  const word = areas.every(a => /^Bay/i.test(a)) ? 'Bays' : areas.every(a => /^Zone/i.test(a)) ? 'Zones' : '';
+  return (word ? word + ' ' : '') + areas.map(a => word ? zoneShort(a) : a).join(' · ');
+}
+const PRIO_RANK = { critical: 0, high: 1, normal: 2, low: 3 };
+function foldHubs(list) {
+  const all = new Map();                                                // every zone task of the key, whatever the filters
+  tasksOnScreen().forEach(t => { const k = hubKey(t); if (k) { if (!all.has(k)) all.set(k, []); all.get(k).push(t); } });
+  const groups = new Map(), out = [];
+  list.forEach(t => {
+    const k = hubKey(t);
+    if (!k) { out.push(t); return; }
+    if (!groups.has(k)) { groups.set(k, []); out.push({ _hub: k }); }
+    groups.get(k).push(t);
+  });
+  return out.map(x => {
+    if (!x._hub) return x;
+    const ms = groups.get(x._hub).sort((a, b) => (a.area || '').localeCompare(b.area || '', undefined, { numeric: true }));
+    return ms.length === 1 ? ms[0] : hubOf(ms, all.get(x._hub) || ms);
+  });
+}
+function hubOf(ms, all) {
+  const open = ms.filter(isOpenTask), first = open[0] || ms[0];
+  const workers = [];
+  (open.length ? open : ms).forEach(m => (m.workers || []).forEach(w => { if (!workers.some(x => x.id === w.id)) workers.push(w); }));
+  const status = open.length ? (open.every(m => (m.workers || []).length) ? 'assigned' : 'planned')
+    : ms.some(m => m.status === 'done') ? 'done' : 'skipped';
+  const doneAt = ms.map(m => m.done_at).filter(Boolean).sort().pop() || null;
+  return {
+    ...first, id: 'hub|' + ms.map(m => m.id).join('|'), hub: true, members: ms, all,
+    area: zonesWord(ms), status, workers, nobody: open.filter(m => !(m.workers || []).length).length,
+    minutes: ms.reduce((a, m) => a + Number(m.minutes || 0), 0),
+    actual_minutes: ms.reduce((a, m) => a + Number(m.actual_minutes || 0), 0),
+    priority: ms.map(m => m.priority || 'normal').sort((a, b) => (PRIO_RANK[a] ?? 2) - (PRIO_RANK[b] ?? 2))[0],
+    crops: [...new Set(ms.flatMap(m => m.crops?.length ? m.crops : [m.crop]).filter(Boolean))],
+    crop: null, positions: [], done_at: status === 'done' ? doneAt : null,
+    skip_reason: status === 'skipped' ? first.skip_reason : null, skip_note: null, closed_by: null,
+    harvest_kg: null, withholding_until: null,
+  };
+}
+
 // Morning · afternoon · anytime (0079): the slot orders the day; a clock time is a detail
 const SLOTS = ['am', 'pm', 'any'];
 const SLOT_WORD = { am: 'Morning', pm: 'Afternoon', any: 'Anytime' };
@@ -463,7 +524,7 @@ function navBar() {
 function paintBody() {
   body.textContent = '';
   paintPeople();
-  const tasks = visible(tasksOnScreen());
+  const tasks = foldHubs(visible(tasksOnScreen()));
   if (view === 'list') { body.append(listView(tasks)); return; }
   if (span === 'day') body.append(dayView(tasks));
   else if (span === 'month') body.append(monthView(tasks));
@@ -589,6 +650,12 @@ function chip(t, opts = {}) {
   const title = el('span', 'tk-title', t.title);
   title.title = [t.title, t.area, t.crop].filter(Boolean).join(' · ');
   text.append(title);
+  if (t.hub) {
+    const doneN = t.all.filter(m => m.status === 'done').length;
+    const z = el('span', 'tk-hub', t.area + (doneN ? ` · ${doneN}/${t.all.length} done` : ''));
+    z.title = t.all.map(m => `${m.area}: ${stateOf(m)[2].toLowerCase()}${(m.workers || []).length ? ' · ' + m.workers.map(w => w.name).join(', ') : ''}`).join(String.fromCharCode(10));
+    text.append(z);
+  }
   if (opts.big) {
     text.append(el('span', 'tk-sub', [hhmm(t.due_time) || SLOT_WORD[slotOf(t)], t.area, t.crop, t.category, hrs(t.minutes) + ' h',
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
@@ -612,6 +679,7 @@ function chip(t, opts = {}) {
   else {
     t.workers.slice(0, 2).forEach(w => { const a = avatar({ worker_id: w.id, name: w.name }, 'sm'); a.title = w.name; who.append(a); });
     if (t.workers.length > 2) who.append(el('span', 'avatar sm more', '+' + (t.workers.length - 2)));
+    if (t.hub && t.nobody) { const n = el('span', 'tk-nobody', '?'); n.title = `${t.nobody} zone${t.nobody === 1 ? '' : 's'} with nobody yet`; who.append(n); }
   }
   c.append(who);
   const more = el('button', 'tk-more', '⋮');
@@ -621,7 +689,9 @@ function chip(t, opts = {}) {
   const open = () => {
     if (manual.on) {
       if (t.status === 'done' || t.status === 'skipped') return;
-      const flip = set => { if (set.has(t.id)) set.delete(t.id); else set.add(t.id); };
+      // a folded scouting card flips every open zone task of it together
+      const ids = openIds(t);
+      const flip = set => { const all = ids.every(id => set.has(id)); ids.forEach(id => all ? set.delete(id) : set.add(id)); };
       if (manual.worker) flip(onTask(t, manual.worker) ? manual.drop : manual.tasks);   // theirs: off; anyone else's: to them
       else if ((t.workers || []).length) flip(manual.drop);                               // no face chosen: names off
       else { toast('Nobody on this task yet — click a face first to give it to someone'); return; }
@@ -656,7 +726,7 @@ function dropTarget(cell, date, slot) {
     const sameSlot = slot === null || bandOf(t) === slot;
     if (sameDay && sameSlot) return;
     try {
-      await rpc('move_task', { p_task: t.id, p_date: date, p_slot: slot });
+      for (const id of openIds(t)) await rpc('move_task', { p_task: id, p_date: date, p_slot: slot });   // a folded card: every zone
       toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}`, 'ok');
       await load();
     } catch (err) { toast(err.message, 'bad'); }
@@ -719,6 +789,7 @@ function taskRow(task) {
 
 // ── one task: the facts and the actions ────────────────────────────────────
 function openTask(t) {
+  if (t.hub) return openHub(t);
   const wk = weeks.get(mondayOf(t.date)) || data;
   const d = drawer(t.title, [longDate(t.date), SLOT_WORD[slotOf(t)] + (hhmm(t.due_time) ? ' · ' + hhmm(t.due_time) : ''), t.area].filter(Boolean).join(' · '));
   const facts = el('div', 'facts');
@@ -807,12 +878,51 @@ function openTask(t) {
   d.footer.append(close);
 }
 
+// the daily scouting's card: its zones, each with its own task, and one "Change who" for all of them
+function openHub(t) {
+  const wk = weeks.get(mondayOf(t.date)) || data;
+  const d = drawer(t.title, [longDate(t.date), SLOT_WORD[slotOf(t)], t.area].filter(Boolean).join(' · '));
+  const facts = el('div', 'facts');
+  const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
+  if (unitOf(t)) { const um = unitMark(t, true); const w = el('span'); w.append(um, ' ' + unitOf(t).name); fact('Unit', w); }
+  fact('Kind', subFamilyTag(t.category || t.family));
+  const doneN = t.all.filter(m => m.status === 'done').length;
+  fact('Zones', `${t.all.length} · one task a zone · ${doneN} done`);
+  fact('Takes', hrs(t.all.reduce((a, m) => a + Number(m.minutes || 0), 0)) + ' h');
+  { const tw = timeWord({ ...t, members: t.all }); if (tw) fact('Worked', tw.text); }
+  fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') + (t.nobody ? ` · ${t.nobody} zone${t.nobody === 1 ? '' : 's'} with nobody` : '') : 'nobody yet');
+  d.body.append(facts);
+  d.body.append(el('div', 'sec-title', 'The zones'));
+  const list = el('div', 'tk-hub-list');
+  t.all.forEach(m => {
+    const r = el('button', 'tk-hub-row'); r.type = 'button';
+    r.append(stateMark(m), el('b', null, m.area || '—'));
+    r.append(el('span', 'hint', (m.workers || []).length ? m.workers.map(w => w.name).join(', ') : 'nobody yet'));
+    const tw = timeWord(m); r.append(el('span', 'tk-time ' + (tw?.cls || ''), tw ? tw.text : hrs(m.minutes) + ' h'));
+    r.onclick = () => { d.close(); openTask(m); };
+    list.append(r);
+  });
+  d.body.append(list);
+  d.body.append(el('div', 'hint', 'The scouting is one task a zone on the phone, the report and the hours; here the day is one card. Change who gives every open zone to one person; open a zone for its own task.'));
+  const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
+  if (openIds(t).length && mayPlan) {
+    const ch = el('button', 'btn btn-primary', 'Change who');
+    ch.onclick = () => { d.close(); reassign(t, wk); };
+    d.footer.append(ch);
+  }
+  const close = el('button', 'btn', 'Close');
+  close.onclick = d.close;
+  d.footer.append(close);
+}
+
 // how a chip looks in Assign manually: picked = theirs after Validate, dropping = a name coming off
 function markManual(c, t) {
-  const kept = manual.worker && ((onTask(t, manual.worker) && !manual.drop.has(t.id)) || manual.tasks.has(t.id));
+  const ids = openIds(t), all = set => ids.length > 0 && ids.every(id => set.has(id));
+  const dropping = all(manual.drop);
+  const kept = manual.worker && ((onTask(t, manual.worker) && !dropping) || all(manual.tasks));
   c.classList.toggle('picked', !!kept);
-  c.classList.toggle('dropping', manual.drop.has(t.id));
-  c.title = manual.drop.has(t.id) ? `Comes off ${manual.worker ? 'this person' : 'everybody'} on Validate — click again to keep`
+  c.classList.toggle('dropping', dropping);
+  c.title = dropping ? `Comes off ${manual.worker ? 'this person' : 'everybody'} on Validate — click again to keep`
           : kept ? (onTask(t, manual.worker) ? 'Theirs — click to take it off them' : 'Given to them on Validate — click again to undo')
           : (t.workers || []).length ? (manual.worker ? 'Click to give it to them instead' : 'Click to take the names off') : '';
 }
@@ -848,7 +958,7 @@ function notDone(t, parent) {
 function reassign(task, wk) {
   const d = drawer(task.title, [task.area, longDate(task.date)].filter(Boolean).join(' · '));
   const list = el('div', 'resp');
-  const current = new Set(task.workers.map(w => w.id));
+  const current = new Set(task.hub ? (task.workers.filter(w => onTask(task, w.id)).map(w => w.id)) : task.workers.map(w => w.id));
   const pick = (id, label, hint) => {
     const b = el('button', 'btn' + (current.has(id) ? ' btn-accent' : ''), label);
     b.style.justifyContent = 'flex-start';
@@ -856,7 +966,11 @@ function reassign(task, wk) {
     b.onclick = async () => {
       d.close();
       try {
-        await rpc('assign_task', { p_task: task.id, p_worker: id });
+        if (task.hub) {
+          const ids = openIds(task);
+          if (id) await rpc('assign_tasks', { p_tasks: ids, p_worker: id });
+          else await rpc('unassign_tasks', { p_tasks: ids, p_worker: null });
+        } else await rpc('assign_task', { p_task: task.id, p_worker: id });
         toast(id ? 'Given to ' + label : 'Left for the planner', 'ok');
         await load();
       } catch (e) { toast(e.message, 'bad'); }

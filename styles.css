@@ -1003,6 +1003,13 @@ html { zoom: var(--zoom, 1); }
 .tk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tk-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 500; line-height: 1.25; word-break: break-word; }
 .tk-sub { font-size: var(--text-xs); color: var(--text-muted); }
+/* the daily scouting folded into one card (0.7.180): its zones under the title, its window's zone rows */
+.tk-hub { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-hub-list { display: grid; gap: 4px; }
+.tk-hub-row { display: grid; grid-template-columns: auto minmax(70px, auto) minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; text-align: left; width: 100%;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.tk-hub-row:hover { border-color: var(--accent); }
+.tk-hub-row .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-prio { font-size: 10px; flex: none; color: var(--text-muted); }
 .tk-prio.high, .tk-prio.critical { color: var(--error); }
 .tk-who { display: flex; align-items: center; flex: none; }

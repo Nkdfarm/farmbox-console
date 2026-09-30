@@ -229,6 +229,24 @@ export const num = (v, dp = 0) =>
   v == null ? '—' : Number(v).toLocaleString(undefined,
     { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
+// A card keeps its insects (FarmBox 0176–0179): what the counting made of a trap reading lower than the card had,
+// as a small pill — null when there is nothing to say. `check` is app.trap_check's answer.
+export function trapCheckPill(check, total) {
+  if (!check?.state) return null;
+  const h = check.high_before != null ? num(check.high_before, 0) : '?', n = num(total, 0);
+  const [cls, text, title] = {
+    fewer:    ['warn', `fewer than the ${h} it had`, `A card keeps its insects: this photo counted ${n}, the card already had ${h}. Nobody answered on the phone, so nothing new was counted — the photo probably missed some.`],
+    kept:     ['info', `kept ${n} · was ${h}`, `Lower than the ${h} the card had, and the person kept it: the count before was too high, the card goes on from ${n}.`],
+    new_card: ['info', 'new card', `The person said this is a new card: all ${n} insects count as new.`],
+    auto_new: ['warn', `far fewer than ${h}: new card?`, `${n} after ${h}: far fewer, so it was counted as a new card (all ${n} new). If the card was not changed, the photo missed insects.`],
+    excluded: ['', 'left out', `Left out of the counting${check.why ? ': ' + check.why : ''}. Its count stays on the photo; the next reading is measured without it.`],
+  }[check.state] || [];
+  if (!text) return null;
+  const p = el('span', 'pill trap-check' + (cls ? ' ' + cls : ''), text);
+  p.title = title;
+  return p;
+}
+
 // A local date, printed short. Never through toISOString.
 export function shortDate(s) {
   if (!s) return '—';

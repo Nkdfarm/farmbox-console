@@ -28,7 +28,7 @@
 // scouting_dates.unit_counts, scouting_day.units. A card or photo of the zone that names no table is in both.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, pageHead, drawer, num, cropAvatar, toast } from './ui.js';
+import { loading, el, pageHead, drawer, num, cropAvatar, toast, trapCheckPill } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { renderIpm } from './ipm.js';
@@ -436,6 +436,8 @@ function trapCard(p, z, day) {
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
+  const chk = trapCheckPill(p.check, p.total);
+  if (chk) card.append(chk);
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
   card.onclick = () => openViewer(viewerCtx(p, z, day));
   return card;

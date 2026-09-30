@@ -240,6 +240,8 @@ th.right, td.right { text-align: right; }
 .pill.warn { background: var(--warning-bg); color: var(--warning); }
 .pill.bad { background: var(--error-bg); color: var(--error); }
 .pill.info { background: var(--info-bg); color: var(--info); }
+.pill.trap-check { justify-self: start; align-self: flex-start; max-width: 100%; white-space: normal; cursor: help; }
+.tm-hfig.excluded img { opacity: 0.45; }
 
 /* connected / offline, top right (app.js) */
 .pill.net { border: 0; font-family: inherit; cursor: pointer; }

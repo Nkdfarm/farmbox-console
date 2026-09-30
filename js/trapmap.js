@@ -12,7 +12,7 @@
 // A spot keeps one curve through its successive cards; a new card is a mark.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, pageHead, drawer, num, toast, busy, input, field } from './ui.js';
+import { loading, el, pageHead, drawer, num, toast, busy, input, field, trapCheckPill } from './ui.js';
 import { openViewer } from './viewer.js';
 import { renderIpm } from './ipm.js';
 
@@ -204,8 +204,12 @@ function spotCard(s) {
         f.type = 'button';
         const im = x.photo_data ? el('img') : el('span', 'tm-nophoto', 'no photo');
         if (x.photo_data) { im.src = x.photo_data; im.alt = ''; }
-        f.append(im, el('span', null, `${dm(x.taken_at)}${x.side ? ' · ' + x.side : ''} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : ' · count starts'}`),
+        const excl = x.check?.state === 'excluded';
+        f.append(im, el('span', null, `${dm(x.taken_at)}${x.side ? ' · ' + x.side : ''} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : excl ? '' : ' · count starts'}`),
                  el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced after' : '')));
+        const chk = trapCheckPill(x.check, x.total);
+        if (chk) f.append(chk);
+        if (excl) f.classList.add('excluded');
         f.onclick = () => view(x, getReadings);
         hist.append(f);
       });

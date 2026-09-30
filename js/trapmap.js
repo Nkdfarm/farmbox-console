@@ -52,7 +52,7 @@ export function trapKit(K) {
     const card = el('div', 'card card-pad tm-unit');
     const title = el('div', 'row');
     const worst = u.cells.reduce((a, c) => rank(c.tone) > rank(a) ? c.tone : a, null);
-    title.append(el('b', null, u.label), el('span', 'hint', `${spots.filter(s => s.active).length} trap${spots.filter(s => s.active).length === 1 ? '' : 's'}`));
+    title.append(el('b', null, u.label), el('span', 'hint', `${m1(cfg.width_m)} × ${m1(cfg.length_m)} m · ${spots.filter(s => s.active).length} trap${spots.filter(s => s.active).length === 1 ? '' : 's'}`));
     if (worst) title.append(el('span', 'pill ' + (worst === 'red' ? 'bad' : worst === 'orange' ? 'warn' : 'ok'), TONE_WORD[worst]));
     card.append(title);
 
@@ -65,7 +65,7 @@ export function trapKit(K) {
       const b = el('button', 'tm-cell ' + (c.tone || 'none'));
       b.type = 'button';
       b.style.gridColumn = String(c.row + 1);
-      b.style.gridRow = String(c.col + 1);
+      b.style.gridRow = String(cfg.cols - c.col);                    // row A at the bottom (0.7.178)
       const n = c.spots.length;
       b.append(el('span', 'tm-trend', c.trend ? TREND[c.trend] : ''), el('b', null, c.level != null ? d1(c.level) : ''),
                el('span', 'tm-n', n ? `${n} trap${n > 1 ? 's' : ''}` : ''));
@@ -81,7 +81,7 @@ export function trapKit(K) {
       const d = el('button', 'tm-dot ' + (s.tone || 'none'));
       d.type = 'button';
       d.style.left = `${Math.min(98, Math.max(2, 100 * Number(s.metres) / Number(cfg.length_m)))}%`;
-      d.style.top = `${100 * (letters.indexOf(s.row) + 0.5) / letters.length}%`;
+      d.style.top = `${100 * (1 - (letters.indexOf(s.row) + 0.5) / letters.length)}%`;
       d.title = `${shortCode(s.code)} · ${s.level != null ? d1(s.level) + ' new a day' : 'not read lately'}`;
       d.onclick = e => { e.stopPropagation(); openSpots(`${u.label} · trap ${shortCode(s.code)}`, [s]); };
       grid.append(d);
@@ -90,7 +90,7 @@ export function trapKit(K) {
     const axis = el('div', 'tm-axis');
     axis.append(el('span', null, '0 m · corridor'), el('span', null, `${num(cfg.length_m, 0)} m`));
     const side = el('div', 'tm-side');
-    for (let c = 0; c < cfg.cols; c++) {
+    for (let c = cfg.cols - 1; c >= 0; c--) {                           // top to bottom: the last rows first
       const part = letters.slice(Math.floor(c * letters.length / cfg.cols), Math.floor((c + 1) * letters.length / cfg.cols));
       side.append(el('span', null, part.length ? `${part[0]}–${part[part.length - 1]}` : '—'));
     }

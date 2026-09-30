@@ -26,6 +26,7 @@
 // Since 0171 (console 0.7.167, owner: "split zone 4 in 4.1 and 4.2 report") the chips are report units: a zone,
 // or each table of a zone reported by table (FarmLab Zone 4.1 and 4.2) — pest_overview.pressure_units,
 // scouting_dates.unit_counts, scouting_day.units. A card or photo of the zone that names no table is in both.
+// Since 0.7.177: under Plant health, Growth then Traps, each a full-width line that opens (Traps is seldom opened).
 // Since 0.7.176: the zones of today's and yesterday's reports start with a compact AI opinion (Open, Ask again); Growth | Traps under Plant health,
 // in the same two thirds / one third; no Trap map block on top of All zones.
 // Since 0.7.175: Plant health is photos on two thirds, the zone's average insects a day and its trap map on the last

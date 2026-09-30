@@ -26,12 +26,19 @@
 // Since 0171 (console 0.7.167, owner: "split zone 4 in 4.1 and 4.2 report") the chips are report units: a zone,
 // or each table of a zone reported by table (FarmLab Zone 4.1 and 4.2) — pest_overview.pressure_units,
 // scouting_dates.unit_counts, scouting_day.units. A card or photo of the zone that names no table is in both.
+// Since 0180 (console 0.7.174, owner 30 Sept 2026): today's and yesterday's reports open by themselves; each zone of a
+// day starts with its Plant health section open — the 30 days' insects a day per trap and the cases' severity
+// (zone_health), the zone's trap map as it stands, the plant-health photos — then two tiles, Traps and Growth, that
+// open their photos. A zone's report starts with the AI's opinion (edge function zone-opinion, pressed only, kept in
+// zone_opinion). There is no Traps page any more: the map of every zone is in the All zones report, a trap's
+// window and history open from the report, Traps and limits… and Map size… sit in the page's head (trapKit).
+// A scouting done before its day counts on the day it was done (app.work_day).
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, openFast } from './api.js';
-import { loading, el, pageHead, drawer, num, cropAvatar, toast, trapCheckPill } from './ui.js';
+import { rpc, fn, openFast } from './api.js';
+import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
-import { renderIpm } from './ipm.js';
+import { trapKit } from './trapmap.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
@@ -47,6 +54,7 @@ const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digi
 
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
+let tmap = null, kit = null, opinions = [];
 const zoneKey = () => 'fbc_pd_zone_' + farm.id;
 // the report units (0171): a zone, or one table of a zone reported table by table; an older database gives zones
 const zones = () => (over?.pressure_units || over?.pressure_zones || []).map(z => ({ ...z, unit_id: z.unit_id || z.zone_id }));
@@ -78,9 +86,12 @@ async function load(fresh = false) {
     ['cases', { ...a, p_include_closed: showClosed }],
     ['scouting_dates', { ...a, p_before: null, p_limit: 21 }],
     ['pest_catalog', {}],
+    ['trap_map', a],
+    ['zone_opinions', a],
   ], {
-    show: ([o, c, d, cat]) => {
-      over = o; cases = c; dates = d; catalog = cat;
+    show: ([o, c, d, cat, tm, op]) => {
+      over = o; cases = c; dates = d; catalog = cat; tmap = tm; opinions = op || [];
+      kit = tmap ? trapKit({ farm, data: tmap, reload }) : null;
       useFarm(farm, catalog);
       moreDone = dates.length < 21;
       dayData.clear();
@@ -100,16 +111,21 @@ function paint() {
   const scaleBtn = el('a', 'btn', 'Scale card');
   scaleBtn.href = 'scale-card.html'; scaleBtn.target = '_blank'; scaleBtn.rel = 'noopener';
   scaleBtn.title = 'The printed card for growth photos: a black-and-white marker with a 5 cm square the phone measures against';
-  const trapsBtn = el('button', 'btn', 'Traps…');
-  trapsBtn.title = 'Add or move traps, set the thresholds, see every trap with its trend';
-  trapsBtn.onclick = openTraps;
+  const setupBtn = el('button', 'btn', 'Traps and limits…');
+  setupBtn.title = 'Every trap on the list, add or move one, the watch and over limits';
+  setupBtn.onclick = () => kit?.openSetup();
+  const sizeBtn = el('button', 'btn', 'Map size…');
+  sizeBtn.title = 'How the trap map draws a zone';
+  sizeBtn.onclick = () => kit?.openSize();
   mount.append(pageHead('Pest & diseases',
-    'The daily scouting by date, zone by zone, with the traps and the photos. A dot says the worst thing inside: ' +
-    'red severe or over the threshold, orange open or on watch, green improving or resolved.', scaleBtn, trapsBtn, openBtn));
+    'The daily scouting by date, zone by zone: plant health first, with the trap curves and the zone\'s trap map, then the traps and the growth photos. ' +
+    'A dot says the worst thing inside: red severe or over the threshold, orange open or on watch, green improving or resolved.',
+    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), openBtn));
 
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());
-  mount.append(zoneFilter ? zoneReport() : dashboard());
+  if (zoneFilter) mount.append(opinionCard(), zoneReport());
+  else mount.append(dashboard(), mapSection());
   mount.append(caseStrip());
   mount.append(cropBar());
 
@@ -117,7 +133,10 @@ function paint() {
   const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps);
   if (zoneFilter) list.append(el('div', 'pd-zone-head', `${zoneName(zoneFilter)} — the scouting report by date`));
   if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
-  shown.forEach((d, i) => list.append(dayRow(d, i === 0)));
+  // today's and yesterday's reports open by themselves (0.7.174); with neither, the latest
+  const today = String(over.today), yday = ymd(new Date(parse(today).getTime() - 864e5));
+  const opens = d => d.day === today || d.day === yday, any = shown.some(opens);
+  shown.forEach((d, i) => list.append(dayRow(d, opens(d) || (!any && i === 0))));
   mount.append(list);
   if (!moreDone) {
     const more = el('button', 'btn btn-sm', 'Show older reports');
@@ -401,16 +420,13 @@ function zoneBand(z, day) {
   }
   const shared = [...traps, ...photos].filter(p => p.shared).length;
   if (shared) body.append(el('div', 'hint pd-shared', `${shared} of these name ${z.zone_name || 'the zone'} without its table, so they are in each of its reports.`));
-  if (traps.length) {
-    const row = el('div', 'pd-traps');
-    traps.forEach(p => row.append(trapCard(p, z, day)));
-    body.append(row);
-  }
-  if (photos.length) {
-    const grid = el('div', 'sc-grid');
-    photos.forEach(p => grid.append(photoFig(p, z, day)));
-    body.append(grid);
-  }
+  // plant health first, open: the curves, the zone's map, its photos; then Traps and Growth as tiles (0.7.174)
+  const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'));
+  const tp = tilesAndPanels(z, day, traps, photos.filter(p => p.section === 'growth'));
+  hs.onData = h => tp.setDay(h);      // the Traps tile says the curve's figure for the day
+  body.append(hs, tp);
+  if (det.open) hs.load();
+  det.addEventListener('toggle', () => { if (det.open) hs.load(); });
   if (!traps.length && !photos.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
   const answers = (z.answers || []).filter(a => a.note || a.value || a.result === 'nok');
   answers.forEach(a => body.append(el('div', 'sc-answer', `${a.result === 'nok' ? '✗ ' : ''}${a.title || 'step ' + a.seq}: ${[a.value, a.note].filter(Boolean).join(' · ')}`)));
@@ -491,12 +507,264 @@ function photoFig(p, z, day) {
   return fig;
 }
 
-// the trap setup, in a wide window: add, move, thresholds, every trap with its trend
-function openTraps() {
-  const d = drawer('Traps', 'Where they hang, their thresholds, their trend', { onClose: () => reload() });
-  d.box.style.width = 'min(1100px, 100vw)';
-  renderIpm(d.body, farm);
-  const close = el('button', 'btn', 'Close');
-  close.onclick = () => d.close();
-  d.footer.append(close);
+// ── the AI's opinion on the chosen zone, at the top of its report (0180) ──
+const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
+const TREND_AI = { better: ['ok', '▼ getting better'], stable: ['', '– stable'], worse: ['bad', '▲ getting worse'], unclear: ['', '? trend unclear'] };
+function opinionCard() {
+  const u = cur();
+  const card = el('div', 'card card-pad pd-ai');
+  if (!u) return card;
+  const op = (opinions || []).find(o => o.unit_id === u.unit_id);
+  const head = el('div', 'pd-ai-head');
+  const ask = el('button', 'btn btn-sm' + (op ? '' : ' btn-primary'), op ? '✦ Ask again' : '✦ Ask the AI');
+  ask.title = `Sends what was recorded in ${u.zone} over the last 30 days — the counts, the notes, the cases and the AI notes, no photo — for an opinion on the situation and the trend`;
+  ask.onclick = async () => {
+    busy(ask, true, 'The AI is reading 30 days…');
+    try {
+      const r = await fn('zone-opinion', { farm_id: farm.id, zone_id: u.zone_id, system_id: u.system_id || null, force: true });
+      if (!r?.ok) throw new Error(r?.error || 'no answer');
+      opinions = await rpc('zone_opinions', { p_farm: farm.id });
+      paint();
+    } catch (e) { busy(ask, false, op ? '✦ Ask again' : '✦ Ask the AI'); toast('AI opinion: ' + String(e.message || e).replace(/^\d+ /, '').slice(0, 160), 'bad'); }
+  };
+  head.append(el('b', null, '✦ AI opinion'), el('span', 'hint', `${u.zone} · the last 30 days`), el('span', 'spacer'), ask);
+  card.append(head);
+  if (!op) {
+    card.append(el('div', 'hint', 'Nothing asked yet for this zone. The AI reads the traps, the photos\' tags and AI notes, the cases and treatments and the scouting notes of 30 days, and says how things stand and where they are going. It proposes; you decide.'));
+    return card;
+  }
+  const line = el('div', 'pd-ai-line');
+  const [sc, sw] = STATUS[op.status] || ['', op.status];
+  const [tc, tw] = TREND_AI[op.trend] || ['', op.trend];
+  line.append(el('span', 'pill ' + sc, sw), el('span', 'pill ' + tc, tw), el('b', null, op.headline));
+  card.append(line);
+  if ((op.points || []).length) {
+    const ul = el('ul', 'pd-ai-points');
+    op.points.forEach(p => { const li = el('li'); li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li); });
+    card.append(ul);
+  }
+  if ((op.next_checks || []).length) {
+    card.append(el('div', 'pd-hlabel', 'Next'));
+    const ol = el('ol', 'pd-ai-next');
+    op.next_checks.forEach(t => ol.append(el('li', null, t)));
+    card.append(ol);
+  }
+  if ((op.missing || []).length) {
+    const d = el('details', 'pd-ai-missing');
+    const sm = el('summary', null, `What was missing (${op.missing.length})`);
+    const ul = el('ul');
+    op.missing.forEach(t => ul.append(el('li', null, t)));
+    d.append(sm, ul);
+    card.append(d);
+  }
+  const st = op.stats || {};
+  const read = [st.trap_readings ? `${st.trap_readings} trap readings` : null, st.plant_health ? `${st.plant_health} health photos` : null,
+                st.growth ? `${st.growth} growth photos` : null, st.cases ? `${st.cases} cases` : null].filter(Boolean).join(', ');
+  const asked = new Date(op.created_at);
+  const foot = [`Asked ${asked.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${hhmm(op.created_at)}`, op.by,
+                op.confidence != null ? `confidence ${Math.round(op.confidence * 100)} %` : null, read ? 'read ' + read : null,
+                op.previous ? `before: ${(STATUS[op.previous.status] || [, op.previous.status])[1]} on ${shortDay(op.previous.day)}` : null].filter(Boolean).join(' · ');
+  card.append(el('div', 'hint pd-ai-foot', foot + ' · The AI proposes; you decide.'));
+  if (String(op.day) < String(over.today)) card.append(el('div', 'hint', 'This opinion is from an earlier day — ask again for today.'));
+  return card;
+}
+
+// ── the All zones report: every zone's trap map, then every trap ──
+function mapSection() {
+  const det = el('details', 'pd-mapsec');
+  if (!tmap || !kit) return det;
+  det.open = true;
+  const sum = el('summary');
+  sum.append(el('b', null, 'Trap map'), el('span', 'hint', 'every zone, this week — an area is its worst trap, in new insects a day'));
+  det.append(sum);
+  const body = el('div', 'pd-mapsec-body');
+  body.append(kit.legend());
+  const spots = tmap.spots || [];
+  if (!spots.length) body.append(el('div', 'hint', 'No trap yet: each is added from the position written on its card at the first scouting.'));
+  const maps = el('div', 'tm-maps');
+  (tmap.units || []).forEach(u => maps.append(kit.unitMap(u, spots.filter(s => s.n === u.n))));
+  body.append(maps);
+  if (spots.length) {
+    const every = el('details', 'pd-every');
+    every.append(el('summary', null, `Every trap (${spots.filter(s => s.active).length}), worst first`));
+    every.addEventListener('toggle', () => { if (every.open && every.children.length === 1) every.append(kit.trapList(spots)); });
+    body.append(every);
+  }
+  det.append(body);
+  return det;
+}
+
+// ── a zone's plant health: the curves, its trap map, its photos (0.7.174) ──
+function healthSection(z, day, health) {
+  const sec = el('details', 'pd-sec pd-health');
+  sec.open = true;
+  const sum = el('summary');
+  sum.append(el('b', null, 'Plant health'), el('span', 'hint', health.length ? `${health.length} photo${health.length === 1 ? '' : 's'}` : 'no photo that day'));
+  const inner = el('div', 'pd-sec-body');
+  const charts = el('div', 'pd-hcharts');
+  const curves = el('div', 'pd-hcurve');
+  curves.append(el('div', 'hint', 'Reading the curves…'));
+  charts.append(curves);
+  const mu = (tmap?.units || []).find(u => u.n === z.zone_number);
+  if (mu && kit) {
+    const box = el('div', 'pd-hmap');
+    const m = kit.unitMap(mu, (tmap.spots || []).filter(s => s.n === mu.n));
+    m.classList.add('tm-mini');
+    box.append(el('div', 'pd-hlabel', 'Traps now'), m);
+    charts.append(box);
+  }
+  inner.append(charts);
+  if (health.length) {
+    const grid = el('div', 'sc-grid');
+    health.forEach(p => grid.append(photoFig(p, z, day)));
+    inner.append(grid);
+  }
+  sec.append(sum, inner);
+  sec.load = async () => {
+    if (sec.dataset.loaded) return;
+    sec.dataset.loaded = '1';
+    try {
+      const h = await rpc('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
+      curves.textContent = '';
+      curves.append(curveChart(h));
+      sec.onData?.(h);
+    } catch (e) { curves.textContent = ''; curves.append(el('div', 'note bad', e.message)); delete sec.dataset.loaded; }
+  };
+  return sec;
+}
+
+// 30 days of insects a day, a line a trap, the watch and over lines; the cases' severity underneath
+const PALETTE = ['#e07a5f', '#5b9bd5', '#6fbf73', '#c38fdc', '#e2b34a', '#4fc1c1', '#d2708e', '#9aa66b'];
+const SEV = ['#8a8f98', '#e2b34a', '#e0873a', '#d64545'];
+function curveChart(h) {
+  const box = el('div', 'pd-curvebox');
+  const th = h.threshold || {};
+  const traps = (h.traps || []).filter(t => (t.points || []).some(p => p.rate != null));
+  box.append(el('div', 'pd-hlabel', 'Insects a day per trap · 30 days'));
+  if (!traps.length && !(h.cases || []).length) { box.append(el('div', 'hint', 'No trap rate and no case in the last 30 days.')); return box; }
+  const W = 360, H = 118, L = 24, R = 6, T = 6, B = 16;
+  const d0 = parse(h.from).getTime(), d1 = parse(h.day).getTime(), span = Math.max(1, d1 - d0);
+  const x = d => L + (parse(d).getTime() - d0) * (W - L - R) / span;
+  const rates = traps.flatMap(t => t.points.map(p => Number(p.rate) || 0));
+  const max = Math.max(1, (th.over || 0) * 1.2, ...rates);
+  const y = v => H - B - v * (H - T - B) / max;
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('class', 'pd-curve'); svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Insects a day per trap, ${shortDay(h.from)} to ${shortDay(h.day)}`);
+  const mk = (tag, at) => { const n = document.createElementNS(SVG_NS, tag); Object.entries(at).forEach(([k, v]) => n.setAttribute(k, v)); svg.append(n); return n; };
+  mk('line', { x1: L, x2: W - R, y1: H - B, y2: H - B, class: 'pd-axis' });
+  [['watch', th.watch], ['over', th.over]].forEach(([w, v]) => {
+    if (v == null || v > max) return;
+    mk('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'pd-th ' + w });
+    const t = mk('text', { x: 2, y: y(v) + 3, class: 'pd-th-t' }); t.textContent = `${w} ${num(v, 1)}`;
+  });
+  [h.from, ymd(new Date(d0 + span / 2)), h.day].forEach((d, i) => {
+    const t = mk('text', { x: x(d), y: H - 3, class: 'pd-ax-t', 'text-anchor': ['start', 'middle', 'end'][i] }); t.textContent = shortDay(d);
+  });
+  const legend = el('div', 'pd-curve-legend');
+  traps.forEach((t, i) => {
+    const c = PALETTE[i % PALETTE.length];
+    const pts = t.points.filter(p => p.rate != null);
+    if (pts.length > 1) mk('polyline', { points: pts.map(p => `${x(p.day).toFixed(1)},${y(Number(p.rate)).toFixed(1)}`).join(' '), stroke: c, class: 'pd-line' });
+    pts.forEach(p => {
+      const dot = mk('circle', { cx: x(p.day), cy: y(Number(p.rate)), r: 2.4, fill: c });
+      const tt = document.createElementNS(SVG_NS, 'title'); tt.textContent = `${t.code} · ${shortDay(p.day)}: ${num(p.rate, 1)} a day · ${p.total} on the card`; dot.append(tt);
+    });
+    const k = el('span', 'pd-key'); const sw = el('i'); sw.style.background = c; k.append(sw, el('span', null, t.code)); legend.append(k);
+  });
+  box.append(svg);
+  if (traps.length) box.append(legend);
+  (h.cases || []).forEach(k => {
+    const row = el('div', 'pd-hcase');
+    const lab = el('button', 'linkish', k.label + (k.status === 'closed' ? ' (closed)' : ''));
+    lab.onclick = () => openCase(k.id, reload, farm);
+    const strip = document.createElementNS(SVG_NS, 'svg');
+    strip.setAttribute('viewBox', `0 0 ${W} 12`); strip.setAttribute('class', 'pd-sevstrip');
+    (k.points || []).forEach(p => {
+      if (!p.day || parse(p.day).getTime() < d0) return;
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('cx', x(p.day)); c.setAttribute('cy', 6); c.setAttribute('r', 3 + Number(p.severity || 0));
+      c.setAttribute('fill', SEV[Math.max(0, Math.min(3, Number(p.severity) || 0))]);
+      const tt = document.createElementNS(SVG_NS, 'title'); tt.textContent = `${k.label} · ${shortDay(p.day)}: severity ${p.severity}`; c.append(tt);
+      strip.append(c);
+    });
+    row.append(dotEl(k.dot), lab, strip);
+    box.append(row);
+  });
+  return box;
+}
+
+// ── Traps and Growth: a tile each, its photos behind it (0.7.174) ──
+function tilesAndPanels(z, day, traps, growth) {
+  const wrap = el('div', 'pd-tp');
+  const row = el('div', 'pd-dtiles');
+  const panels = el('div', 'pd-dpanels');
+  const tile = (title, big, small, warn, dot, panel) => {
+    const b = el('button', 'pd-dtile' + (panel ? '' : ' empty'));
+    b.type = 'button';
+    const t = el('div', 'pd-dtile-t'); t.append(dotEl(dot), el('b', null, title));
+    const sm = el('div', 'hint', small);
+    b.append(t, el('div', 'pd-dtile-big', big), sm);
+    b._small = sm;
+    if (warn) b.append(el('span', 'pill warn', warn));
+    b.setAttribute('aria-expanded', 'false');
+    if (panel) {
+      panel.hidden = true;
+      b.onclick = () => { panel.hidden = !panel.hidden; b.setAttribute('aria-expanded', String(!panel.hidden)); b.classList.toggle('on', !panel.hidden); };
+      panels.append(panel);
+    } else b.disabled = true;
+    row.append(b);
+    return b;
+  };
+  // traps: how many, insects a day per trap that day, the ones to look at again
+  const codes = [...new Set(traps.map(p => p.code))];
+  // each side's latest photo with a rate that day, the two sides added: a card photographed twice counts once
+  const lastBySide = new Map();
+  traps.filter(p => p.day_rate != null).forEach(p => {
+    const k = p.code + '|' + (p.side || '');
+    if (!lastBySide.has(k) || String(p.taken_at) > String(lastBySide.get(k).taken_at)) lastBySide.set(k, p);
+  });
+  const perCode = new Map(); [...lastBySide.values()].forEach(p => perCode.set(p.code, (perCode.get(p.code) || 0) + Number(p.day_rate)));
+  const perTrap = perCode.size ? [...perCode.values()].reduce((a, v) => a + v, 0) / perCode.size : null;
+  const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
+  let tp = null;
+  if (traps.length) {
+    tp = el('div', 'pd-dpanel');
+    tp.append(el('div', 'pd-hlabel', 'Traps'));
+    const cards = el('div', 'pd-traps');
+    traps.forEach(p => cards.append(trapCard(p, z, day)));
+    tp.append(cards);
+    if (kit) {
+      const hist = el('div', 'pd-hist');
+      hist.append(el('span', 'hint', 'History:'));
+      codes.forEach(c => { const s = kit.spotOf(c); if (!s) return; const b = el('button', 'pd-cropchip', c); b.onclick = () => kit.openSpots(`${z.name} · trap ${c}`, [s]); hist.append(b); });
+      if (hist.children.length > 1) tp.append(hist);
+    }
+  }
+  const trapTile = tile('Traps', traps.length ? `${codes.length} trap${codes.length === 1 ? '' : 's'} · ${traps.length} photo${traps.length === 1 ? '' : 's'}` : 'none read',
+       perTrap != null ? `${num(perTrap, perTrap >= 10 ? 0 : 1)} insects a trap a day` : traps.length ? 'the count starts' : (z.item?.done_at || z.item?.task?.status === 'done' ? 'not counted' : ''),
+       toCheck ? `${toCheck} to look at again` : null, worst(traps.map(p => p.dot)), tp);
+  // growth: the photos and the sizes measured
+  let gp = null;
+  const sized = growth.find(p => (p.measures || []).length);
+  const sizes = sized ? sized.measures.map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)}`).join(' · ') + ' mm' : '';
+  if (growth.length) {
+    gp = el('div', 'pd-dpanel');
+    gp.append(el('div', 'pd-hlabel', 'Growth'));
+    const grid = el('div', 'sc-grid');
+    growth.forEach(p => grid.append(photoFig(p, z, day)));
+    gp.append(grid);
+  }
+  tile('Growth', growth.length ? `${growth.length} photo${growth.length === 1 ? '' : 's'}` : 'none', sizes || (growth.length ? 'no size measured' : ''),
+       null, worst(growth.map(p => p.dot)), gp);
+  // once the curves are read: the day's insects a trap a day, each side's new insects over its time (zone_health, 0181)
+  wrap.setDay = h => {
+    const pts = (h?.traps || []).map(t => (t.points || []).find(p => p.day === String(day.day).slice(0, 10) && p.rate != null)).filter(Boolean);
+    if (!pts.length || !trapTile?._small) return;
+    const v = pts.reduce((a, p) => a + Number(p.rate), 0) / pts.length;
+    trapTile._small.textContent = `${num(v, v >= 10 ? 0 : 1)} insects a trap a day`;
+    trapTile._small.title = `Each side's new insects of the day over the time since its photo before, the two sides added; the average of ${pts.length} trap${pts.length === 1 ? '' : 's'}`;
+  };
+  wrap.append(row, panels);
+  return wrap;
 }

@@ -1856,10 +1856,6 @@ table.table tr.off td { opacity: .5; }
 .pd-ai-missing summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-muted); }
 .pd-ai-missing ul { margin: 6px 0 0; padding-left: 1.25rem; font-size: var(--text-sm); color: var(--text-muted); }
 .pd-ai-foot { font-size: var(--text-xs); }
-.pd-mapsec { margin: var(--space-3) 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.pd-mapsec > summary { padding: var(--space-2) var(--space-3); cursor: pointer; display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
-.pd-mapsec-body { padding: 0 var(--space-3) var(--space-3); display: grid; gap: var(--space-3); }
-.pd-every > summary { cursor: pointer; font-weight: 600; font-size: var(--text-sm); }
 .pd-sec { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .pd-sec > summary { padding: var(--space-2) var(--space-3); cursor: pointer; display: flex; gap: var(--space-2); align-items: baseline; }
 .pd-sec-body { padding: 0 var(--space-3) var(--space-3); }
@@ -1896,5 +1892,28 @@ table.table tr.off td { opacity: .5; }
 .pd-curve .pd-pt.warn { fill: var(--warning); } .pd-curve .pd-pt.bad { fill: var(--error); } .pd-curve .pd-pt.ok { fill: var(--success); }
 .pd-curve .pd-th-t, .pd-curve .pd-ax-t { font-size: 9px; }
 .pd-hmap .tm-unit.tm-mini { border: 0; background: none; padding: 0; box-shadow: none; }
-.pd-hmap-facts, .pd-hmap-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: var(--text-sm); }
 .pd-growth > summary .dot { align-self: center; }
+
+.pd-hmap-facts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: var(--text-sm); }
+/* the line under Plant health (0.7.176): Growth under the photos, Traps under the map */
+.pd-hbottom { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: var(--space-4); align-items: start; }
+@media (max-width: 900px) { .pd-hbottom { grid-template-columns: 1fr; } }
+.pd-hbottom > .pd-sec > summary { flex-wrap: wrap; }
+.pd-trapsec .pd-traps { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+/* the AI's opinion on a zone of the latest day, in one line that opens (0.7.176) */
+.pd-ai.compact { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md); background: var(--surface); margin: 0; }
+.pd-ai.compact > summary { list-style: none; cursor: pointer; padding: var(--space-2) var(--space-3); display: flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; }
+.pd-ai.compact > summary::-webkit-details-marker { display: none; }
+.pd-ai.compact > summary .pd-ai-headline { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.pd-ai.compact[open] > summary .pd-ai-headline { white-space: normal; }
+.pd-ai.compact > summary .spacer { flex: 0 0 0; }
+.pd-ai.compact > summary .btn { flex: none; }
+.pd-ai.compact .pd-ai-body { padding: 0 var(--space-3) var(--space-3); display: grid; gap: var(--space-2); }
+.pd-ai .pd-ai-body { display: grid; gap: var(--space-2); }
+/* a long line never widens the report (0.7.176): the day and zone bodies are one shrinkable column */
+.pd-days, .pd-day-body, .pd-zone-body { min-width: 0; }
+.pd-days, .pd-zone-body { grid-template-columns: minmax(0, 1fr); }
+.pd-day-body { display: grid; grid-template-columns: minmax(0, 1fr); }
+.pd-ai { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.pd-ai.compact { display: block; }
+.pd-ai-head > b { white-space: nowrap; flex: none; }

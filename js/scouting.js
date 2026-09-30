@@ -26,6 +26,8 @@
 // Since 0171 (console 0.7.167, owner: "split zone 4 in 4.1 and 4.2 report") the chips are report units: a zone,
 // or each table of a zone reported by table (FarmLab Zone 4.1 and 4.2) — pest_overview.pressure_units,
 // scouting_dates.unit_counts, scouting_day.units. A card or photo of the zone that names no table is in both.
+// Since 0.7.176: the zones of today's and yesterday's reports start with a compact AI opinion (Open, Ask again); Growth | Traps under Plant health,
+// in the same two thirds / one third; no Trap map block on top of All zones.
 // Since 0.7.175: Plant health is photos on two thirds, the zone's average insects a day and its trap map on the last
 // third, the day's trap photos behind the map (no Traps block), Growth underneath.
 // Since 0180 (console 0.7.174, owner 30 Sept 2026): today's and yesterday's reports open by themselves; each zone of a
@@ -37,7 +39,7 @@
 // A scouting done before its day counts on the day it was done (app.work_day).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
-import { loading, el, pageHead, drawer, num, cropAvatar, toast, busy, trapCheckPill } from './ui.js';
+import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
@@ -127,7 +129,7 @@ function paint() {
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());
   if (zoneFilter) mount.append(opinionCard(), zoneReport());
-  else mount.append(dashboard(), mapSection());
+  else mount.append(dashboard());
   mount.append(caseStrip());
   mount.append(cropBar());
 
@@ -138,7 +140,7 @@ function paint() {
   // today's and yesterday's reports open by themselves (0.7.174); with neither, the latest
   const today = String(over.today), yday = ymd(new Date(parse(today).getTime() - 864e5));
   const opens = d => d.day === today || d.day === yday, any = shown.some(opens);
-  shown.forEach((d, i) => list.append(dayRow(d, opens(d) || (!any && i === 0))));
+  shown.forEach((d, i) => { const o = opens(d) || (!any && i === 0); list.append(dayRow(d, o, o)); });   // the AI line on the days that open
   mount.append(list);
   if (!moreDone) {
     const more = el('button', 'btn btn-sm', 'Show older reports');
@@ -316,7 +318,7 @@ function cropBar() {
 }
 
 // ── one report day ──
-function dayRow(d, openFirst) {
+function dayRow(d, openFirst, latest = false) {
   const det = el('details', 'pd-day');
   const sum = el('summary');
   sum.append(dotEl(d.dot), el('b', null, longDay(d.day) + (d.day === String(over.today) ? ' · today' : '')));
@@ -364,7 +366,7 @@ function dayRow(d, openFirst) {
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
     else if (!full.length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
-    full.forEach(z => { const b = zoneBand(z, day); if (zoneFilter) b.open = true; body.append(b); });
+    full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true; body.append(b); });
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
   };
   det.addEventListener('toggle', () => { if (det.open) fill(); });
@@ -373,7 +375,7 @@ function dayRow(d, openFirst) {
 }
 
 // ── one zone of a day: its traps, then its plant photos ──
-function zoneBand(z, day) {
+function zoneBand(z, day, withAi = false) {
   const photos = z.photos.filter(p => !cropFilter || p.crop_id === cropFilter).map(p => ({ ...p, zone: z.name }));
   const traps = z.traps.map(p => ({ ...p, zone: z.name }));
   const caseDots = (z.cases || []).map(k => (cases.cases || []).find(x => x.id === k.id)?.dot).filter(Boolean);
@@ -409,6 +411,8 @@ function zoneBand(z, day) {
   det.append(sum);
 
   const body = el('div', 'pd-zone-body');
+  // the AI's opinion on this zone over its 30 days, at the top of the latest day's report (0.7.176)
+  if (withAi) body.append(opinionCard({ unit_id: z.unit_id || z.zone_id, zone_id: z.zone_id, system_id: z.system_id || null, zone: z.name }, true));
   if (zt?.outcome_note) body.append(el('div', 'note ' + (zt.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome', zt.outcome_note));
   if (zt?.section_outcomes && Object.keys(zt.section_outcomes).length) {
     const row = el('div', 'sc-verdicts');
@@ -425,7 +429,9 @@ function zoneBand(z, day) {
   // plant health first, open: its photos on two thirds, the zone's insect curve and trap map on the last third; the
   // day's trap photos behind the map; Growth underneath (0.7.175)
   const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'), traps);
-  body.append(hs, growthBlock(z, day, photos.filter(p => p.section === 'growth')));
+  const bottom = el('div', 'pd-hbottom');
+  bottom.append(growthBlock(z, day, photos.filter(p => p.section === 'growth')), trapsBlock(z, day, traps));
+  body.append(hs, bottom);
   if (det.open) hs.load();
   det.addEventListener('toggle', () => { if (det.open) hs.load(); });
   if (!traps.length && !photos.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
@@ -511,44 +517,50 @@ function photoFig(p, z, day) {
 // ── the AI's opinion on the chosen zone, at the top of its report (0180) ──
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
 const TREND_AI = { better: ['ok', '▼ getting better'], stable: ['', '– stable'], worse: ['bad', '▲ getting worse'], unclear: ['', '? trend unclear'] };
-function opinionCard() {
-  const u = cur();
-  const card = el('div', 'card card-pad pd-ai');
+function opinionCard(u = cur(), compact = false) {
+  const card = el(compact ? 'details' : 'div', compact ? 'pd-ai compact' : 'card card-pad pd-ai');
   if (!u) return card;
   const op = (opinions || []).find(o => o.unit_id === u.unit_id);
-  const head = el('div', 'pd-ai-head');
   const ask = el('button', 'btn btn-sm' + (op ? '' : ' btn-primary'), op ? '✦ Ask again' : '✦ Ask the AI');
   ask.title = `Sends what was recorded in ${u.zone} over the last 30 days — the counts, the notes, the cases and the AI notes, no photo — for an opinion on the situation and the trend`;
-  ask.onclick = async () => {
+  ask.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
     busy(ask, true, 'The AI is reading 30 days…');
     try {
       const r = await fn('zone-opinion', { farm_id: farm.id, zone_id: u.zone_id, system_id: u.system_id || null, force: true });
       if (!r?.ok) throw new Error(r?.error || 'no answer');
       opinions = await rpc('zone_opinions', { p_farm: farm.id });
       paint();
-    } catch (e) { busy(ask, false, op ? '✦ Ask again' : '✦ Ask the AI'); toast('AI opinion: ' + String(e.message || e).replace(/^\d+ /, '').slice(0, 160), 'bad'); }
+    } catch (err) { busy(ask, false, op ? '✦ Ask again' : '✦ Ask the AI'); toast('AI opinion: ' + String(err.message || err).replace(/^\d+ /, '').slice(0, 160), 'bad'); }
   };
-  head.append(el('b', null, '✦ AI opinion'), el('span', 'hint', `${u.zone} · the last 30 days`), el('span', 'spacer'), ask);
+  const [sc, sw] = op ? (STATUS[op.status] || ['', op.status]) : [];
+  const [tc, tw] = op ? (TREND_AI[op.trend] || ['', op.trend]) : [];
+  const head = el(compact ? 'summary' : 'div', 'pd-ai-head');
+  head.append(el('b', null, '✦ AI opinion'));
+  if (compact && op) head.append(el('span', 'pill ' + sc, sw), el('span', 'pill ' + tc, tw), el('span', 'pd-ai-headline', op.headline));
+  else head.append(el('span', 'hint', op ? `${u.zone} · the last 30 days` : `${u.zone} · not asked yet — it reads the last 30 days`));
+  head.append(el('span', 'spacer'), ask);
   card.append(head);
   if (!op) {
-    card.append(el('div', 'hint', 'Nothing asked yet for this zone. The AI reads the traps, the photos\' tags and AI notes, the cases and treatments and the scouting notes of 30 days, and says how things stand and where they are going. It proposes; you decide.'));
+    if (!compact) card.append(el('div', 'hint', 'Nothing asked yet for this zone. The AI reads the traps, the photos\' tags and AI notes, the cases and treatments and the scouting notes of 30 days, and says how things stand and where they are going. It proposes; you decide.'));
     return card;
   }
-  const line = el('div', 'pd-ai-line');
-  const [sc, sw] = STATUS[op.status] || ['', op.status];
-  const [tc, tw] = TREND_AI[op.trend] || ['', op.trend];
-  line.append(el('span', 'pill ' + sc, sw), el('span', 'pill ' + tc, tw), el('b', null, op.headline));
-  card.append(line);
+  const body = el('div', 'pd-ai-body');
+  if (!compact) {
+    const line = el('div', 'pd-ai-line');
+    line.append(el('span', 'pill ' + sc, sw), el('span', 'pill ' + tc, tw), el('b', null, op.headline));
+    body.append(line);
+  }
   if ((op.points || []).length) {
     const ul = el('ul', 'pd-ai-points');
     op.points.forEach(p => { const li = el('li'); li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li); });
-    card.append(ul);
+    body.append(ul);
   }
   if ((op.next_checks || []).length) {
-    card.append(el('div', 'pd-hlabel', 'Next'));
+    body.append(el('div', 'pd-hlabel', 'Next'));
     const ol = el('ol', 'pd-ai-next');
     op.next_checks.forEach(t => ol.append(el('li', null, t)));
-    card.append(ol);
+    body.append(ol);
   }
   if ((op.missing || []).length) {
     const d = el('details', 'pd-ai-missing');
@@ -556,7 +568,7 @@ function opinionCard() {
     const ul = el('ul');
     op.missing.forEach(t => ul.append(el('li', null, t)));
     d.append(sm, ul);
-    card.append(d);
+    body.append(d);
   }
   const st = op.stats || {};
   const read = [st.trap_readings ? `${st.trap_readings} trap readings` : null, st.plant_health ? `${st.plant_health} health photos` : null,
@@ -565,34 +577,10 @@ function opinionCard() {
   const foot = [`Asked ${asked.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${hhmm(op.created_at)}`, op.by,
                 op.confidence != null ? `confidence ${Math.round(op.confidence * 100)} %` : null, read ? 'read ' + read : null,
                 op.previous ? `before: ${(STATUS[op.previous.status] || [, op.previous.status])[1]} on ${shortDay(op.previous.day)}` : null].filter(Boolean).join(' · ');
-  card.append(el('div', 'hint pd-ai-foot', foot + ' · The AI proposes; you decide.'));
-  if (String(op.day) < String(over.today)) card.append(el('div', 'hint', 'This opinion is from an earlier day — ask again for today.'));
+  body.append(el('div', 'hint pd-ai-foot', foot + ' · The AI proposes; you decide.'));
+  if (String(op.day) < String(over.today)) body.append(el('div', 'hint', 'This opinion is from an earlier day — ask again for today.'));
+  card.append(body);
   return card;
-}
-
-// ── the All zones report: every zone's trap map, then every trap ──
-function mapSection() {
-  const det = el('details', 'pd-mapsec');
-  if (!tmap || !kit) return det;
-  det.open = true;
-  const sum = el('summary');
-  sum.append(el('b', null, 'Trap map'), el('span', 'hint', 'every zone, this week — an area is its worst trap, in new insects a day'));
-  det.append(sum);
-  const body = el('div', 'pd-mapsec-body');
-  body.append(kit.legend());
-  const spots = tmap.spots || [];
-  if (!spots.length) body.append(el('div', 'hint', 'No trap yet: each is added from the position written on its card at the first scouting.'));
-  const maps = el('div', 'tm-maps');
-  (tmap.units || []).forEach(u => maps.append(kit.unitMap(u, spots.filter(s => s.n === u.n))));
-  body.append(maps);
-  if (spots.length) {
-    const every = el('details', 'pd-every');
-    every.append(el('summary', null, `Every trap (${spots.filter(s => s.active).length}), worst first`));
-    every.addEventListener('toggle', () => { if (every.open && every.children.length === 1) every.append(kit.trapList(spots)); });
-    body.append(every);
-  }
-  det.append(body);
-  return det;
 }
 
 // ── a zone's plant health (0.7.175, owner 30 Sept 2026: "2/3 of the width for the health pictures, 1/3 on the right:
@@ -727,38 +715,38 @@ function trapBlock(z, day, traps) {
   if (watch) facts.append(el('span', 'pill warn', `${watch} on watch`));
   if (lastRead) facts.append(el('span', 'hint', 'last read ' + shortDay(lastRead)));
   box.append(facts);
-  if (traps.length) {
-    const b = el('button', 'btn btn-sm', `Trap photos of the day (${traps.length})`);
-    b.title = 'Each card photographed that day, both sides, with its count and what the counting made of it';
-    b.onclick = () => openDayTraps(z, day, traps);
-    const row = el('div', 'pd-hmap-actions');
-    row.append(b);
-    if (toCheck) row.append(el('span', 'pill warn', `${toCheck} to look at again`));
-    box.append(row);
-  }
+  if (toCheck) facts.append(el('span', 'pill warn', `${toCheck} to look at again`));
   return box;
 }
 
-function openDayTraps(z, day, traps) {
-  const d = drawer(`${z.name} · traps of ${shortDay(day.day)}`, `${traps.length} photo${traps.length === 1 ? '' : 's'} — click one for the viewer`);
-  d.box.style.width = 'min(980px, 100vw)';
-  const cards = el('div', 'pd-traps');
-  traps.forEach(p => cards.append(trapCard(p, z, day)));
-  d.body.append(cards);
-  if (kit) {
-    const hist = el('div', 'pd-hist');
-    hist.append(el('span', 'hint', 'History:'));
-    [...new Set(traps.map(p => p.code))].forEach(c => { const s = kit.spotOf(c); if (!s) return; const b = el('button', 'pd-cropchip', c); b.onclick = () => kit.openSpots(`${z.name} · trap ${c}`, [s]); hist.append(b); });
-    if (hist.children.length > 1) d.body.append(hist);
+// ── Traps: the day's cards, both sides, with their counts and checks, and each trap's history (0.7.176) ──
+function trapsBlock(z, day, traps) {
+  const det = el('details', 'pd-sec pd-trapsec');
+  const codes = [...new Set(traps.map(p => p.code))];
+  const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
+  const sum = el('summary');
+  sum.append(dotEl(worst(traps.map(p => p.dot))), el('b', null, 'Traps'),
+             el('span', 'hint', traps.length ? `${codes.length} trap${codes.length === 1 ? '' : 's'} · ${traps.length} photo${traps.length === 1 ? '' : 's'}` : 'none read that day'));
+  if (toCheck) sum.append(el('span', 'pill warn', `${toCheck} to look at again`));
+  det.append(sum);
+  if (traps.length) {
+    const body = el('div', 'pd-sec-body');
+    const cards = el('div', 'pd-traps');
+    traps.forEach(p => cards.append(trapCard(p, z, day)));
+    body.append(cards);
+    if (kit) {
+      const hist = el('div', 'pd-hist');
+      hist.append(el('span', 'hint', 'History:'));
+      codes.forEach(c => { const sp = kit.spotOf(c); if (!sp) return; const b = el('button', 'pd-cropchip', c); b.onclick = () => kit.openSpots(`${z.name} · trap ${c}`, [sp]); hist.append(b); });
+      if (hist.children.length > 1) body.append(hist);
+    }
+    det.append(body);
   }
-  const close = el('button', 'btn', 'Close');
-  close.onclick = () => d.close();
-  d.footer.append(close);
+  return det;
 }
 
 // ── Growth: a tile, its photos behind it ──
 function growthBlock(z, day, growth) {
-  const wrap = el('div', 'pd-tp');
   const sized = growth.find(p => (p.measures || []).length);
   const sizes = sized ? sized.measures.map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)}`).join(' · ') + ' mm' : '';
   const det = el('details', 'pd-sec pd-growth');
@@ -771,6 +759,5 @@ function growthBlock(z, day, growth) {
     growth.forEach(p => grid.append(photoFig(p, z, day)));
     det.append(grid);
   }
-  wrap.append(det);
-  return wrap;
+  return det;
 }

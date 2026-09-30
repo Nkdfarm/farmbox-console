@@ -99,7 +99,7 @@ function paint() {
   openBtn.onclick = () => newCase({ farm, crop_id: cropFilter, crops: over.crops || [], onDone: reload });
   const scaleBtn = el('a', 'btn', 'Scale card');
   scaleBtn.href = 'scale-card.html'; scaleBtn.target = '_blank'; scaleBtn.rel = 'noopener';
-  scaleBtn.title = 'The printed card for growth photos: a 5 cm magenta square the phone measures against';
+  scaleBtn.title = 'The printed card for growth photos: a black-and-white marker with a 5 cm square the phone measures against';
   const trapsBtn = el('button', 'btn', 'Traps…');
   trapsBtn.title = 'Add or move traps, set the thresholds, see every trap with its trend';
   trapsBtn.onclick = openTraps;

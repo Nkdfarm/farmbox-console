@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scale cards</title>
-<!-- The daily scouting's scale card (console 0.7.153): the phone finds the magenta square in a growth photo
-     and, knowing it is exactly 5 cm, turns two taps into millimetres. Print at 100 %, laminate, check with a ruler. -->
+<!-- The daily scouting's scale card (console 0.7.172, Naked Brain 0.11.69): a printed marker (ArUco MIP 36h12,
+     id 0) whose black square is exactly 50 mm. The phone finds its four corners in any light, corrects for a
+     tilted card and turns two taps into millimetres. Print at 100 %, check with a ruler, laminate (matte).
+     It replaces the magenta square of 0.7.153, which the phone no longer looks for. -->
 <style>
   @page { size: A4 portrait; margin: 10mm; }
   * { box-sizing: border-box; }
@@ -15,36 +17,46 @@
   .how button { font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; border: 1px solid #16161a; background: #16161a; color: #fff; cursor: pointer; }
   .sheet { width: 190mm; margin: 0 auto; display: grid; grid-template-columns: 95mm 95mm; grid-auto-rows: 68mm; }
   .card { position: relative; width: 95mm; height: 68mm; border: 0.2mm dashed #bbb; }
-  .sq { position: absolute; left: 5mm; top: 5mm; width: 50mm; height: 50mm; background: #e6007e;
+  .mk { position: absolute; left: 7mm; top: 7mm; width: 50mm; height: 50mm; display: block;
         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .sq span { position: absolute; left: 0; right: 0; bottom: 3mm; text-align: center; color: #fff; font-weight: 800; font-size: 5mm; }
-  .txt { position: absolute; left: 59mm; top: 6mm; right: 3mm; font-size: 2.9mm; line-height: 1.35; }
+  .txt { position: absolute; left: 62mm; top: 7mm; right: 3mm; font-size: 2.9mm; line-height: 1.35; }
   .txt b { display: block; font-size: 3.6mm; margin-bottom: 1.5mm; }
-  .ruler { position: absolute; left: 5mm; top: 58mm; width: 80mm; height: 7mm; border-top: 0.25mm solid #16161a; }
+  .ruler { position: absolute; left: 7mm; top: 60mm; width: 80mm; height: 6mm; border-top: 0.25mm solid #16161a; }
   .ruler i { position: absolute; top: 0; width: 0.2mm; background: #16161a; }
-  .ruler em { position: absolute; top: 3.6mm; font-style: normal; font-size: 2.4mm; transform: translateX(-50%); }
+  .ruler em { position: absolute; top: 3.2mm; font-style: normal; font-size: 2.2mm; transform: translateX(-50%); }
   @media print { .how { display: none; } .sheet { margin: 0; } }
 </style>
 </head>
 <body>
 <div class="how">
   <b>Scale cards for the daily scouting</b>
-  Print this page at <b style="display:inline;font-size:inherit">100 % (Actual size)</b>, not "fit to page", on a colour printer. Check one card with a ruler:
-  the magenta square must be 5.0 cm on each side and the ruler 8 cm long — if not, the printer scaled it and the sizes will be off. Cut, laminate,
-  and keep one in each scouting kit. In a growth photo, put the card flat beside the fruit or leaf, at the same distance from the phone.
+  Print this page at <b style="display:inline;font-size:inherit">100 % (Actual size)</b>, not "fit to page" — black and white is fine.
+  Check one card with a ruler: the black square must be <b style="display:inline;font-size:inherit">5.0 cm</b> on each side and the ruler 8 cm long;
+  if not, the printer scaled it and the sizes will be off. Cut along the dashed lines, keeping the white border round the square,
+  laminate (matte if you can — a shine on the square hides it), and keep one in each scouting kit.
+  In a growth photo: the card flat beside the fruit or leaf, at the same distance from the phone, the whole square in the picture.
+  The old magenta cards are no longer used.
   <p><button onclick="print()">Print</button></p>
 </div>
 <div class="sheet" id="sheet"></div>
 <script>
+  // ArUco MIP 36h12, marker 0: 6 × 6 data cells inside a one-cell black border (8 × 8 cells = 50 mm)
+  const BITS = '110100101011011000111010000010011101';
+  const marker = () => {
+    let s = '<svg class="mk" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges"><rect width="8" height="8" fill="#000"/>';
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++)
+      if (BITS[y * 6 + x] === '1') s += `<rect x="${x + 1}" y="${y + 1}" width="1" height="1" fill="#fff"/>`;
+    return s + '</svg>';
+  };
   const sheet = document.getElementById('sheet');
   for (let n = 0; n < 8; n++) {
     const c = document.createElement('div'); c.className = 'card';
-    c.innerHTML = '<div class="sq"><span>5 cm</span></div>' +
-      '<div class="txt"><b>FarmBox scale</b>The magenta square is exactly 5 × 5 cm.<br><br>Lay it flat beside the fruit or leaf, in the same plane, then take the growth photo.<br><br>Print at 100 %.</div>';
+    c.innerHTML = marker() +
+      '<div class="txt"><b>FarmBox scale · 5 cm</b>The black square is exactly 5 × 5 cm.<br><br>Lay the card flat beside the fruit or leaf, the same distance from the phone, the whole square in the photo.<br><br>Print at 100 %.</div>';
     const r = document.createElement('div'); r.className = 'ruler';
     for (let mm = 0; mm <= 80; mm++) {
       const t = document.createElement('i');
-      t.style.left = mm + 'mm'; t.style.height = (mm % 10 === 0 ? 3.2 : mm % 5 === 0 ? 2.2 : 1.2) + 'mm';
+      t.style.left = mm + 'mm'; t.style.height = (mm % 10 === 0 ? 3 : mm % 5 === 0 ? 2 : 1.1) + 'mm';
       r.append(t);
       if (mm % 10 === 0) { const e = document.createElement('em'); e.style.left = mm + 'mm'; e.textContent = mm / 10; r.append(e); }
     }

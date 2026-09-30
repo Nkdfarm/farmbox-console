@@ -648,7 +648,7 @@ function chip(t, opts = {}) {
   const ic = el('span', 'tk-ic'); ic.append(icon(FAM_ICON[t.family] || 'clipboard'));
   const text = el('span', 'tk-text');
   const title = el('span', 'tk-title', t.title);
-  title.title = [t.title, t.area, t.crop].filter(Boolean).join(' · ');
+  title.title = [t.title, t.area, t.crop, unitOf(t)?.name].filter(Boolean).join(' · ');
   text.append(title);
   if (t.hub) {
     const doneN = t.all.filter(m => m.status === 'done').length;
@@ -660,9 +660,13 @@ function chip(t, opts = {}) {
     text.append(el('span', 'tk-sub', [hhmm(t.due_time) || SLOT_WORD[slotOf(t)], t.area, t.crop, t.category, hrs(t.minutes) + ' h',
       t.positions?.length ? t.positions.map(p => p.code).join(' ') : null].filter(Boolean).join(' · ')));
   }
-  c.append(stateMark(t));
-  const um = unitMark(t, opts.big);
-  if (um) { c.append(um); c.style.setProperty('--u', unitOf(t).colour || 'transparent'); c.classList.add('has-unit'); }
+  // who, on the left (0.7.181, owner: "the small avatar on the left over the small empty circle"): the face in place of the
+  // status ring — ✓ / ✕ on the face once done or cancelled, the dashed ? when nobody is on it yet
+  c.append(leadOf(t));
+  // the unit is the colour of the chip's left edge (the legend above the board names it); its letters only in the day view
+  if (unitOf(t)) { c.style.setProperty('--u', unitOf(t).colour || 'transparent'); c.classList.add('has-unit'); }
+  const um = opts.big ? unitMark(t, true) : null;
+  if (um) c.append(um);
   c.append(ic, text);
   // a harvest under a treatment's withholding period (0098)
   if (t.withholding_until && t.status !== 'done') {
@@ -671,17 +675,9 @@ function chip(t, opts = {}) {
   }
   const p = PRIO[t.priority];
   if (p && p[0]) { const s = el('span', 'tk-prio ' + t.priority, p[0]); s.title = p[1] + ' priority'; c.append(s); }
+  // Not done · Paused · Done in … go under the title, so the title keeps the chip's width (0.7.181)
   const tw = timeWord(t);
-  if (tw) { const s = el('span', 'tk-time ' + tw.cls, tw.text); if (tw.cls === 'over') s.title = `planned ${hrs(t.minutes)} h`; c.append(s); }
-  const who = el('span', 'tk-who');
-  if (t.status === 'done' || t.status === 'skipped') { /* the mark at the start says it */ }
-  else if (!t.workers.length) { const n = el('span', 'tk-nobody', '?'); n.title = 'Nobody yet'; who.append(n); }
-  else {
-    t.workers.slice(0, 2).forEach(w => { const a = avatar({ worker_id: w.id, name: w.name }, 'sm'); a.title = w.name; who.append(a); });
-    if (t.workers.length > 2) who.append(el('span', 'avatar sm more', '+' + (t.workers.length - 2)));
-    if (t.hub && t.nobody) { const n = el('span', 'tk-nobody', '?'); n.title = `${t.nobody} zone${t.nobody === 1 ? '' : 's'} with nobody yet`; who.append(n); }
-  }
-  c.append(who);
+  if (tw) { const s = el('span', 'tk-time ' + tw.cls, tw.text); if (tw.cls === 'over') s.title = `planned ${hrs(t.minutes)} h`; text.append(s); }
   const more = el('button', 'tk-more', '⋮');
   more.setAttribute('aria-label', 'Actions for ' + t.title);
   more.onclick = e => { e.stopPropagation(); openTask(t); };
@@ -711,6 +707,24 @@ function chip(t, opts = {}) {
     c.ondragend = () => { dragging = null; c.classList.remove('dragging'); };
   }
   return c;
+}
+
+// the chip's left end: the first person's face (+n for more), the status on it; nobody = the dashed ?
+function leadOf(t) {
+  const lead = el('span', 'tk-lead');
+  const ws = t.workers || [], [k] = stateOf(t);
+  if (ws.length) {
+    lead.append(avatar({ worker_id: ws[0].id, name: ws[0].name }, 'sm'));
+    if (ws.length > 1) lead.append(el('span', 'tk-lead-more', '+' + (ws.length - 1)));
+    if (k !== 'planned') { const b = stateMark(t); b.classList.add('tk-lead-badge'); lead.append(b); }
+    if (t.hub && t.nobody && k === 'planned') lead.append(el('span', 'tk-lead-q', '?'));
+  } else if (k !== 'planned') lead.append(stateMark(t));
+  else lead.append(el('span', 'tk-nobody', '?'));
+  const [, , word] = stateOf(t);
+  lead.title = (ws.length ? ws.map(w => w.name).join(', ') : 'Nobody yet') + ' · ' + word
+    + (t.hub && t.nobody ? ` · ${t.nobody} zone${t.nobody === 1 ? '' : 's'} with nobody yet` : '')
+    + (t.skip_reason ? ' — ' + reasonText(t.skip_reason) + (t.skip_note ? ': ' + t.skip_note : '') : '');
+  return lead;
 }
 
 // where a dragged chip may land: a day and, on the boards with bands, a half of it

@@ -16,6 +16,7 @@ import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
 import { renderScouting } from './scouting.js';
+import { renderRobot } from './robot.js';
 import { rpc as rpcCall } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
@@ -144,7 +145,7 @@ const SECTIONS = {
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
   // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
   // and the procedures; the trap setup is behind the page's "Traps…" button
-  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['programs', 'Procedures', lib('ipm')]] },   // the Traps tab is in the report (0.7.174)
+  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['robot', 'Matthew Paxton', renderRobot], ['programs', 'Procedures', lib('ipm')]] },   // the Traps tab is in the report (0.7.174); the robot's tab 0.7.183
   office: { title: 'Office', tabs: [
     // Sell is the basket planner since 0.7.141; the market prices are Market
     ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['stock', 'Stock', renderStock], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },
@@ -179,7 +180,7 @@ const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${k
 const PAGE_KIND = {
   'dashboard/overview': 'overview', 'dashboard/yield': 'overview', 'dashboard/issues': 'overview', 'dashboard/reports': 'overview',
   'grow/forecast': 'overview', 'grow/harvest': 'overview', 'grow/validation': 'overview',
-  'ipm/scouting': 'overview', 'office/money': 'overview', 'office/orders': 'overview',
+  'ipm/scouting': 'overview', 'ipm/robot': 'overview', 'office/money': 'overview', 'office/orders': 'overview',
   'connect/farmnet': 'overview', 'connect/heatmap': 'overview', 'connect/growth': 'overview', 'connect/counting': 'overview',
   'grow/planner': 'work', 'maintenance/equipment': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
 };
@@ -188,7 +189,7 @@ const PAGE_MOD = {
   'dashboard/overview': ['./dashboard.js', 'renderDashboard'], 'dashboard/yield': ['./yield.js', 'renderYield'],
   'dashboard/issues': ['./issues.js', 'renderIssues'], 'dashboard/reports': ['./reports.js', 'renderReports'],
   'grow/forecast': ['./forecast.js', 'renderForecast'], 'grow/harvest': ['./harvest.js', 'renderHarvest'],
-  'grow/validation': ['./validation.js', 'renderValidation'], 'ipm/scouting': ['./scouting.js', 'renderScouting'],
+  'grow/validation': ['./validation.js', 'renderValidation'], 'ipm/scouting': ['./scouting.js', 'renderScouting'], 'ipm/robot': ['./robot.js', 'renderRobot'],
   'office/money': ['./money.js', 'renderMoney'], 'office/orders': ['./orders.js', 'renderOrders'],
   'connect/farmnet': ['./connect.js', 'renderFarmnet'], 'connect/heatmap': ['./connect.js', 'renderHeatmap'],
   'connect/growth': ['./connect.js', 'renderGrowth'], 'connect/counting': ['./connect.js', 'renderCounting'],
@@ -461,7 +462,7 @@ async function warmOne(id) {
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['seedling_orders', p], ['price_table', p], ['market_trends', p],
     ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['trap_map', p], ['zone_opinions', p],
-    ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
+    ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['robot_scouting', { ...p, p_days: 30 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];

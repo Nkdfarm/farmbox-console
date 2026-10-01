@@ -419,7 +419,7 @@ function paintCounting(mount, farm, d, back) {
 }
 
 // ── Devices & API ────────────────────────────────────────────────────────────
-const KIND_LABEL = { controller: 'Controller', sensor: 'Sensor', gateway: 'Gateway', camera: 'Camera' };
+const KIND_LABEL = { controller: 'Controller', sensor: 'Sensor', gateway: 'Gateway', camera: 'Camera', robot: 'Robot' };
 const VENDORS = [['farmnet', 'FarmNet'], ['ridder', 'Ridder HortiMaX'], ['priva', 'Priva'], ['edge', 'Camera edge computer'], ['generic', 'Other']];
 const STATE = { online: ['online', 'ok'], quiet: ['quiet', 'warn'], never: ['not connected yet', ''], off: ['switched off', ''] };
 
@@ -497,6 +497,10 @@ Content-Type: application/json
                    "height_cm": 12, "days_to_harvest": 14, "kg_est": 35, "confidence": 0.8, "model": "…" }],
   "counts":     [{ "system": "FL-Z3", "position": "A", "object": "head", "count": 250, "confidence": 0.9 }]
 }
+
+A robot may add to a count:
+  "measures": [{ "item": 1, "what": "length", "mm": 363 }, { "item": 1, "what": "diameter", "mm": 41 }],
+  "photo": "data:image/jpeg;base64,…"   (at most 400 kB),   "note": "…"
 
 GET ${URL_BASE}/functions/v1/ingest     → the metric codes`;
   api.append(pre);

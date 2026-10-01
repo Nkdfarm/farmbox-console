@@ -85,6 +85,31 @@ export async function renderWeek(container, currentFarm) {
   mount = container;
   if (!week) { day = today(); week = mondayOf(day); month = firstOfMonth(day); }
   await load();
+  // who is doing what stays current (0.7.182): the weeks on screen are read again every minute while the board is in
+  // view and nobody is in the middle of something (a window open, Assign manually, a drag); openFast redraws only on a change
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (!mount || !mount.isConnected) { clearInterval(refreshTimer); return; }
+    if (document.hidden || manual.on || dragging || document.querySelector('.drawer')) return;
+    refresh();
+  }, 60000);
+}
+let refreshTimer = null;
+// read the weeks on screen again, quietly: the board is redrawn only when something moved, and stays where it was scrolled
+async function refresh() {
+  const mondays = mondaysOnScreen(), here = mount;
+  try {
+    const got = await Promise.all(mondays.map(m => rpc('labour_week', { p_farm: farm.id, p_week: m })));
+    if (!here.isConnected || mount !== here || mondaysOnScreen().join() !== mondays.join()) return;
+    if (manual.on || dragging || document.querySelector('.drawer')) return;
+    if (!got.some((g, i) => JSON.stringify(g) !== JSON.stringify(weeks.get(mondays[i])))) return;
+    mondays.forEach((m, i) => weeks.set(m, got[i]));
+    data = weeks.get(focusWeek());
+    const cal = body?.querySelector('.tk-cal'), left = cal ? cal.scrollLeft : 0, top = window.scrollY;
+    paintBody();
+    const cal2 = body?.querySelector('.tk-cal'); if (cal2) cal2.scrollLeft = left;
+    window.scrollTo(0, top);
+  } catch { /* offline or a hiccup: the next minute tries again */ }
 }
 
 // this week: what the page opens on, and what warm() reads ahead (next week too)
@@ -149,21 +174,31 @@ function unitMark(t, big) {
 function timeOf(t) {
   if (t.hub) {
     const xs = t.members.map(timeOf).filter(Boolean);
-    return xs.length ? { minutes: xs.reduce((a, x) => a + Number(x.minutes || 0), 0), running: xs.some(x => x.running) } : null;
+    return xs.length ? { minutes: xs.reduce((a, x) => a + Number(x.minutes || 0), 0), running: xs.some(x => x.running),
+                         by: xs.flatMap(x => x.by || []) } : null;
   }
   for (const w of weeks.values()) { const x = (w?.task_times || []).find(y => y.task_id === t.id); if (x) return x; }
   return null;
 }
 const fmtWork = m => { m = Math.round(Number(m) || 0); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 // the same words as the phone: Done in 42 min · ▶ 12 min · 12 min so far · Not finished · 12 min (an earlier day)
+// 0.7.182 (owner: "the same information in the Naked Heart planner"): and who — the people timing it (labour_week's
+// task_times.by, FarmBox 0186), who closed it (closed_by)
+const firstName = n => String(n || '').trim().split(/\s+/)[0] || '';
+const nameList = xs => { xs = [...new Set(xs.map(firstName).filter(Boolean))]; return xs.length > 2 ? `${xs[0]} +${xs.length - 1}` : xs.join(' + '); };
+const timedBy = (t, runningOnly) => nameList(((timeOf(t) || {}).by || []).filter(b => !runningOnly || b.running).map(b => b.name));
 function timeWord(t) {
   const x = timeOf(t), m = Number(x?.minutes || t.actual_minutes || 0);
-  if (t.status === 'done') return m >= 1 ? { text: `Done · ${fmtWork(m)}`, cls: m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok' } : null;
+  const say = (word, who, cls) => ({ text: [word, who || null, m >= 1 ? fmtWork(m) : null].filter(Boolean).join(' · '), cls });
+  if (t.status === 'done') {
+    const who = nameList(String(t.closed_by || '').split(' + '));
+    return (m >= 1 || who) ? say('Done', who, m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok') : null;
+  }
   if (t.status === 'skipped') return null;                       // the ✕ mark and its title say Cancelled and why
-  if (t.date < today()) return { text: 'Not done' + (m >= 1 ? ` · ${fmtWork(m)}` : ''), cls: 'late' };
+  if (x?.running) return say('In progress', timedBy(t, true), 'run');
+  if (t.date < today()) return say('Not done', timedBy(t), 'late');
   if (m < 1) return null;
-  if (x?.running) return { text: `In progress · ${fmtWork(m)}`, cls: 'run' };
-  return { text: `Paused · ${fmtWork(m)}`, cls: '' };
+  return say('Paused', timedBy(t), '');
 }
 // a day's line: 5 of 8 done · 3 h 10 worked
 function dayWorked(list) {
@@ -249,7 +284,9 @@ function hubOf(ms, all) {
     priority: ms.map(m => m.priority || 'normal').sort((a, b) => (PRIO_RANK[a] ?? 2) - (PRIO_RANK[b] ?? 2))[0],
     crops: [...new Set(ms.flatMap(m => m.crops?.length ? m.crops : [m.crop]).filter(Boolean))],
     crop: null, positions: [], done_at: status === 'done' ? doneAt : null,
-    skip_reason: status === 'skipped' ? first.skip_reason : null, skip_note: null, closed_by: null,
+    skip_reason: status === 'skipped' ? first.skip_reason : null, skip_note: null,
+    closed_by: [...new Set(ms.filter(m => m.status === 'done').map(m => m.closed_by).filter(Boolean))].join(' + ') || null,
+    also_sent: ms.flatMap(m => m.also_sent || []),
     harvest_kg: null, withholding_until: null,
   };
 }
@@ -678,6 +715,7 @@ function chip(t, opts = {}) {
   // Not done · Paused · Done in … go under the title, so the title keeps the chip's width (0.7.181)
   const tw = timeWord(t);
   if (tw) { const s = el('span', 'tk-time ' + tw.cls, tw.text); if (tw.cls === 'over') s.title = `planned ${hrs(t.minutes)} h`; text.append(s); }
+  if ((t.also_sent || []).length) { const s = el('span', 'tk-time late', '2 reports'); s.title = secondReports(t); text.append(s); }
   const more = el('button', 'tk-more', '⋮');
   more.setAttribute('aria-label', 'Actions for ' + t.title);
   more.onclick = e => { e.stopPropagation(); openTask(t); };
@@ -708,6 +746,12 @@ function chip(t, opts = {}) {
   }
   return c;
 }
+
+// a task two people sent (FarmBox 0186): the first report is the task's, the others are kept and named here
+const secondReports = t => 'Also sent by ' + (t.also_sent || []).map(a => `${firstName(a.by) || 'somebody'}${a.at ? ' at ' + new Date(a.at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}`).join(', ')
+  + ' — the first report is the one of the task; the other is kept as a second report.';
+// who worked on it, one by one: "Naison 12 min (now) · Dial 5 min"
+const workedBy = t => ((timeOf(t) || {}).by || []).map(b => `${firstName(b.name) || 'somebody'} ${fmtWork(b.minutes)}${b.running ? ' (now)' : ''}`).join(' · ');
 
 // the chip's left end: the first person's face (+n for more), the status on it; nobody = the dashed ?
 function leadOf(t) {
@@ -816,6 +860,8 @@ function openTask(t) {
   fact('When', SLOT_WORD[slotOf(t)] + (slotOf(t) === 'any' ? ' · drawn in the ' + SLOT_WORD[bandOf(t)].toLowerCase() : ''));
   fact('Takes', hrs(t.minutes) + ' h');
   { const tw = timeWord(t); if (tw) fact('Worked', tw.text + (timeOf(t)?.running ? ' · the timer is running on the phone' : '')); }
+  if (((timeOf(t) || {}).by || []).length > 1 || timeOf(t)?.running) fact('By', workedBy(t));
+  if ((t.also_sent || []).length) d.body.append(el('div', 'note warn', secondReports(t)));
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
   fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
     : t.status === 'skipped' ? 'Cancelled · ' + reasonText(t.skip_reason) + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')
@@ -904,6 +950,8 @@ function openHub(t) {
   fact('Zones', `${t.all.length} · one task a zone · ${doneN} done`);
   fact('Takes', hrs(t.all.reduce((a, m) => a + Number(m.minutes || 0), 0)) + ' h');
   { const tw = timeWord({ ...t, members: t.all }); if (tw) fact('Worked', tw.text); }
+  if (workedBy({ ...t, members: t.all })) fact('By', workedBy({ ...t, members: t.all }));
+  if ((t.also_sent || []).length) d.body.append(el('div', 'note warn', secondReports(t)));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') + (t.nobody ? ` · ${t.nobody} zone${t.nobody === 1 ? '' : 's'} with nobody` : '') : 'nobody yet');
   d.body.append(facts);
   d.body.append(el('div', 'sec-title', 'The zones'));

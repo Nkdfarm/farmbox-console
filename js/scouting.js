@@ -38,12 +38,15 @@
 // zone_opinion). There is no Traps page any more: the map of every zone is in the All zones report, a trap's
 // window and history open from the report, Traps and limits… and Map size… sit in the page's head (trapKit).
 // A scouting done before its day counts on the day it was done (app.work_day).
+// Since 0.7.184 (0188): what the robot sent is in the day too — a line that opens beside Growth and Traps in the zone it
+// named, or under the day's zones when it named none; a day only the robot worked gets its own date line.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
+import { robotSection } from './robot.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
@@ -59,7 +62,11 @@ const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digi
 
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
-let tmap = null, kit = null, opinions = [];
+let tmap = null, kit = null, opinions = [], robot = null;
+// what the robot sent (0188): that day's rows, and those naming a zone band
+const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
+const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
+const robotOpts = () => ({ mayWrite: !!robot?.may_write, onChange: reload });
 const zoneKey = () => 'fbc_pd_zone_' + farm.id;
 // the report units (0171): a zone, or one table of a zone reported table by table; an older database gives zones
 const zones = () => (over?.pressure_units || over?.pressure_zones || []).map(z => ({ ...z, unit_id: z.unit_id || z.zone_id }));
@@ -93,9 +100,10 @@ async function load(fresh = false) {
     ['pest_catalog', {}],
     ['trap_map', a],
     ['zone_opinions', a],
+    ['robot_scouting', { ...a, p_days: 90 }],
   ], {
-    show: ([o, c, d, cat, tm, op]) => {
-      over = o; cases = c; dates = d; catalog = cat; tmap = tm; opinions = op || [];
+    show: ([o, c, d, cat, tm, op, rb]) => {
+      over = o; cases = c; dates = d; catalog = cat; tmap = tm; opinions = op || []; robot = rb || null;
       kit = tmap ? trapKit({ farm, data: tmap, reload }) : null;
       useFarm(farm, catalog);
       moreDone = dates.length < 21;
@@ -135,7 +143,12 @@ function paint() {
   mount.append(cropBar());
 
   const list = el('div', 'pd-days');
-  const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps);
+  // a day only the robot worked gets its own date line, inside the dates read so far
+  const oldest = dates.length ? dates[dates.length - 1].day : null;
+  const robotOnly = [...new Set((robot?.rows || []).map(r => String(r.day)))]
+    .filter(day => !dates.some(d => String(d.day) === day) && (moreDone || !oldest || day > String(oldest))).map(day => ({ day }));
+  const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps).concat(cropFilter ? [] : robotOnly)
+    .sort((x, y) => String(y.day).localeCompare(String(x.day)));
   if (zoneFilter) list.append(el('div', 'pd-zone-head', `${zoneName(zoneFilter)} — the scouting report by date`));
   if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
   // today's and yesterday's reports open by themselves (0.7.174); with neither, the latest
@@ -343,6 +356,8 @@ function dayRow(d, openFirst, latest = false) {
     if (v.note) pill.title = v.note;
     facts.append(pill);
   });
+  const rbDay = robotDay(d.day);
+  if (rbDay.length) { const p = el('span', 'pill' + (rbDay.some(r => r.status === 'new') ? ' warn' : ''), `robot ${rbDay.length}`); p.title = 'Observations the robot sent that day'; facts.append(p); }
   sum.append(facts);
   det.append(sum);
   const body = el('div', 'pd-day-body');
@@ -363,12 +378,15 @@ function dayRow(d, openFirst, latest = false) {
     const zones = (day.units || day.zones || []).filter(z => (!zoneFilter || (z.unit_id || z.zone_id) === zoneFilter)
       && (!cropFilter || (z.crops || []).some(c => c.id === cropFilter) || z.photos.some(p => p.crop_id === cropFilter)));
     // a zone with nothing in it that day is one word, not a band
-    const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done';
+    const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done' || robotIn(z, rbDay).length;
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
-    else if (!full.length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
+    else if (!full.length && !rbDay.length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
     full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true; body.append(b); });
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
+    // the robot's rows that name no zone of the day's bands: one line under the zones (not in a zone's own report)
+    const loose = rbDay.filter(r => !full.some(z => robotIn(z, [r]).length));
+    if (loose.length && !zoneFilter && !cropFilter) { const s = robotSection(loose, robotOpts()); s.open = !full.length; body.append(s); }
   };
   det.addEventListener('toggle', () => { if (det.open) fill(); });
   if (openFirst) { det.open = true; fill(); }
@@ -432,10 +450,12 @@ function zoneBand(z, day, withAi = false) {
   const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'), traps);
   const bottom = el('div', 'pd-hbottom');
   bottom.append(growthBlock(z, day, photos.filter(p => p.section === 'growth')), trapsBlock(z, day, traps));
+  const rb = robotIn(z, robotDay(day.day));
+  if (rb.length) { bottom.append(robotSection(rb, robotOpts())); det.open = true; }
   body.append(hs, bottom);
   if (det.open) hs.load();
   det.addEventListener('toggle', () => { if (det.open) hs.load(); });
-  if (!traps.length && !photos.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
+  if (!traps.length && !photos.length && !rb.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
   const answers = (z.answers || []).filter(a => a.note || a.value || a.result === 'nok');
   answers.forEach(a => body.append(el('div', 'sc-answer', `${a.result === 'nok' ? '✗ ' : ''}${a.title || 'step ' + a.seq}: ${[a.value, a.note].filter(Boolean).join(' · ')}`)));
   det.append(body);

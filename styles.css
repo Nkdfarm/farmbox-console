@@ -1779,7 +1779,6 @@ table.table tr.off td { opacity: .5; }
 .sc-where { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-size: var(--text-xs); }
 .sc-where .mono { font-family: ui-monospace, monospace; font-weight: 700; }
 /* the robot's tab (0.7.183) */
-.rb-grid { padding: 0 var(--space-4) var(--space-4); }
 .rb-fig { cursor: pointer; }
 .rb-fig.rb-off { opacity: .5; }
 .rb-nophoto { aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; border: 1px dashed var(--border); color: var(--text-faint); font-size: var(--text-xs); }

@@ -1,17 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Pest & diseases › Matthew Paxton — what the robot collected (console 0.7.183,
-// migration 0188; owner, 1 Oct 2026: "add in the scouting page the Matthew
-// Paxton tab where to put the information collected by the G1").
+// The robot in the daily scouting (console 0.7.184, migration 0188; owner, 1 Oct
+// 2026: "put inside the daily scouting as collapsible tab is more coherent and
+// clean" — 0.7.183 had it as a tab of its own).
 //
 // Matthew Paxton is the Unitree G1. It sends through the ingest endpoint with its
 // own device key (Connections › Devices & API, kind Robot): a count of what it
 // saw, the sizes it measured against the printed scale card, a small photo, a
-// note. The page is robot_scouting(farm, days): the robots and their state at the
-// top, then what came in by date, newest first. The robot proposes, a person
-// validates: a manager confirms or dismisses each row.
+// note. scouting.js reads robot_scouting(farm, days) with the page and asks
+// robotSection() for a line that opens, like Growth and Traps: in the zone the
+// robot named, or under the day's zones when it named none. The robot proposes,
+// a person validates: a manager confirms or dismisses each row.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { loading, el, pageHead, num, cropAvatar, toast, busy, drawer } from './ui.js';
+import { el, num, cropAvatar, toast, busy, drawer } from './ui.js';
 
 const OBJECT = { plant: ['plant', 'plants'], head: ['head', 'heads'], fruit: ['fruit', 'fruit'], flower: ['flower', 'flowers'],
                  truss: ['truss', 'trusses'], gap: ['gap', 'gaps'], pest: ['pest', 'pests'], other: ['object', 'objects'] };
@@ -20,11 +21,6 @@ const STATUS = { new: ['warn', 'To validate'], confirmed: ['ok', 'Confirmed'], d
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
-const ago = ts => {
-  if (!ts) return 'never';
-  const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
-  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
-};
 const what = r => { const w = OBJECT[r.object] || OBJECT.other; return `${num(r.count, 0)} ${r.count === 1 ? w[0] : w[1]}${r.crop ? ' · ' + r.crop : ''}`; };
 const where = r => [r.zone, r.system && r.system !== r.zone ? r.system : null, r.position || r.pos_code].filter(Boolean).join(' · ');
 // the sizes, one line an item: "1  L 363 · Ø 41 mm"
@@ -34,70 +30,21 @@ function sizeLines(measures) {
   return [...by.entries()].map(([k, ms]) => ({ item: k, text: ms.map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)}`).join(' · ') + ' mm' }));
 }
 
-let farm = null, mount = null, data = null;
+let ctx = { mayWrite: false, onChange: () => {} };
 
-export async function renderRobot(container, currentFarm) {
-  farm = currentFarm; mount = container;
-  mount.textContent = '';
-  mount.append(loading('Reading what the robot sent…'));
-  await load();
-}
-
-async function load() {
-  const here = mount;
-  try { data = await rpc('robot_scouting', { p_farm: farm.id, p_days: 30 }); }
-  catch (e) { if (here.isConnected) { here.textContent = ''; here.append(el('div', 'note bad', e.message)); } return; }
-  if (here.isConnected && mount === here) paint();
-}
-
-function paint() {
-  mount.textContent = '';
-  const again = el('button', 'btn', 'Read again');
-  again.onclick = async () => { busy(again, true, 'Reading…'); await load(); };
-  mount.append(pageHead('Matthew Paxton',
-    'What the robot collected on its rounds: what it counted, the sizes it measured against the scale card, its photos. The robot proposes; a person validates.',
-    again));
-
-  const robots = data.robots || [], rows = data.rows || [];
-  if (!robots.length) {
-    mount.append(el('div', 'empty', 'No robot on this FarmBox yet. In Connections › Devices & API, add a device of kind Robot and make its key: what it sends shows here.'));
-    return;
-  }
-  const box = el('div', 'pd-dash');
-  const tiles = el('div', 'pd-tiles');
-  const tile = (n, label, cls) => { const t = el('div', 'pd-tile' + (cls ? ' ' + cls : '')); t.append(el('b', null, String(n)), el('span', null, label)); tiles.append(t); };
-  const today = String(data.today), todays = rows.filter(r => String(r.day) === today);
-  const waiting = rows.filter(r => r.status === 'new').length;
-  const seen = robots.map(r => r.last_seen_at).filter(Boolean).sort().pop();
-  tile(ago(seen), robots.length === 1 ? `${robots[0].name} last heard` : `${robots.length} robots, last heard`);
-  tile(todays.length, todays.length === 1 ? 'observation today' : 'observations today');
-  tile(waiting, 'to validate', waiting ? 'warn' : '');
-  tile(rows.length, `in ${data.days} days`);
-  box.append(tiles);
-  robots.filter(r => !r.key_set || !r.active).forEach(r =>
-    box.append(el('div', 'note warn pd-wait-note', r.active ? `${r.name} has no key yet — make one in Connections › Devices & API.` : `${r.name} is switched off.`)));
-  mount.append(box);
-
-  const list = el('div', 'pd-days');
-  if (!rows.length) list.append(el('div', 'empty', `Nothing received in the last ${data.days} days.`));
-  const days = [...new Set(rows.map(r => String(r.day)))];
-  days.forEach((d, i) => {
-    const mine = rows.filter(r => String(r.day) === d);
-    const det = el('details', 'pd-day');
-    det.open = i === 0 || d === today;
-    const sum = el('summary');
-    sum.append(el('b', null, longDay(d) + (d === today ? ' · today' : '')));
-    const facts = el('span', 'pd-day-facts');
-    facts.append(el('span', 'pill', `${mine.length} observation${mine.length === 1 ? '' : 's'}`));
-    const w = mine.filter(r => r.status === 'new').length;
-    if (w) facts.append(el('span', 'pill warn', `${w} to validate`));
-    sum.append(facts);
-    const grid = el('div', 'sc-grid rb-grid');
-    mine.forEach(r => grid.append(card(r)));
-    det.append(sum, grid);
-    list.append(det);
-  });
-  mount.append(list);
+// a line that opens on the robot's observations: its name, how many, how many wait for a person
+export function robotSection(rows, opts) {
+  ctx = { ...ctx, ...opts };
+  const det = el('details', 'pd-sec pd-robot');
+  const names = [...new Set(rows.map(r => r.robot).filter(Boolean))].join(', ') || 'Robot';
+  const w = rows.filter(r => r.status === 'new').length;
+  const sum = el('summary');
+  sum.append(el('b', null, names), el('span', 'hint', `robot · ${rows.length} observation${rows.length === 1 ? '' : 's'}`));
+  if (w) sum.append(el('span', 'pill warn', `${w} to validate`));
+  const grid = el('div', 'sc-grid pd-sec-body');
+  rows.forEach(r => grid.append(card(r)));
+  det.append(sum, grid);
+  return det;
 }
 
 function card(r) {
@@ -146,13 +93,13 @@ function open(r) {
   st.append(el('span', 'pill ' + cls, word));
   if (r.decided_at) st.append(el('span', 'hint', `${parse(r.decided_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${hhmm(r.decided_at)}`));
   dr.body.append(st);
-  if (!data.may_write) { dr.body.append(el('p', 'hint', 'A manager of this FarmBox confirms or dismisses what the robot sent.')); return; }
+  if (!ctx.mayWrite) { dr.body.append(el('p', 'hint', 'A manager of this FarmBox confirms or dismisses what the robot sent.')); return; }
   const acts = el('div', 'rb-acts');
   const act = (label, status, cls2) => {
     const b = el('button', 'btn' + (cls2 ? ' ' + cls2 : ''), label);
     b.onclick = async () => {
       busy(b, true, 'Saving…');
-      try { await rpc('decide_robot_count', { p_id: r.id, p_status: status }); dr.close?.(); await load(); }
+      try { await rpc('decide_robot_count', { p_id: r.id, p_status: status }); dr.close(); await ctx.onChange(); }
       catch (e) { busy(b, false, label); toast(e.message, 'bad'); }
     };
     acts.append(b);

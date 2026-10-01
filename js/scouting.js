@@ -66,7 +66,8 @@ let tmap = null, kit = null, opinions = [], robot = null;
 // what the robot sent (0188): that day's rows, and those naming a zone band
 const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
 const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
-const robotOpts = () => ({ mayWrite: !!robot?.may_write, onChange: reload });
+const robotNames = () => (robot?.robots || []).filter(x => x.active !== false).map(x => x.name).join(', ');
+const robotOpts = () => ({ mayWrite: !!robot?.may_write, onChange: reload, names: robotNames() });
 const zoneKey = () => 'fbc_pd_zone_' + farm.id;
 // the report units (0171): a zone, or one table of a zone reported table by table; an older database gives zones
 const zones = () => (over?.pressure_units || over?.pressure_zones || []).map(z => ({ ...z, unit_id: z.unit_id || z.zone_id }));
@@ -145,7 +146,8 @@ function paint() {
   const list = el('div', 'pd-days');
   // a day only the robot worked gets its own date line, inside the dates read so far
   const oldest = dates.length ? dates[dates.length - 1].day : null;
-  const robotOnly = [...new Set((robot?.rows || []).map(r => String(r.day)))]
+  // … and today always has one while a robot is registered, so its line is there before it has sent anything (0.7.185)
+  const robotOnly = [...new Set((robot?.rows || []).map(r => String(r.day)).concat(robotNames() && over?.today ? [String(over.today)] : []))]
     .filter(day => !dates.some(d => String(d.day) === day) && (moreDone || !oldest || day > String(oldest))).map(day => ({ day }));
   const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps).concat(cropFilter ? [] : robotOnly)
     .sort((x, y) => String(y.day).localeCompare(String(x.day)));
@@ -381,12 +383,13 @@ function dayRow(d, openFirst, latest = false) {
     const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done' || robotIn(z, rbDay).length;
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
-    else if (!full.length && !rbDay.length) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
+    else if (!full.length && !rbDay.length && !(robotNames() && String(d.day) === String(over.today))) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
     full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true; body.append(b); });
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
     // the robot's rows that name no zone of the day's bands: one line under the zones (not in a zone's own report)
     const loose = rbDay.filter(r => !full.some(z => robotIn(z, [r]).length));
-    if (loose.length && !zoneFilter && !cropFilter) { const s = robotSection(loose, robotOpts()); s.open = !full.length; body.append(s); }
+    const waiting = !rbDay.length && robotNames() && String(d.day) === String(over.today);   // registered, nothing sent yet today
+    if ((loose.length || waiting) && !zoneFilter && !cropFilter) { const s = robotSection(loose, robotOpts()); s.open = !full.length && loose.length > 0; body.append(s); }
   };
   det.addEventListener('toggle', () => { if (det.open) fill(); });
   if (openFirst) { det.open = true; fill(); }

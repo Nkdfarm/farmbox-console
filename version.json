@@ -1,5 +1,5 @@
 {
-  "version": "0.7.184",
+  "version": "0.7.185",
   "released": "2026-10-01",
-  "note": "The robot is in the daily scouting, as a line that opens"
+  "note": "Scouting: the robot has its line on today's report before it has sent anything"
 }

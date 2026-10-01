@@ -36,13 +36,15 @@ let ctx = { mayWrite: false, onChange: () => {} };
 export function robotSection(rows, opts) {
   ctx = { ...ctx, ...opts };
   const det = el('details', 'pd-sec pd-robot');
-  const names = [...new Set(rows.map(r => r.robot).filter(Boolean))].join(', ') || 'Robot';
+  const names = [...new Set(rows.map(r => r.robot).filter(Boolean))].join(', ') || opts?.names || 'Robot';
   const w = rows.filter(r => r.status === 'new').length;
   const sum = el('summary');
-  sum.append(el('b', null, names), el('span', 'hint', `robot · ${rows.length} observation${rows.length === 1 ? '' : 's'}`));
+  sum.append(el('b', null, names), el('span', 'hint', rows.length ? `robot · ${rows.length} observation${rows.length === 1 ? '' : 's'}` : 'robot · nothing sent that day'));
   if (w) sum.append(el('span', 'pill warn', `${w} to validate`));
-  const grid = el('div', 'sc-grid pd-sec-body');
+  const grid = el('div', rows.length ? 'sc-grid pd-sec-body' : 'pd-sec-body');
   rows.forEach(r => grid.append(card(r)));
+  // a registered robot has its line on today's report before it has sent anything (0.7.185)
+  if (!rows.length) grid.append(el('div', 'hint', 'Nothing received yet. What the robot counts and measures on its round shows here, for a manager to confirm.'));
   det.append(sum, grid);
   return det;
 }

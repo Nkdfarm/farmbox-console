@@ -266,8 +266,9 @@ function paint() {
   if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
   // only today's report opens by itself (0.7.202, owner 2 Oct 2026: "only today report is opened, other reports are
   // closed"; it was today and yesterday, or the latest, since 0.7.174) — a day opens, and is read, when it is clicked
-  const today = String(over.today);
-  shown.forEach(d => { const o = d.day === today; list.append(dayRow(d, o, o)); });   // the AI line on the day that opens
+  // … and with no report today yet, the latest one (0.7.203, owner: "yes open the last one")
+  const today = String(over.today), any = shown.some(d => d.day === today);
+  shown.forEach((d, i) => { const o = d.day === today || (!any && i === 0); list.append(dayRow(d, o, o)); });   // the AI line on the day that opens
   mount.append(list);
   if (!moreDone) {
     const more = el('button', 'btn btn-sm', 'Show older reports');

@@ -2042,7 +2042,7 @@ table.table tr.off td { opacity: .5; }
 .pd-gbox { max-width: 460px; }
 .pd-hright > .pd-gcurve:empty { display: none; }
 /* the insects a day in one line on top of the trap map (0.7.190) */
-.pd-hmap > .pd-hcurve { margin: 0 0 var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.pd-hmap .pd-hcurve { margin: 0 0 var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
 .pd-ins { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 150px); gap: var(--space-3); align-items: center; cursor: pointer; border-radius: var(--radius-md); }
 .pd-ins:hover .pd-hlabel, .pd-ins:focus-visible .pd-hlabel { color: var(--accent); }
 .pd-ins:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -2091,7 +2091,20 @@ table.table tr.off td { opacity: .5; }
 .set-row.ac-fn .set-text b { font-weight: 500; }
 
 /* ── IPM programs (0.7.199, migration 0197): the treatments block of a zone's report, the apply window, the library ── */
-.tr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.tr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* the right column's folds (0.7.200): one line with the KPI, the rest inside */
+.pd-fold > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.pd-fold > summary::-webkit-details-marker { display: none; }
+.pd-fold > summary::before { content: '▸'; color: var(--text-faint); font-size: 0.75rem; width: 10px; }
+.pd-fold[open] > summary::before { content: '▾'; }
+.pd-fold[open] > summary { margin-bottom: 6px; }
+.pd-fold > summary .pd-hlabel { margin: 0; }
+.pd-fold > summary:hover .pd-hlabel { color: var(--accent); }
+.tr-kpi { font-weight: 800; font-size: var(--text-sm); padding: 1px 8px; border-radius: var(--radius-full); background: var(--surface-offset); }
+.tr-kpi.ok { color: var(--success); background: var(--success-bg); }
+.tr-kpi.run, .tr-kpi.warn { color: var(--warning); background: var(--warning-bg); }
+.tr-kpi.bad { color: var(--error); background: var(--error-bg); }
+.pd-fold-body { display: grid; gap: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }
 .tr-head .spacer, .tr-prog-top .spacer { flex: 1; }
 .tr-flag { font-size: var(--text-xs); color: var(--text-faint); }

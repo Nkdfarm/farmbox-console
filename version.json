@@ -1,5 +1,5 @@
 {
-  "version": "0.7.199",
+  "version": "0.7.200",
   "released": "2026-10-02",
-  "note": "IPM programs: a library of products and programs, a treatment per table from the zone report"
+  "note": "Zone report: Treatments and Traps fold to one line with their figure"
 }

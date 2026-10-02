@@ -51,14 +51,18 @@ async function library(farm, fresh = false) {
 
 // ── the block in the zone's report ───────────────────────────────────────────
 export function treatBlock(farm, z, day, calm, onChange) {
-  const box = el('div', 'tr-block');
-  box.append(el('div', 'pd-hlabel', 'Treatments'), el('div', 'hint', 'Reading…'));
+  // a fold (0.7.200, owner: "collapsible with just the KPI on top … closed if no products applied"): the line says
+  // applied / planned, green at 0/0; it opens by itself only when the zone has an application
+  const box = el('details', 'tr-block pd-fold');
+  const s0 = el('summary'); s0.append(el('span', 'pd-hlabel', 'Treatments'), el('span', 'hint', 'reading…'));
+  box.append(s0);
   const read = () => (calm || rpc)('zone_treatments', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
   const again = async () => { try { paintBlock(box, farm, z, await read(), again, onChange); } catch (e) { /* the next opening reads it again */ } };
   box.load = async () => {
-    if (!z.zone_id) { box.textContent = ''; box.append(el('div', 'pd-hlabel', 'Treatments'), el('div', 'hint', 'No zone here.')); return; }
+    const say = (cls, text) => { box.textContent = ''; const s = el('summary'); s.append(el('span', 'pd-hlabel', 'Treatments'), el('span', cls, text)); box.append(s); };
+    if (!z.zone_id) { say('hint', 'no zone here'); return; }
     try { paintBlock(box, farm, z, await read(), again, onChange); }
-    catch (e) { box.textContent = ''; box.append(el('div', 'pd-hlabel', 'Treatments'), el('div', 'note bad', e.message)); }
+    catch (e) { say('pill bad', e.message); }
   };
   return box;
 }
@@ -66,16 +70,21 @@ export function treatBlock(farm, z, day, calm, onChange) {
 function paintBlock(box, farm, z, t, again, onChange) {
   box.textContent = '';
   const running = (t.programs || []).filter(p => p.state === 'running');
-  const head = el('div', 'tr-head');
-  head.append(el('span', 'pd-hlabel', 'Treatments'));
+  // the KPI: applications applied / planned over the programs running here; 0/0 is green — nothing to treat
+  const done = running.reduce((a, p) => a + Number(p.done || 0), 0), total = running.reduce((a, p) => a + Number(p.total || 0), 0);
+  const head = el('summary', 'tr-head');
+  const kpi = el('span', 'tr-kpi ' + (done >= total ? 'ok' : 'run'), `${done}/${total}`);
+  kpi.title = total ? `${done} of ${total} applications applied, over ${running.length} program${running.length === 1 ? '' : 's'} running here` : 'No treatment running on this zone';
+  head.append(el('span', 'pd-hlabel', 'Treatments'), kpi);
+  if (!box.dataset.seen) { box.open = (t.applications || []).length > 0; box.dataset.seen = '1'; }
   // the flag: a program runs here
-  const flag = el('span', 'tr-flag' + (running.length ? ' on' : ''), running.length ? `⚑ ${running.length === 1 ? running[0].name : running.length + ' programs running'}` : 'none running');
+  const flag = el('span', 'tr-flag' + (running.length ? ' on' : ''), running.length ? `⚑ ${running.length === 1 ? running[0].name : running.length + ' programs running'}` : '');
   if (running.length) flag.title = running.map(p => `${p.name} — ${p.tables}`).join('\n');
   head.append(flag, el('span', 'spacer'));
   if (t.may_treat) {
     const b = el('button', 'btn btn-sm btn-primary', 'Apply…');
     b.title = 'Start an IPM program on the tables of this zone';
-    b.onclick = () => openApply(farm, z, { cases: t.open_cases || [], onDone: () => { again(); onChange?.(); } });
+    b.onclick = e => { e.preventDefault(); e.stopPropagation(); openApply(farm, z, { cases: t.open_cases || [], onDone: () => { box.open = true; again(); onChange?.(); } }); };
     head.append(b);
   }
   box.append(head);

@@ -781,7 +781,7 @@ function healthSection(z, day, health, traps, growth = []) {
   curve.append(el('div', 'hint', 'Reading the curve…'));
   // the insects a day sit on top of the trap map, in one block (0.7.190)
   const tb = trapBlock(z, day, traps);
-  tb.prepend(curve);
+  tb.inner.prepend(curve);
   right.append(treat, sump, tb, gcurve);
   grid.append(left, right);
   sec.append(sum, grid);
@@ -795,7 +795,9 @@ function healthSection(z, day, health, traps, growth = []) {
     try {
       const h = await calm('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
       curve.textContent = '';
-      curve.append(insectStrip(h, z));
+      const strip = insectStrip(h, z);
+      curve.append(strip);
+      tb.setRate(strip);
     } catch (e) { curve.textContent = ''; curve.append(el('div', 'note bad', e.message)); delete sec.dataset.loaded; }
   };
   return sec;
@@ -940,25 +942,37 @@ function zoneCurve(h, z) {
 // the zone's traps as they stand: its map (an area or a dot opens the trap: photo, both sides, history), a line of
 // what they say, and that day's trap photos in a window — the traps block of 0.7.174, folded into the map
 function trapBlock(z, day, traps) {
-  const box = el('div', 'pd-hmap');
+  // a fold (0.7.200, owner: "the traps block has to be collapsible as well … closed if no traps"): the line says how
+  // many traps and the insects a day once read (setRate); the curve and the map are inside
+  const box = el('details', 'pd-hmap pd-fold');
   const mu = (tmap?.units || []).find(u => u.n === z.zone_number);
   const spots = mu ? (tmap.spots || []).filter(s => s.n === mu.n && s.active) : [];
-  box.append(el('div', 'pd-hlabel', 'Traps now'));
+  const sum = el('summary'), rate = el('span', 'tr-kpi');
+  rate.hidden = true;
+  sum.append(el('span', 'pd-hlabel', 'Traps'), rate);
+  box.append(sum);
+  box.open = spots.length > 0;
+  // the zone's insects a day, in the line: the figure of the strip inside, in its colour
+  box.setRate = strip => { const b = strip.querySelector('.pd-ins-big'); if (!b) return;
+    rate.textContent = b.textContent + '/day'; rate.className = 'tr-kpi ' + (b.classList.contains('bad') ? 'bad' : b.classList.contains('warn') ? 'warn' : 'ok'); rate.hidden = false;
+    rate.title = 'Insects a trap a day, the last day read'; };
+  box.inner = el('div', 'pd-fold-body');
+  box.append(box.inner);
   if (mu && kit) {
     const m = kit.unitMap(mu, spots);
     m.classList.add('tm-mini');
-    box.append(m);
-  } else box.append(el('div', 'hint', 'No trap map for this zone.'));
+    box.inner.append(m);
+  } else box.inner.append(el('div', 'hint', 'No trap map for this zone.'));
   const over = spots.filter(s => s.tone === 'red').length, watch = spots.filter(s => s.tone === 'orange').length;
   const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
   const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
   const facts = el('div', 'pd-hmap-facts');
-  facts.append(el('span', null, `${spots.length} trap${spots.length === 1 ? '' : 's'}`));
-  if (over) facts.append(el('span', 'pill bad', `${over} over`));
-  if (watch) facts.append(el('span', 'pill warn', `${watch} on watch`));
+  sum.append(el('span', 'hint', spots.length ? `${spots.length} trap${spots.length === 1 ? '' : 's'}` : 'no trap'));
+  if (over) sum.append(el('span', 'pill bad', `${over} over`));
+  if (watch) sum.append(el('span', 'pill warn', `${watch} on watch`));
   if (lastRead) facts.append(el('span', 'hint', 'last read ' + shortDay(lastRead)));
-  box.append(facts);
   if (toCheck) facts.append(el('span', 'pill warn', `${toCheck} to look at again`));
+  if (facts.childElementCount) box.inner.append(facts);
   return box;
 }
 

@@ -21,7 +21,7 @@ import { roleLabel } from './people.js';
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const FAM_ICON = { Agriculture: 'sprout', Maintenance: 'wrench', Office: 'clipboard' };
 const PRIO = { critical: ['‼', 'Critical'], high: ['▲', 'High'], normal: ['', 'Normal'], low: ['▽', 'Low'] };
-const STATUS = [['open', 'Open tasks'], ['done', 'Done'], ['skipped', 'Cancelled'], ['all', 'All']];
+const STATUS = [['open', 'Open tasks'], ['going', 'In progress or paused'], ['done', 'Done'], ['skipped', 'Cancelled'], ['all', 'All']];
 // the status of a task at a glance (0.7.103): planned · done · not done
 // 0.7.164: a skipped task is Cancelled (a choice, with its reason); Not done is an open task whose day has passed
 const STATE = { done: ['done', '✓', 'Done'], skipped: ['skipped', '✕', 'Cancelled'] };
@@ -175,7 +175,7 @@ function timeOf(t) {
   if (t.hub) {
     const xs = t.members.map(timeOf).filter(Boolean);
     return xs.length ? { minutes: xs.reduce((a, x) => a + Number(x.minutes || 0), 0), running: xs.some(x => x.running),
-                         by: xs.flatMap(x => x.by || []) } : null;
+                         by: xs.flatMap(x => x.by || []), held: xs.map(x => x.held).find(Boolean) || null } : null;
   }
   for (const w of weeks.values()) { const x = (w?.task_times || []).find(y => y.task_id === t.id); if (x) return x; }
   return null;
@@ -187,18 +187,25 @@ const fmtWork = m => { m = Math.round(Number(m) || 0); return m < 60 ? `${m} min
 const firstName = n => String(n || '').trim().split(/\s+/)[0] || '';
 const nameList = xs => { xs = [...new Set(xs.map(firstName).filter(Boolean))]; return xs.length > 2 ? `${xs[0]} +${xs.length - 1}` : xs.join(' + '); };
 const timedBy = (t, runningOnly) => nameList(((timeOf(t) || {}).by || []).filter(b => !runningOnly || b.running).map(b => b.name));
+// 0.7.205 (FarmBox 0201): the person a task is held by — it is theirs, running or paused, until they finish it, hand it
+// over, a manager releases it, or the day ends. Nobody else can open it on a phone meanwhile.
+const heldBy = t => { const h = (timeOf(t) || {}).held; return h && !['done', 'skipped'].includes(t.status) ? (firstName(h.name) || 'Somebody') : null; };
 function timeWord(t) {
   const x = timeOf(t), m = Number(x?.minutes || t.actual_minutes || 0);
-  const say = (word, who, cls) => ({ text: [word, who || null, m >= 1 ? fmtWork(m) : null].filter(Boolean).join(' · '), cls });
+  const say = (word, who, cls, total) => ({ text: [word, who || null, m >= 1 ? fmtWork(m) + (total ? ' total' : '') : null].filter(Boolean).join(' · '), cls });
   if (t.status === 'done') {
-    const who = nameList(String(t.closed_by || '').split(' + '));
-    return (m >= 1 || who) ? say('Done', who, m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok') : null;
+    // done by X, or by X + Y in the time of both: who closed it and everybody who worked a minute or more on it
+    const people = [...String(t.closed_by || '').split(' + '), ...((x || {}).by || []).filter(b => Number(b.minutes) >= 1).map(b => b.name)];
+    const who = nameList(people), n = new Set(people.map(firstName).filter(Boolean)).size;
+    return (m >= 1 || who) ? say('Done', who, m > Number(t.minutes || 0) * 1.25 && Number(t.minutes) > 0 ? 'over' : 'ok', n > 1) : null;
   }
   if (t.status === 'skipped') return null;                       // the ✕ mark and its title say Cancelled and why
+  const lock = t.hub ? null : heldBy(t);
+  if (lock) return say(x?.running ? '🔒 In progress' : '🔒 Paused', lock, 'run');
   if (x?.running) return say('In progress', timedBy(t, true), 'run');
   if (t.date < today()) return say('Not done', timedBy(t), 'late');
   if (m < 1) return null;
-  return say('Paused', timedBy(t), '');
+  return say('To continue', timedBy(t), '');     // started and given back: free for anybody (a held one says 🔒 Paused above)
 }
 // a day's line: 5 of 8 done · 3 h 10 worked
 function dayWorked(list) {
@@ -224,7 +231,8 @@ function visible(tasks) {
   const q = filters.q.trim().toLowerCase();
   const isOpen = t => !['done', 'skipped'].includes(t.status);
   return tasks.filter(t =>
-    (filters.status === 'all' || (filters.status === 'done' ? t.status === 'done' : filters.status === 'skipped' ? t.status === 'skipped' : isOpen(t)))
+    (filters.status === 'all' || (filters.status === 'done' ? t.status === 'done' : filters.status === 'skipped' ? t.status === 'skipped'
+      : filters.status === 'going' ? isOpen(t) && !!(timeOf(t)?.running || timeOf(t)?.held) : isOpen(t)))
     && (!filters.family || t.family === filters.family)
     && (!filters.category || (t.category || '') === filters.category)
     && (!filters.crop || (t.crops?.length ? t.crops : [t.crop || '']).includes(filters.crop))
@@ -899,6 +907,18 @@ function openTask(t) {
       mv.append(b);
     });
     d.body.append(mv);
+  }
+  // held by somebody on a phone (0.7.205): a manager frees it — their timer stops, the next person may open it
+  if (heldBy(t) && wk?.may_plan) {
+    d.body.append(el('div', 'note', `${heldBy(t)} has this task open on the phone: nobody else can open it until it is finished, handed over or released.`));
+    const rl = el('button', 'btn', 'Release');
+    rl.title = `Take the task back from ${heldBy(t)}`;
+    rl.onclick = async () => {
+      busy(rl, true, 'Releasing…');
+      try { await rpc('release_task', { p_task: t.id }); d.close(); toast('Released — anybody can open it now', 'ok'); await load(); }
+      catch (e) { busy(rl, false, 'Release'); toast(e.message, 'bad'); }
+    };
+    d.footer.append(rl);
   }
   if (t.status === 'done' || t.status === 'skipped') {
     // back to planned: the task's people, or a manager

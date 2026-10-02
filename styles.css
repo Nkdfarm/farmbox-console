@@ -2015,7 +2015,16 @@ table.table tr.off td { opacity: .5; }
 .pd-growth-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); align-items: start; }
 .pd-gbox { max-width: 460px; }
 .pd-hright > .pd-gcurve:empty { display: none; }
-.pd-zc-big b { font-size: 1.35rem; }
+/* the insects a day in one line on top of the trap map (0.7.190) */
+.pd-hmap > .pd-hcurve { margin: 0 0 var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.pd-ins { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 150px); gap: var(--space-3); align-items: center; cursor: pointer; border-radius: var(--radius-md); }
+.pd-ins:hover .pd-hlabel, .pd-ins:focus-visible .pd-hlabel { color: var(--accent); }
+.pd-ins:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pd-ins-fig { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; }
+.pd-ins-fig .pd-hlabel { margin: 0; flex-basis: 100%; }
+.pd-ins-big b { font-size: 1.5rem; line-height: 1; }
+.pd-ins-big.ok b { color: var(--success); } .pd-ins-big.warn b { color: var(--warning); } .pd-ins-big.bad b { color: var(--error); }
+.pd-ins-svg { max-height: 44px; }
 .pd-gsvg { max-height: 170px; }
 .pd-gline { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
 .pd-gpt { stroke: var(--surface); stroke-width: 1; }

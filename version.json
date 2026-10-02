@@ -1,5 +1,5 @@
 {
-  "version": "0.7.189",
+  "version": "0.7.190",
   "released": "2026-10-02",
-  "note": "Scouting: larger sump curves, a lower insect curve, the growth sizes on the right"
+  "note": "Scouting: the insects a day in one line on top of the trap map; a click opens the curve"
 }

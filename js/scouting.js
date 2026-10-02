@@ -717,7 +717,10 @@ function healthSection(z, day, health, traps, growth = []) {
   const sump = sumpBlock(farm, z, day, calm);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
-  right.append(sump, curve, trapBlock(z, day, traps), gcurve);
+  // the insects a day sit on top of the trap map, in one block (0.7.190)
+  const tb = trapBlock(z, day, traps);
+  tb.prepend(curve);
+  right.append(sump, tb, gcurve);
   grid.append(left, right);
   sec.append(sum, grid);
   sec.load = async () => {
@@ -729,10 +732,70 @@ function healthSection(z, day, health, traps, growth = []) {
     try {
       const h = await calm('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
       curve.textContent = '';
-      curve.append(zoneCurve(h, z));
+      curve.append(insectStrip(h, z));
     } catch (e) { curve.textContent = ''; curve.append(el('div', 'note bad', e.message)); delete sec.dataset.loaded; }
   };
   return sec;
+}
+
+// the insects a day in one line on top of the trap map (0.7.190, owner 2 Oct 2026: "integrate the insect per day graph
+// and trend in the top of heatmap in more compact version, you can always click to have more clear vision"): the
+// figure, the trend against a week before, a small curve with the watch and over lines; a click opens the full curve
+// with the cases under it (zoneCurve) in a window
+function insectStrip(h, z) {
+  const th = h.threshold || {};
+  const byDay = new Map();
+  (h.traps || []).forEach(t => (t.points || []).forEach(p => {
+    if (p.rate == null) return;
+    const d = String(p.day).slice(0, 10), a = byDay.get(d) || { sum: 0, n: 0 };
+    a.sum += Number(p.rate); a.n++; byDay.set(d, a);
+  }));
+  const pts = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, a]) => ({ d, v: a.sum / a.n, n: a.n }));
+  const last = pts[pts.length - 1];
+  const weekAgo = last ? [...pts].reverse().find(p => parse(p.d).getTime() <= parse(last.d).getTime() - 6 * 864e5) : null;
+  const before = pts[pts.length - 2] || null, ref = weekAgo || before;
+  const tone = v => v >= (th.over ?? Infinity) ? 'bad' : v >= (th.watch ?? Infinity) ? 'warn' : 'ok';
+  const strip = el('div', 'pd-ins');
+  const left = el('div', 'pd-ins-fig');
+  left.append(el('span', 'pd-hlabel', 'Insects a day'));
+  if (!last) left.append(el('span', 'hint', 'no figure yet: a trap gets one from its second photo'));
+  else {
+    const big = el('span', 'pd-ins-big ' + tone(last.v));
+    big.append(el('b', null, num(last.v, last.v >= 10 ? 0 : 1)));
+    left.append(big);
+    if (ref) {
+      const up = last.v > ref.v * 1.15, down = last.v < ref.v * 0.85;
+      const pill = el('span', 'pill ' + (up ? 'bad' : down ? 'ok' : ''), `${up ? '▲' : down ? '▼' : '–'} ${num(ref.v, ref.v >= 10 ? 0 : 1)} on ${shortDay(ref.d)}`);
+      pill.title = `${num(ref.v, 1)} a trap a day on ${shortDay(ref.d)}, ${num(last.v, 1)} on ${shortDay(last.d)}`;
+      left.append(pill);
+    }
+    left.append(el('span', 'hint', `a trap a day · ${shortDay(last.d)}, ${last.n} trap${last.n === 1 ? '' : 's'}`));
+  }
+  strip.append(left);
+  if (pts.length > 1) {
+    const W = 120, H = 34, P = 4;
+    const t0 = parse(pts[0].d).getTime(), t1 = parse(last.d).getTime(), span = Math.max(1, t1 - t0);
+    const max = Math.max(1, (th.over || 0) * 1.2, ...pts.map(p => p.v));
+    const x = d => P + (parse(d).getTime() - t0) * (W - 2 * P) / span, y = v => H - P - v * (H - 2 * P) / max;
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('class', 'pd-curve pd-ins-svg'); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', `Insects a trap a day, ${shortDay(pts[0].d)} to ${shortDay(last.d)}`);
+    const mk = (tag, at) => { const n = document.createElementNS(SVG_NS, tag); Object.entries(at).forEach(([k, v]) => n.setAttribute(k, v)); svg.append(n); return n; };
+    [['watch', th.watch], ['over', th.over]].forEach(([w, v]) => { if (v != null && v <= max) mk('line', { x1: P, x2: W - P, y1: y(v), y2: y(v), class: 'pd-th ' + w }); });
+    mk('polygon', { points: `${x(pts[0].d).toFixed(1)},${H - P} ` + pts.map(p => `${x(p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ') + ` ${x(last.d).toFixed(1)},${H - P}`, class: 'pd-area' });
+    mk('polyline', { points: pts.map(p => `${x(p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join(' '), class: 'pd-line' });
+    mk('circle', { cx: x(last.d), cy: y(last.v), r: 3, class: 'pd-pt ' + tone(last.v) });
+    const tt = document.createElementNS(SVG_NS, 'title');
+    tt.textContent = pts.map(p => `${shortDay(p.d)}: ${num(p.v, 1)}`).join('\n');
+    svg.append(tt);
+    strip.append(svg);
+  }
+  strip.tabIndex = 0; strip.setAttribute('role', 'button');
+  strip.title = 'Open the curve: the 30 days, the watch and over lines, the cases';
+  const open = () => { const d = drawer(`Insects a day · ${z.name}`, 'The average over the traps read each day, the last 30 days'); d.box.classList.add('sump-drawer'); d.body.append(zoneCurve(h, z)); };
+  strip.onclick = open;
+  strip.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  return strip;
 }
 
 // the zone's insects a day: each day, the average over the traps read that day (each trap = both sides' new insects
@@ -768,7 +831,7 @@ function zoneCurve(h, z) {
     // the time axis starts at the first figure (a week at least), so a young record is not a flat line in an empty month
     const d1 = parse(h.day).getTime();
     const d0 = Math.max(parse(h.from).getTime(), Math.min(parse(pts[0].d).getTime() - 864e5, d1 - 6 * 864e5));
-    const W = 300, H = 76, L = 6, R = 6, T = 8, B = 14, span = Math.max(1, d1 - d0);   // lower since 0.7.189: the sump took the room
+    const W = 300, H = 120, L = 6, R = 6, T = 8, B = 16, span = Math.max(1, d1 - d0);
     const x = d => L + (parse(d).getTime() - d0) * (W - L - R) / span;
     const max = Math.max(1, (th.over || 0) * 1.25, ...pts.map(p => p.v));
     const y = v => H - B - v * (H - T - B) / max;

@@ -686,7 +686,23 @@ function removeX(p) {
     try {
       await rpc('remove_photo', { p_kind: trap ? 'trap' : 'observation', p_id: p.id, p_reason: null });
       toast('Photo removed — Removed photos… puts it back');
-      reload();
+      // the page stays as it is (0.7.204, owner 2 Oct 2026: "when we delete a pic the page has to stay open, the refresh
+      // after deleting is too confusing"): only the photo leaves — its card, the day's kept answer, the counts on its zone
+      const card = x.closest('.pd-trap, .sc-fig'), band = x.closest('.pd-zone-band');
+      dayData.forEach(day => [...(day.units || []), ...(day.zones || [])].forEach(z => {
+        z.photos = (z.photos || []).filter(q => q.id !== p.id);
+        z.traps = (z.traps || []).filter(q => q.id !== p.id);
+      }));
+      card?.remove();
+      if (band) {
+        const figs = band.querySelectorAll('.sc-fig').length, traps = band.querySelectorAll('.pd-trap').length;
+        band.querySelectorAll(':scope > summary .pill').forEach(pill => {
+          if (/^\d+ photos?$/.test(pill.textContent)) pill.textContent = `${figs} photo${figs === 1 ? '' : 's'}`;
+          else if (/^\d+ traps?$/.test(pill.textContent)) pill.textContent = traps ? `${traps} trap${traps === 1 ? '' : 's'}` : 'traps —';
+        });
+        const health = band.querySelectorAll('.pd-hleft > .pd-hphotos .sc-fig').length, hint = band.querySelector('.pd-health > summary .hint');
+        if (hint && /photo/.test(hint.textContent)) hint.textContent = health ? `${health} photo${health === 1 ? '' : 's'}` : 'no photo that day';
+      }
     } catch (err) { toast(String(err.message || err).replace(/^\d+ /, ''), 'bad'); }
   };
   x.onclick = go;

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.203",
+  "version": "0.7.204",
   "released": "2026-10-02",
-  "note": "Daily report: today opens by itself, else the latest"
+  "note": "Daily report: removing a photo leaves the page as it is"
 }

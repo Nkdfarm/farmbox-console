@@ -1125,6 +1125,20 @@ tr.off { opacity: .6; }
 .vw-zoom { min-width: 48px; text-align: center; font-family: var(--font-mono, monospace); font-size: var(--text-xs); color: var(--text-muted); }
 .vw-ai-line { font-size: var(--text-sm); padding: 4px 0; border-bottom: 1px solid var(--border); }
 .vw-ai-notes { font-size: var(--text-sm); color: var(--text-muted); margin: 6px 0 0; }
+/* 0195: the chat about the photo, in the viewer's panel */
+.vw-msgs { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+.vw-msg { flex: none; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: var(--text-sm); }
+.vw-msg.user { align-self: flex-end; max-width: 92%; background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: transparent; }
+.vw-msg.assistant { align-self: stretch; }
+.vw-msg-who { font-size: var(--text-xs); color: var(--text-muted); margin-bottom: 2px; }
+.vw-msg-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.vw-card { margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px dashed var(--accent); display: grid; gap: 4px; }
+.vw-card.done { border-style: solid; border-color: var(--success, var(--border)); }
+.vw-card.dismissed { border-color: var(--border); opacity: .7; }
+.vw-card .row { gap: 6px; margin-top: 2px; }
+.vw-ask-row { display: flex; gap: 6px; align-items: flex-end; margin-top: 8px; }
+.vw-ask { flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: var(--text-sm); padding: 6px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: transparent; color: inherit; }
 .vw-cmp { margin-top: var(--space-2); display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
 .vw-cmp-day { font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; letter-spacing: .04em; }
 .vw-cmp-row { display: flex; align-items: center; gap: var(--space-2); background: transparent; border: 1px solid var(--border);
@@ -1210,6 +1224,13 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .pd-tile b { font-size: var(--text-xl); line-height: 1.1; }
 .pd-tile span { font-size: var(--text-xs); color: var(--text-muted); }
 .pd-tile.bad b { color: var(--error); } .pd-tile.warn b { color: var(--warning); }
+/* 0194: a tile that opens a list, and the list of photos where the AI found something */
+.pd-tile-btn { cursor: pointer; }
+.pd-tile-btn:hover, .pd-tile-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pd-found { display: flex; align-items: center; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--border); }
+.pd-found img { width: 64px; height: 64px; object-fit: cover; border-radius: var(--radius-sm); flex: none; background: var(--border); }
+.pd-found-text { flex: 1; min-width: 0; }
+.pd-found-sum { font-size: var(--text-sm); color: var(--text-muted); margin-top: 2px; }
 .pd-pressure { display: grid; grid-template-columns: auto auto; gap: 0 8px; align-items: baseline; padding: 8px 12px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .pd-pressure b { font-size: var(--text-lg); }

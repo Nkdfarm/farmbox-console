@@ -28,11 +28,13 @@ let farm = null, catalog = null;
 export function useFarm(f, cat) { farm = f; if (cat) catalog = cat; }
 
 // ── a new case, from a photo or by hand ───────────────────────────────────
-// ctx: { zone_id, crop_id, from_kind, from_id, code, severity, zones?, crops? , onDone }
+// ctx: { zone_id, crop_id, from_kind, from_id, code, severity, zones?, crops? , onDone, onCancel }
 export async function newCase(ctx) {
   if (ctx?.farm) farm = ctx.farm;      // the unit it was opened from (a site draws two units' pages side by side)
   const cat = catalog || await rpc('pest_catalog');
-  const d = drawer('Open a case', ctx.from_id ? 'From this photo — it becomes the first point' : 'One problem, on one crop, in one zone');
+  let saved = false;      // closed without saving → ctx.onCancel (the photo chat's card waits for one or the other, 0195)
+  const d = drawer('Open a case', ctx.from_id ? 'From this photo — it becomes the first point' : 'One problem, on one crop, in one zone',
+    { onClose: () => { if (!saved) ctx.onCancel?.(); } });
   const opts = [];
   ['pest', 'disease', 'disorder'].forEach(k => cat.filter(c => c.kind === k).forEach(c => opts.push([c.code, `${KIND_WORD[k]}: ${c.label}`])));
   const code = selectBox(opts, ctx.code && opts.some(o => o[0] === ctx.code) ? ctx.code : opts[0][0]);
@@ -59,6 +61,7 @@ export async function newCase(ctx) {
       const c = await rpc('open_case', { p: { farm_id: farm.id, code: code.value, severity: Number(sev.value), note: note.value.trim(),
         zone_id: ctx.zone_id || zone?.value || null, crop_id: ctx.crop_id || crop?.value || null,
         from_kind: ctx.from_kind || null, from_id: ctx.from_id || null } });
+      saved = true;
       d.close(); toast('Case opened: ' + c.title, 'ok');
       ctx.onDone?.(c);
     } catch (e) { busy(ok, false, 'Open the case'); toast(e.message, 'bad'); }

@@ -4,9 +4,11 @@
 // One scouting photo — a sticky trap or a plant part — full screen on the
 // full-resolution file: wheel or pinch to zoom up to 8×, drag to pan, 1:1 and
 // Fit. Beside it: what it is, the person's tags from the pest catalogue, the
-// AI's reading with an "Ask the AI" button (nothing is sent by itself), and
+// AI's reading with an "Ask the AI" button (sent by itself only where the automatic scan is on, 0194), and
 // "Compare with…", which lists the same zone's photos by date and opens the
-// chosen one in a second pane at the same zoom.
+// chosen one in a second pane at the same zoom. Since 0195 a chat about the photo
+// (rpc photo_chat, function photo-chat): the farm's one conversation, with the cards
+// the AI proposes — run here, as the person, on "Do it".
 //
 //   openViewer({ farm, photo, catalog, zonePhotos, aiReady, mayWrite, onChange })
 //     photo       { kind: 'trap' | 'observation', id, taken_at, photo_data, photo_path, tags, … }
@@ -139,6 +141,7 @@ export function openViewer(ctx) {
       if ([...document.querySelectorAll('.drawer')].some(dr => root.compareDocumentPosition(dr) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
       e.stopImmediatePropagation(); close();
     }
+    else if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;   // typing (the chat, 0195) is not a zoom key
     else if (e.key === '+' || e.key === '=') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 1.25, panes[0]);
     else if (e.key === '-') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 0.8, panes[0]);
     else if (e.key === '0') fitAll();
@@ -277,10 +280,132 @@ export function openViewer(ctx) {
         } catch (e) { paintAI(); toast(e.message, 'bad'); }
       };
       secAI.append(ask);
+      // 0194: opened from "The AI found something" — looked at, nothing to do
+      if (photo.ai_found && !photo.ai_seen) {
+        const seen = el('button', 'btn btn-sm', 'Seen — nothing to do');
+        seen.title = 'It leaves the list of photos where the AI found something';
+        seen.style.marginLeft = '6px';
+        seen.onclick = async () => {
+          busy(seen, true, '…');
+          try { await rpc('mark_photo_seen', { p_id: photo.id, p_seen: true }); photo.ai_seen = true; paintAI(); toast('Marked seen', 'ok'); ctx.onChange?.(photo); }
+          catch (e) { busy(seen, false, 'Seen — nothing to do'); toast(e.message, 'bad'); }
+        };
+        secAI.append(seen);
+      }
     }
   };
   paintAI();
   panel.append(secAI);
+
+  // ── the chat about this photo (0195): the farm's one conversation, kept in the database ──
+  // The AI answers looking at the photo, its record and the zone's month. It changes nothing:
+  // a card it proposes is run here, as the person, only on "Do it".
+  const secChat = el('div', 'vw-chat');
+  let chat = null, asking = false;
+  const CARD = {
+    tag_photo: a => `Tag: ${a.label || a.code} · ${SEV[a.severity ?? 1]}`,
+    add_to_case: a => `Add to the case “${a.case_title || 'open case'}” · ${SEV[a.severity ?? 1]}`,
+    new_case: a => `Open a case${a.label ? ': ' + a.label : ''} · ${SEV[a.severity ?? 1]}`,
+    mark_seen: () => 'Mark seen — nothing to do',
+  };
+  const runCard = async (m, i, a) => {
+    if (a.type === 'tag_photo') {
+      const tags = (photo.tags || []).filter(t => t.code !== a.code).map(t => ({ code: t.code, severity: t.severity, note: t.note }));
+      photo.tags = await rpc('tag_photo', { p_kind: photo.kind, p_id: photo.id, p_tags: [...tags, { code: a.code, severity: a.severity }] });
+      paintTags();
+    } else if (a.type === 'add_to_case') {
+      await rpc('add_case_point', { p_case: a.case_id, p_kind: photo.kind, p_ref: photo.id, p_severity: a.severity, p_count: null, p_note: null });
+      paintCases();
+    } else if (a.type === 'mark_seen') {
+      await rpc('mark_photo_seen', { p_id: photo.id, p_seen: true }); photo.ai_seen = true; paintAI();
+    } else if (a.type === 'new_case') {
+      // the form opens filled in; the person saves it — only then is the card done
+      await new Promise((resolve, reject) => newCase({ farm: ctx.farm, zone_id: ctx.zoneId || photo.zone_id || null,
+        crop_id: photo.crop_id || ctx.cropId || null, crops: ctx.crops || [], from_kind: photo.kind, from_id: photo.id,
+        code: a.code, severity: a.severity || 1, onDone: () => { paintCases(); resolve(); }, onCancel: () => reject(new Error('cancelled')) }));
+    } else throw new Error('unknown card');
+    m.actions = await rpc('photo_chat_action', { p_message: m.id, p_index: i, p_status: 'done' });
+    ctx.onChange?.(photo);
+  };
+  const cardEl = (m, i, a) => {
+    const c = el('div', 'vw-card ' + (a.status || 'proposed'));
+    c.append(el('b', null, (CARD[a.type] || (() => a.type))(a)));
+    if (a.summary) c.append(el('div', 'hint', a.summary));
+    if (a.status === 'done' || a.status === 'dismissed') {
+      c.append(el('div', 'hint', (a.status === 'done' ? '✓ Done' : 'Dismissed') + (a.by ? ' by ' + a.by : '') + (a.at ? ' · ' + when(a.at) : '')));
+    } else if (mayWrite && chat?.may_ask) {
+      const row = el('div', 'row');
+      const go = el('button', 'btn btn-sm btn-primary', a.type === 'new_case' ? 'Open the form…' : 'Do it');
+      const no = el('button', 'btn btn-sm btn-ghost', 'Dismiss');
+      go.onclick = async () => {
+        busy(go, true, '…');
+        try { await runCard(m, i, a); paintChat(); toast('Done', 'ok'); }
+        catch (e) { busy(go, false, a.type === 'new_case' ? 'Open the form…' : 'Do it'); if (e.message !== 'cancelled') toast(e.message, 'bad'); }
+      };
+      no.onclick = async () => {
+        try { m.actions = await rpc('photo_chat_action', { p_message: m.id, p_index: i, p_status: 'dismissed' }); paintChat(); }
+        catch (e) { toast(e.message, 'bad'); }
+      };
+      row.append(go, no);
+      c.append(row);
+    }
+    return c;
+  };
+  const paintChat = (pending) => {
+    secChat.textContent = '';
+    if (!chat) return;
+    secChat.append(el('div', 'sec-title', 'Chat about this photo'));
+    const list = el('div', 'vw-msgs');
+    const msgs = chat.messages || [];
+    if (!msgs.length && !pending) list.append(el('div', 'hint', chat.may_ask
+      ? 'Ask the AI anything about this photo: what it shows, how sure it is, what to check next. Everybody on the farm sees this conversation.'
+      : 'Nobody has asked about this photo yet.'));
+    msgs.forEach(m => {
+      const b = el('div', 'vw-msg ' + m.role);
+      b.append(el('div', 'vw-msg-who', m.role === 'user' ? `${m.mine ? 'You' : (m.author || 'Somebody')} · ${when(m.at)}` : `AI · ${when(m.at)}`));
+      b.append(el('div', 'vw-msg-text', m.content));
+      (m.actions || []).forEach((a, i) => b.append(cardEl(m, i, a)));
+      list.append(b);
+    });
+    if (pending) {
+      const q = el('div', 'vw-msg user'); q.append(el('div', 'vw-msg-who', 'You · now'), el('div', 'vw-msg-text', pending));
+      const w = el('div', 'vw-msg assistant'); w.append(el('div', 'vw-msg-who', 'AI'), el('div', 'vw-msg-text hint', 'Looking at the photo… about half a minute'));
+      list.append(q, w);
+    }
+    secChat.append(list);
+    if (chat.may_ask && mayWrite) {
+      const box = el('textarea', 'vw-ask'); box.rows = 2; box.maxLength = 2000;
+      box.placeholder = 'Ask about this photo…'; box.setAttribute('aria-label', 'Ask about this photo');
+      const send = el('button', 'btn btn-primary btn-sm', 'Send');
+      box.disabled = send.disabled = asking;
+      const ask = async () => {
+        const text = box.value.trim();
+        if (!text || asking) return;
+        if (chat.ai_ready === false) { toast('Paste an Anthropic API key in Settings › Integrations first', 'bad'); return; }
+        asking = true; paintChat(text);
+        try {
+          const res = await fn('photo-chat', { kind: photo.kind, id: photo.id, message: text });
+          if (!res?.ok) throw new Error(res?.error || 'no answer');
+          chat = await rpc('photo_chat', { p_kind: photo.kind, p_id: photo.id });
+          asking = false; paintChat();
+        } catch (e) {
+          asking = false; paintChat();
+          const again = secChat.querySelector('.vw-ask'); if (again) again.value = text;   // the question is not lost
+          toast('The AI did not answer: ' + String(e.message || e).slice(0, 160), 'bad');
+        }
+      };
+      send.onclick = ask;
+      box.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } };
+      const row = el('div', 'vw-ask-row'); row.append(box, send);
+      secChat.append(row);
+    }
+    list.scrollTop = list.scrollHeight;
+  };
+  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) {
+    panel.append(secChat);
+    // a console published before migration 0195 has no chat: the section stays empty
+    rpc('photo_chat', { p_kind: photo.kind, p_id: photo.id }).then(j => { chat = j; paintChat(); }).catch(() => {});
+  }
 
   // the cases (0097): add this photo to an open case of the zone, or open one from it
   const secCase = el('div');

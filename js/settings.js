@@ -62,6 +62,7 @@ export function openSettings(ctx) {
     section('Notion', notion(ctx)),
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Task feedback', taskFeedback(ctx)),
+    section('Automatic AI scan', aiScan(ctx)),
     section('Integrations', integrations(ctx)),
     section('Account', account(ctx, d)),
     section('Version', version()),
@@ -170,11 +171,11 @@ const INTEGRATIONS = [
           '(free: 100 requests a day; one market scan uses 7). ',
     link: ['Farmazone API page', 'https://farmazone.co.za/api/v1/docs/'] },
   { name: 'anthropic', label: 'Anthropic API key', placeholder: 'sk-ant-…',
-    setText: 'A photo goes to Claude when somebody presses Ask the AI on it, in Pest & diseases.',
+    setText: 'A photo goes to Claude when somebody presses Ask the AI on it — or by itself where the automatic AI scan is on.',
     unsetText: 'Not set — photos are counted and tagged by people only; the AI cannot be asked.',
     savedToast: 'Anthropic key saved — Ask the AI works on any photo now',
-    help: 'Pest & diseases needs it: a trap or plant photo goes to Claude (Anthropic) only when somebody asks, photo by ' +
-          'photo; it names the insects or the disease against the catalogue. Create a key in the Anthropic Console (a photo costs a few cents). ',
+    help: 'Pest & diseases needs it: a trap or plant photo goes to Claude (Anthropic) when somebody asks, photo by ' +
+          'photo, or by itself where a manager switched the automatic AI scan on; it names the insects or the disease against the catalogue. Create a key in the Anthropic Console (a photo costs a few cents). ',
     link: ['Anthropic Console', 'https://console.anthropic.com/settings/keys'] },
   { name: 'groq', label: 'Groq API key', placeholder: 'gsk_…',
     setText: 'A feedback sent from the phone is transcribed and put in points with it.',
@@ -211,6 +212,56 @@ function taskFeedback(ctx) {
         ctx.refresh?.();
       } catch (e) { toast(e.message, 'bad'); }
     }, 'Feedback on tasks'));
+  }).catch(e => { hint.textContent = e.message; });
+  return list;
+}
+
+// ── automatic AI scan (0.7.196, migration 0194) ────────────────────────────
+// A plant-health or trap photo with no AI note is read by the AI when its full photo
+// arrives — up to a number of photos a day. Off until a manager switches it on;
+// the sister units of a site switch together and share the cap.
+function aiScan(ctx) {
+  const list = el('div', 'set-list');
+  const hint = el('small', null, 'Reading…');
+  const text = el('div', 'set-text');
+  text.append(el('b', null, 'Read new photos by themselves'), hint);
+  const r = el('div', 'set-row');
+  r.append(text);
+  list.append(r);
+  if (!ctx.farmId) { hint.textContent = 'No FarmBox open.'; return list; }
+  const capHint = el('small', null, '');
+  const capText = el('div', 'set-text');
+  capText.append(el('b', null, 'Most photos a day'), capHint);
+  const capRow = el('div', 'set-row');
+  capRow.append(capText);
+  const words = st => (!st.ai_ready ? 'No Anthropic API key yet (Integrations, below): nothing can be sent. '
+    : st.on ? 'On — a plant-health or trap photo with no AI note goes to the AI when its full photo arrives. A photo already read on the phone, and growth photos, are left alone. The AI proposes: it opens no case and tags nothing. '
+            : 'Off — a photo goes to the AI only when somebody presses Ask the AI. ') + (st.may_switch ? '' : 'A manager of this FarmBox switches it.');
+  const capWords = st => `Sent today: ${st.used_today} of ${st.cap}` + (st.waiting ? ` · ${st.waiting} waiting` : '') +
+    '. Over the number, photos wait for the next day (three days at most). What a photo costs is under the Anthropic key, below.';
+  const paint = st => { hint.textContent = words(st); capHint.textContent = capWords(st); };
+  rpc('ai_scan_state', { p_farm: ctx.farmId }).then(st => {
+    paint(st);
+    list.append(capRow);
+    if (!st.may_switch) return;
+    r.append(switchBox(st.on, async on => {
+      try {
+        st = await rpc('set_ai_scan', { p_farm: ctx.farmId, p_on: on, p_cap: null });
+        paint(st);
+        toast(on ? 'Automatic AI scan on — new photos are read within ten minutes' : 'Automatic AI scan off', 'ok');
+        ctx.refresh?.();
+      } catch (e) { toast(e.message, 'bad'); }
+    }, 'Automatic AI scan'));
+    const cap = el('input'); cap.type = 'number'; cap.min = 1; cap.max = 500; cap.step = 1; cap.value = st.cap;
+    cap.setAttribute('aria-label', 'Most photos a day'); cap.style.width = '5.5em';
+    cap.onchange = async () => {
+      const n = Math.round(Number(cap.value));
+      if (!(n >= 1 && n <= 500)) { toast('Between 1 and 500 photos a day', 'bad'); cap.value = st.cap; return; }
+      try { st = await rpc('set_ai_scan', { p_farm: ctx.farmId, p_on: null, p_cap: n }); paint(st); toast(`At most ${n} photos a day`, 'ok'); }
+      catch (e) { toast(e.message, 'bad'); cap.value = st.cap; }
+    };
+    const f = el('div', 'field'); f.append(cap);
+    capRow.append(f);
   }).catch(e => { hint.textContent = e.message; });
   return list;
 }

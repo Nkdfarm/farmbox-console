@@ -15,7 +15,7 @@ import { rpc } from './api.js';
 import { el, drawer, num, toast } from './ui.js';
 
 const KIND = { 'scout-photo': 'Plant photo read by the AI', 'trap-species': 'Trap photo: the species', 'zone-opinion': 'A zone\'s AI opinion',
-               assistant: 'The assistant', 'photo-note': 'AI note on the phone' };
+               assistant: 'The assistant', 'photo-note': 'AI note on the phone', 'photo-chat': 'Chat about a photo' };
 const SUB = { health: 'plant health', growth: 'growth', trap: 'trap', code: 'the position on a card' };
 const kindName = r => r.fn === 'photo-note' ? `AI note on the phone · ${SUB[r.kind] || r.kind || ''}` : (KIND[r.fn] || r.fn);
 const usd = (v, dp = 2) => v == null ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });

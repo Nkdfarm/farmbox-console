@@ -613,6 +613,7 @@ export function calendarRange() {
 // ── To decide (0140): what the new modules left waiting for a person, each a link ──
 const DECIDE = [
   ['alarms', 'sensor alarm', 'sensor alarms', '#/dashboard/issues', 'bad'],
+  ['ai_found', 'photo where the AI found something', 'photos where the AI found something', '#/ipm/scouting', 'warn'],
   ['pos_to_approve', 'purchase order to approve', 'purchase orders to approve', '#/office/buy', 'warn'],
   ['pos_to_send', 'purchase order to send', 'purchase orders to send', '#/office/buy', ''],
   ['shop', 'order from the selling app', 'orders from the selling app', '#/office/orders', 'warn'],

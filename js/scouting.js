@@ -265,12 +265,23 @@ function dashboard() {
     const t = el('div', 'pd-tile' + (cls ? ' ' + cls : ''));
     t.append(el('b', null, String(n ?? 0)), el('span', null, label));
     tiles.append(t);
+    return t;
   };
   tile(c.diseases, 'diseases open', c.diseases ? 'bad' : '');
   tile(c.pests, 'pests open', c.pests ? 'warn' : '');
   tile(c.programs, 'treatments running');
   tile(c.traps_over, `trap${c.traps_over === 1 ? '' : 's'} over ${over.threshold?.over ?? ''}`.trim(), c.traps_over ? 'bad' : '');
-  tile(c.to_review, 'photos to look at', c.to_review ? 'warn' : '');
+  // 0194: what the AI named on a photo nobody has tagged, put in a case or marked seen — the list is behind the tile
+  if (c.ai_found != null) {
+    const t = tile(c.ai_found, c.ai_found === 1 ? 'photo: the AI found something' : 'photos: the AI found something', c.ai_found ? 'warn' : '');
+    if (c.ai_found) {
+      t.classList.add('pd-tile-btn'); t.setAttribute('role', 'button'); t.tabIndex = 0;
+      t.title = 'Open the list';
+      t.onclick = openFound;
+      t.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFound(); } };
+    }
+  }
+  tile(c.to_review, 'photos not read yet', c.to_review ? 'warn' : '');
   tile(`${c.scouted_days ?? 0}/${c.scouting_days ?? 0}`, 'days scouted this week');
   box.append(tiles);
 
@@ -288,6 +299,52 @@ function dashboard() {
     box.append(el('div', 'note warn pd-wait-note', `Do not harvest ${x.name}${zones ? ' in ' + zones : ''} before ${longDay(x.harvest_after)} — a treatment's withholding period.`));
   });
   return box;
+}
+
+// ── the AI found something (0194): the photos, the worst first; each opens in the viewer ──
+const SEV_WORD = ['none', 'slight', 'clear', 'severe'];
+async function openFound() {
+  const d = drawer('The AI found something', 'Plant photos of the last 14 days, not tagged, in no case, not marked seen');
+  d.body.append(loading('Reading…'));
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close; d.footer.append(close);
+  let j;
+  try { j = await rpc('ai_found', { p_farm: farm.id }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+  const paintList = () => {
+    d.body.textContent = '';
+    const list = j.photos || [];
+    if (!list.length) { d.body.append(el('div', 'empty', 'Nothing waiting: every finding was tagged, put in a case or marked seen.')); return; }
+    d.body.append(el('div', 'hint', 'A proposal by the AI, not a diagnosis. Open a photo to tag it, put it in a case, or mark it seen.'));
+    list.forEach(p => {
+      const row = el('div', 'pd-found');
+      const img = el('img'); img.src = p.photo_data || ''; img.alt = photoTitle(p); img.loading = 'lazy';
+      const text = el('div', 'pd-found-text');
+      const f = (p.ai?.findings || []).filter(x => ['pest', 'disease', 'disorder'].includes(x.kind) && (x.severity ?? 0) >= 1);
+      text.append(el('b', null, f.map(x => `${x.name || x.code} · ${SEV_WORD[x.severity ?? 0]}`).join(' — ') || 'Finding'),
+        el('div', 'hint', [p.zone, p.crop, shortDay(p.taken_at), p.ai_auto ? 'read automatically' : null].filter(Boolean).join(' · ')));
+      if (p.ai?.summary) text.append(el('div', 'pd-found-sum', p.ai.summary));
+      const open = el('button', 'btn btn-sm btn-primary', 'Open');
+      const seen = el('button', 'btn btn-sm', 'Seen');
+      seen.title = 'Looked at it: nothing to do. It leaves this list.';
+      const drop = () => { j.photos = j.photos.filter(x => x.id !== p.id); paintList(); reload(); };
+      open.onclick = () => openViewer({
+        farm, photo: p, catalog: catalog || [], aiReady: j.ai_ready, mayWrite: j.may_write !== false,
+        zonePhotos: () => p.zone_id ? rpc('zone_photos', { p_farm: farm.id, p_zone: p.zone_id }) : Promise.resolve([]),
+        zoneId: p.zone_id, crops: [],
+        openCases: async () => (cases?.cases || []).filter(k => k.zone_id === p.zone_id && k.status !== 'closed'),
+        onChange: ph => { if (ph?.ai_seen || (ph?.tags || []).length) drop(); else reload(); },
+      });
+      seen.onclick = async () => {
+        busy(seen, true, '…');
+        try { await rpc('mark_photo_seen', { p_id: p.id, p_seen: true }); drop(); }
+        catch (e) { busy(seen, false, 'Seen'); toast(e.message, 'bad'); }
+      };
+      row.append(img, text, open);
+      if (j.may_write !== false) row.append(seen);
+      d.body.append(row);
+    });
+  };
+  paintList();
 }
 
 function pressureLine(weeks, thisWeek) {

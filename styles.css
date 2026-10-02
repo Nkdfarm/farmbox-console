@@ -1975,6 +1975,11 @@ table.table tr.off td { opacity: .5; }
 .pd-sump.sp-click:hover, .pd-sump.sp-click:focus-visible { border-color: var(--accent); outline: none; }
 .sp-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
 .sp-head .pd-hlabel { margin: 0; }
+.sp-head .spacer { flex: 1; }
+.sp-temp { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.sp-temp b { font-size: 1.05rem; }
+.sp-temp.ok b, .sp-temp.ok .sp-arrow { color: var(--success); } .sp-temp.warn b, .sp-temp.warn .sp-arrow { color: var(--warning); } .sp-temp.bad b, .sp-temp.bad .sp-arrow { color: var(--error); }
+.sp-arrow { font-size: var(--text-xs); }
 .sp-row { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
 .sp-row + .sp-row { border-top: 1px solid var(--border); }
 .sp-row .sp-fig { flex-wrap: wrap; row-gap: 0; }

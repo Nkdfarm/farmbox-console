@@ -81,12 +81,26 @@ function paintBlock(box, farm, h) {
   const s = h.sump;
   const head = el('div', 'sp-head');
   head.append(el('span', 'pd-hlabel', s ? s.name : 'Sump'), el('span', 'hint', s ? feedsText(s) : ''));
+  // the water temperature is a figure in the head, not a curve (0.7.191, owner 2 Oct 2026: "remove the temperature graph
+  // but just a today value on the top with an arrow indicating the trend"): the last reading, coloured against its band,
+  // and an arrow against the reading before; the curve is in the window the block opens
+  const temps = (h.readings || []).filter(r => r.water_temp != null);
+  if (s && temps.length) {
+    const t = temps[temps.length - 1], b = temps[temps.length - 2] || null;
+    const diff = b ? Number(t.water_temp) - Number(b.water_temp) : 0;
+    const arrow = !b ? '' : diff > 0.3 ? '▲' : diff < -0.3 ? '▼' : '–';
+    const chip = el('span', 'sp-temp ' + toneOf(t.water_temp, h.limits?.water_temp));
+    chip.append(el('span', 'hint', String(t.day) === String(h.day) ? 'Water today' : `Water ${shortDay(t.day)}`), el('b', null, `${num(t.water_temp, 1)} °C`));
+    if (arrow) chip.append(el('span', 'sp-arrow', arrow));
+    chip.title = `Water ${num(t.water_temp, 1)} °C on ${shortDay(t.day)} ${hhmm(t.at)}` + (b ? ` — ${num(b.water_temp, 1)} °C on ${shortDay(b.day)} (${diff >= 0 ? '+' : '−'}${num(Math.abs(diff), 1)})` : ' — the first reading') + '. Click for the curve.';
+    head.append(el('span', 'spacer'), chip);
+  }
   box.append(head);
   if (!s) { box.append(el('div', 'hint', 'No sump is set for this zone.')); return; }
   if (!(h.readings || []).length) {
     box.append(el('div', 'hint', 'No EC, pH or temperature in these 30 days. The daily sump check files them here.'));
   } else {
-    METRICS.forEach(m => {
+    METRICS.filter(m => m.key !== 'water_temp').forEach(m => {
       const last = lastOf(h, m.key);
       const row = el('div', 'sp-row');
       const fig = el('div', 'sp-fig ' + (last ? toneOf(last[m.key], h.limits?.[m.key]) : ''));

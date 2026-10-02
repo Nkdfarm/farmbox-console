@@ -2066,3 +2066,5 @@ table.table tr.off td { opacity: .5; }
 .ac-foot { margin-top: var(--space-4); }
 .sp-table td.num { text-align: right; } .sp-table th:not(:first-child) { text-align: right; }
 .set-row.ac-line { border-top: 1px dashed var(--border); }
+.set-row.ac-fn { padding-left: var(--space-8, 32px); border-top: 0; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.set-row.ac-fn .set-text b { font-weight: 500; }

@@ -50,38 +50,55 @@ export function aiSpendLine(farmId) {
   return r;
 }
 
-// the model every AI function uses, under the key (0.7.194, 0192, owner: "add in the Anthropic setting the model choice
-// rolling menu"): a menu for the franchisor, words for everybody else; nothing chosen = each function keeps its own
+// which Claude model the AI uses, under the key (0.7.194, 0192; a choice per function since 0.7.195, 0193 — owner:
+// "choice per function; add it"): the general choice, then one line per function that follows it or has its own.
+// Menus for the franchisor, words for everybody else. Nothing chosen anywhere = each function keeps the model it was written for.
 export function aiModelLine() {
+  const box = el('div', 'ac-models');
   const r = el('div', 'set-row ac-line');
   const hint = el('small', null, 'Reading…');
   const text = el('div', 'set-text');
   text.append(el('b', null, 'Model'), hint);
   r.append(text);
-  const OWN = 'Each function its own — Opus 5.5, and Sonnet 5 for the note asked on the phone';
-  const words = o => `${o.label || o.model} — $${num(o.input_usd, 2)} in / $${num(o.output_usd, 2)} out per million tokens`;
-  const paint = st => {
-    r.querySelectorAll('select').forEach(n => n.remove());
-    const cur = (st.options || []).find(o => o.model === st.model);
-    hint.textContent = st.model
-      ? `Every AI call uses ${cur?.label || st.model}: a photo read, a trap, the note on the phone, a zone's opinion, the assistant. The cost above follows.`
-      : 'Nothing chosen: each function uses its own model. Choosing one applies it to every AI call.';
-    if (!st.may_edit) { if (!st.model) hint.textContent = OWN + '.'; return; }
+  box.append(r);
+  const price = o => `$${num(o.input_usd, 2)} in / $${num(o.output_usd, 2)} out`;
+  const nameOf = (st, m) => (st.options || []).find(o => o.model === m)?.label || String(m || '').replace(/^claude-/, '');
+  const menu = (st, value, firstWords, onPick, label) => {
     const sel = el('select');
-    sel.setAttribute('aria-label', 'The Claude model the AI functions use');
-    const o0 = el('option', null, OWN); o0.value = ''; sel.append(o0);
-    (st.options || []).forEach(o => { const op = el('option', null, words(o)); op.value = o.model; sel.append(op); });
-    sel.value = st.model || '';
-    sel.style.maxWidth = '340px';
+    sel.setAttribute('aria-label', label);
+    const o0 = el('option', null, firstWords); o0.value = ''; sel.append(o0);
+    (st.options || []).forEach(o => { const op = el('option', null, `${o.label || o.model} — ${price(o)}`); op.value = o.model; sel.append(op); });
+    sel.value = value || '';
+    sel.style.maxWidth = '300px';
     sel.onchange = async () => {
       sel.disabled = true;
-      try { const st2 = await rpc('set_ai_model', { p_model: sel.value || null }); toast(sel.value ? 'Model changed — the next AI call uses it' : 'Each function uses its own model again', 'ok'); paint(st2); }
+      try { paint(await onPick(sel.value || null)); toast('Saved — the next AI call uses it', 'ok'); }
       catch (e) { toast(e.message, 'bad'); paint(st); }
     };
-    r.append(sel);
+    return sel;
+  };
+  const paint = st => {
+    r.querySelectorAll('select').forEach(n => n.remove());
+    box.querySelectorAll('.ac-fn').forEach(n => n.remove());
+    hint.textContent = st.model
+      ? `The general choice: ${nameOf(st, st.model)} for every function that has no choice of its own. Prices are per million tokens.`
+      : 'No general choice: a function with no choice of its own uses the model it was written for. Prices are per million tokens.';
+    if (st.may_edit) r.append(menu(st, st.model, 'No general choice — each function its own', v => rpc('set_ai_model', { p_model: v, p_fn: null }), 'The general model'));
+    (st.functions || []).forEach(f => {
+      const row = el('div', 'set-row ac-fn');
+      const t = el('div', 'set-text');
+      const uses = st.options.find(o => o.model === f.uses);
+      t.append(el('b', null, f.label),
+        el('small', null, `Uses ${nameOf(st, f.uses)}${uses ? ' (' + price(uses) + ')' : ''}` +
+          (f.model ? ' — its own choice' : st.model ? ' — the general choice' : ' — the model it was written for')));
+      row.append(t);
+      if (st.may_edit) row.append(menu(st, f.model, st.model ? `Follow the general choice (${nameOf(st, st.model)})` : `Its own (${nameOf(st, f.own)})`,
+        v => rpc('set_ai_model', { p_model: v, p_fn: f.fn }), `The model for: ${f.label}`));
+      box.append(row);
+    });
   };
   rpc('ai_model_setting', {}).then(paint).catch(e => { hint.textContent = /ai_model_setting/.test(e.message) ? 'Not available on this database yet.' : e.message; });
-  return r;
+  return box;
 }
 
 export function openAiCost(farmId) {

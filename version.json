@@ -1,5 +1,5 @@
 {
-  "version": "0.7.194",
+  "version": "0.7.195",
   "released": "2026-10-02",
-  "note": "Settings: choose the Claude model the AI uses, under the Anthropic key"
+  "note": "Settings: a Claude model per AI function"
 }

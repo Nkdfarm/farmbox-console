@@ -1945,3 +1945,27 @@ table.table tr.off td { opacity: .5; }
 .pd-ai { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .pd-ai.compact { display: block; }
 .pd-ai-head > b { white-space: nowrap; flex: none; }
+
+/* ── Feedback (0.7.186, migration 0189): what people on the phone say should change ── */
+.fbk-note { margin-bottom: var(--space-4); }
+.fbk-chips { margin-bottom: var(--space-4); align-items: center; }
+.fbk-sep { width: 1px; height: 18px; background: var(--divider); margin: 0 var(--space-1); }
+.fbk-what { max-width: 60ch; }
+.fbk-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: 4px; }
+.drawer.fbk-drawer { width: min(640px, 100vw); }
+.fbk-facts { display: grid; gap: 6px; margin-bottom: var(--space-4); }
+.fbk-facts > div { display: grid; grid-template-columns: 104px 1fr; gap: var(--space-2); align-items: baseline; }
+.fbk-sec { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+.fbk-sec textarea { width: 100%; }
+.fbk-summary { margin: 0; font-weight: 600; }
+.fbk-points { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.fbk-change { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--accent-soft); font-size: var(--text-sm); }
+.fbk-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-muted); }
+.fbk-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.fbk-m.audio, .fbk-m.video { grid-column: 1 / -1; }
+.fbk-m audio { width: 100%; }
+.fbk-m video { width: 100%; max-height: 360px; border-radius: 8px; background: #000; }
+.fbk-m img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: #000; }
+.fbk-ai { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-4); }
+.fbk-status { display: flex; gap: var(--space-2); align-items: center; }
+.fbk-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; }

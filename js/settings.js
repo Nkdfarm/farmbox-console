@@ -60,6 +60,7 @@ export function openSettings(ctx) {
     section('Layout', layout(ctx, touched)),
     section('Notion', notion(ctx)),
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
+    section('Task feedback', taskFeedback(ctx)),
     section('Integrations', integrations()),
     section('Account', account(ctx, d)),
     section('Version', version()),
@@ -174,7 +175,44 @@ const INTEGRATIONS = [
     help: 'Pest & diseases needs it: a trap or plant photo goes to Claude (Anthropic) only when somebody asks, photo by ' +
           'photo; it names the insects or the disease against the catalogue. Create a key in the Anthropic Console (a photo costs a few cents). ',
     link: ['Anthropic Console', 'https://console.anthropic.com/settings/keys'] },
+  { name: 'groq', label: 'Groq API key', placeholder: 'gsk_…',
+    setText: 'A feedback sent from the phone is transcribed and put in points with it.',
+    unsetText: 'Not set — feedback is kept as sent: voice notes are not transcribed and there is no summary.',
+    savedToast: 'Groq key saved — the next feedback is transcribed and summarised',
+    help: 'The task feedback needs it: Groq writes down the voice notes and videos (Whisper) and puts each feedback in points. ' +
+          'Create a key in the Groq Console (the free tier is enough for a farm). ',
+    link: ['Groq Console', 'https://console.groq.com/keys'] },
 ];
+
+// ── task feedback (0.7.186, migration 0189) ────────────────────────────────
+// The 💬 button on every task of the phone app, and the page Dashboard › Feedback.
+// Off until a manager switches it on; the sister units of a site switch together.
+function taskFeedback(ctx) {
+  const list = el('div', 'set-list');
+  const hint = el('small', null, 'Reading…');
+  const text = el('div', 'set-text');
+  text.append(el('b', null, 'Feedback on tasks'), hint);
+  const r = el('div', 'set-row');
+  r.append(text);
+  list.append(r);
+  if (!ctx.farmId) { hint.textContent = 'No FarmBox open.'; return list; }
+  const words = st => (st.on
+    ? 'On — every task on the phone has a 💬 button: a note, a voice note, photos or a short video saying what should change. They are listed in Dashboard › Feedback.'
+    : 'Off — the phone shows no 💬 button.') + (st.may_switch ? '' : ' A manager of this FarmBox switches it.');
+  rpc('task_feedback_state', { p_farm: ctx.farmId }).then(st => {
+    hint.textContent = words(st);
+    if (!st.may_switch) return;
+    r.append(switchBox(st.on, async on => {
+      try {
+        const now = await rpc('set_task_feedback', { p_farm: ctx.farmId, p_on: on });
+        hint.textContent = words(now);
+        toast(on ? 'Feedback switched on — the phones show the 💬 button at their next sync' : 'Feedback switched off', 'ok');
+        ctx.refresh?.();
+      } catch (e) { toast(e.message, 'bad'); }
+    }, 'Feedback on tasks'));
+  }).catch(e => { hint.textContent = e.message; });
+  return list;
+}
 
 function integrations() {
   const list = el('div', 'set-list');

@@ -15,6 +15,7 @@ import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
+import { renderFeedback } from './feedback.js';
 import { renderScouting } from './scouting.js';
 import { rpc as rpcCall } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
@@ -136,7 +137,7 @@ const lib = key => (c, f, ctx) => renderProcedures(c, f, LIB[key]);
 
 const SECTIONS = {
   dashboard: { title: 'Dashboard', tabs: [
-    ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['reports', 'Reports', renderReports]] },
+    ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['feedback', 'Feedback', renderFeedback], ['reports', 'Reports', renderReports]] },   // Feedback (0.7.186, migration 0189): drawn once for a site, its rows say the unit
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek], ['hours', 'Hours', renderHours]] },
   grow: { title: 'Grow', tabs: [
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
@@ -460,7 +461,7 @@ async function warmOne(id) {
     ['crop_timeline', { ...p, ...timelineRange() }], ['orders', { ...p, p_include_closed: false }], ['basket_plan', basketArgs(id)], ['connections', p], ['customers', { ...p, p_inactive: false }], ['yield_dashboard', { ...p, ...yieldRange() }], ['labour_hours', { ...p, ...hoursRange() }], ['forecast_review', p], ['field_corrections', { ...p, p_status: null }], ['to_decide', p],
     ['crop_library', p], ['procedures', p],
     ['maintenance', p], ['purchasing', p], ['seedling_orders', p], ['price_table', p], ['market_trends', p],
-    ['issues', { ...p, p_include_closed: false }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['trap_map', p], ['zone_opinions', p],
+    ['issues', { ...p, p_include_closed: false }], ['task_feedback_list', { ...p, p_limit: 500 }], ['ipm', p], ['pest_catalog', {}], ['cases', { ...p, p_include_closed: false }], ['pest_overview', p], ['trap_map', p], ['zone_opinions', p],
     ['scouting_dates', { ...p, p_before: null, p_limit: 21 }], ['robot_scouting', { ...p, p_days: 90 }], ['pest_dot', p], ['reports', { ...p, ...reportRange() }],
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],

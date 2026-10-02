@@ -1975,7 +1975,11 @@ table.table tr.off td { opacity: .5; }
 .pd-sump.sp-click:hover, .pd-sump.sp-click:focus-visible { border-color: var(--accent); outline: none; }
 .sp-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
 .sp-head .pd-hlabel { margin: 0; }
-.sp-row { display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 8px; align-items: center; padding: 2px 0; }
+.sp-row { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 0; }
+.sp-row + .sp-row { border-top: 1px solid var(--border); }
+.sp-row .sp-fig { flex-wrap: wrap; row-gap: 0; }
+.sp-row .sp-fig .sp-name { flex-basis: 100%; }
+.sp-row .sp-fig b { font-size: 1.25rem; }
 .sp-fig { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .sp-fig .sp-name { font-size: var(--text-xs); color: var(--text-muted); min-width: 34px; }
 .sp-fig b { font-size: 1.05rem; line-height: 1.1; }
@@ -1983,10 +1987,10 @@ table.table tr.off td { opacity: .5; }
 .sp-fig.big { flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .sp-fig.big .spacer { flex: 1; }
 .sp-fig.ok b { color: var(--success); } .sp-fig.warn b { color: var(--warning); } .sp-fig.bad b { color: var(--error); }
-.sp-curve { width: 100%; height: 30px; display: block; overflow: visible; }
+.sp-curve { width: 100%; height: auto; display: block; overflow: visible; }
 .sp-curve.big { height: auto; max-height: 200px; }
 .sp-curve .sp-band { fill: color-mix(in srgb, var(--success) 13%, transparent); }
-.sp-curve .sp-line { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.sp-curve .sp-line { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .sp-curve .sp-pt { fill: var(--accent); stroke: var(--surface); stroke-width: 0.6; }
 .sp-curve .sp-pt.ok { fill: var(--success); } .sp-curve .sp-pt.warn { fill: var(--warning); } .sp-curve .sp-pt.bad { fill: var(--error); }
 .sp-curve .pd-axis { stroke: var(--border-strong, var(--border)); stroke-width: 1; }
@@ -2009,7 +2013,9 @@ table.table tr.off td { opacity: .5; }
 .pd-growth { margin-top: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .pd-growth-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
 .pd-growth-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.pd-gbox { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); background: var(--surface-2); max-width: 460px; }
+.pd-gbox { max-width: 460px; }
+.pd-hright > .pd-gcurve:empty { display: none; }
+.pd-zc-big b { font-size: 1.35rem; }
 .pd-gsvg { max-height: 170px; }
 .pd-gline { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
 .pd-gpt { stroke: var(--surface); stroke-width: 1; }

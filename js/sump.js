@@ -41,7 +41,7 @@ const feedsText = s => (s?.feeds || []).length ? 'feeds ' + s.feeds.join(', ') :
 function curve(h, m, big = false) {
   const lim = h.limits?.[m.key] || {};
   const pts = (h.readings || []).filter(r => r[m.key] != null).map(r => ({ t: new Date(r.at).getTime(), v: Number(r[m.key]), r }));
-  const W = 300, H = big ? 96 : 30, L = big ? 26 : 2, R = 4, T = 5, B = big ? 14 : 3;
+  const W = big ? 300 : 220, H = big ? 96 : 54, L = big ? 26 : 2, R = 4, T = 6, B = big ? 14 : 5;   // the small ones taller since 0.7.189
   const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, class: 'sp-curve' + (big ? ' big' : ''), role: 'img' });
   svg.setAttribute('aria-label', `${m.label}: ${pts.length} reading${pts.length === 1 ? '' : 's'}, ${shortDay(h.from)} to ${shortDay(h.day)}`);
   if (!pts.length) return svg;
@@ -68,7 +68,7 @@ function curve(h, m, big = false) {
   pts.forEach((p, i) => {
     const last = i === pts.length - 1, tone = toneOf(p.v, lim);
     if (!big && !last && tone === 'ok') return;                       // small: the line, the readings outside the band, the last one
-    const c = mk('circle', { cx: x(p.t), cy: y(p.v), r: last ? 2.8 : big ? 1.8 : 1.6, class: 'sp-pt ' + tone }, svg);
+    const c = mk('circle', { cx: x(p.t), cy: y(p.v), r: last ? 3 : big ? 1.8 : 2, class: 'sp-pt ' + tone }, svg);
     const tt = mk('title', {}, c); tt.textContent = `${shortDay(p.r.day)} ${hhmm(p.r.at)}: ${m.label} ${num(p.v, m.dp)}${m.unit ? ' ' + m.unit : ''}`;
   });
   return svg;

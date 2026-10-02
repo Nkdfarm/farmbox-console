@@ -709,14 +709,15 @@ function healthSection(z, day, health, traps, growth = []) {
     left.append(g);
   } else left.append(el('div', 'hint pd-hnone', 'No plant-health photo that day.'));
   // under them, the growth photos and the sizes of 30 days (0190: no longer a line that opens)
+  // the sizes of 30 days go on the right, after the trap map (0.7.189, owner: "put the growth graphs on the right just after the insect heatmap")
   const gcurve = el('div', 'pd-gcurve');
-  left.append(growthPart(z, day, growth, gcurve));
+  left.append(growthPart(z, day, growth));
   // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
   const right = el('div', 'pd-hright');
   const sump = sumpBlock(farm, z, day, calm);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
-  right.append(sump, curve, trapBlock(z, day, traps));
+  right.append(sump, curve, trapBlock(z, day, traps), gcurve);
   grid.append(left, right);
   sec.append(sum, grid);
   sec.load = async () => {
@@ -767,7 +768,7 @@ function zoneCurve(h, z) {
     // the time axis starts at the first figure (a week at least), so a young record is not a flat line in an empty month
     const d1 = parse(h.day).getTime();
     const d0 = Math.max(parse(h.from).getTime(), Math.min(parse(pts[0].d).getTime() - 864e5, d1 - 6 * 864e5));
-    const W = 300, H = 120, L = 6, R = 6, T = 8, B = 16, span = Math.max(1, d1 - d0);
+    const W = 300, H = 76, L = 6, R = 6, T = 8, B = 14, span = Math.max(1, d1 - d0);   // lower since 0.7.189: the sump took the room
     const x = d => L + (parse(d).getTime() - d0) * (W - L - R) / span;
     const max = Math.max(1, (th.over || 0) * 1.25, ...pts.map(p => p.v));
     const y = v => H - B - v * (H - T - B) / max;
@@ -862,7 +863,7 @@ function trapsBlock(z, day, traps) {
 }
 
 // ── Growth: under the plant-health photos — the day's photos with their sizes, the sizes of 30 days as a curve ──
-function growthPart(z, day, growth, gcurve) {
+function growthPart(z, day, growth) {
   const box = el('div', 'pd-growth');
   const head = el('div', 'pd-growth-head');
   const sized = growth.filter(p => (p.measures || []).length).length;
@@ -875,7 +876,6 @@ function growthPart(z, day, growth, gcurve) {
     growth.forEach(p => grid.append(photoFig(p, z, day)));
     row.append(grid);
   }
-  row.append(gcurve);
   box.append(row);
   return box;
 }
@@ -890,7 +890,7 @@ function growthCurve(g) {
   pts.forEach(p => { const k = (p.crop || '') + '|' + p.what; if (!series.has(k)) series.set(k, { crop: p.crop, what: p.what, pts: [] }); series.get(k).pts.push(p); });
   const box = el('div', 'pd-curvebox pd-gbox');
   box.append(el('div', 'pd-hlabel', 'Sizes · 30 days'));
-  const W = 300, H = 110, L = 24, R = 6, T = 8, B = 16;
+  const W = 300, H = 96, L = 24, R = 6, T = 8, B = 16;
   const d0 = parse(g.from).getTime(), d1 = parse(g.day).getTime();
   const first = Math.min(...pts.map(p => parse(p.day).getTime()));
   const t0 = Math.max(d0, Math.min(first - 864e5, d1 - 6 * 864e5)), span = Math.max(1, d1 - t0);

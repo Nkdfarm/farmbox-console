@@ -1,5 +1,5 @@
 {
-  "version": "0.7.188",
+  "version": "0.7.189",
   "released": "2026-10-02",
-  "note": "Scouting: a report no longer fails with a statement timeout when the database is busy"
+  "note": "Scouting: larger sump curves, a lower insect curve, the growth sizes on the right"
 }

@@ -4,7 +4,7 @@
 // identified, the position on a card, a zone's opinion, the assistant — is logged by
 // the edge function that made it, with the tokens the API counted; ai_cost(farm, days)
 // adds them up.
-//   aiCostRow(farmId) — the line in Settings: today and the last 30 days, Open.
+//   aiSpendLine(farmId) — under the Anthropic key in Settings › Integrations (0.7.193): this month's total, Spend by day.
 //   openAiCost(farmId) — the window: today · 7 days · 30 days · this month, a photo on
 //     average, the days as bars, by kind, the last calls, the prices used.
 // Dollars are what Anthropic bills; the farm's currency is that × the price book's
@@ -26,25 +26,28 @@ const local = (j, v, dp = 2) => (j.fx_per_usd && j.currency && j.currency !== 'U
   ? ` · ${j.currency} ${Number(v * j.fx_per_usd).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}` : '';
 const both = (j, v, dp = 2) => usd(v, dp) + local(j, v, dp);
 
-export function aiCostRow(farmId) {
-  const list = el('div', 'set-list');
+export function aiSpendLine(farmId) {
+  const r = el('div', 'set-row ac-line');
   const hint = el('small', null, 'Reading…');
   const text = el('div', 'set-text');
-  text.append(el('b', null, 'What the AI costs'), hint);
-  const r = el('div', 'set-row');
+  const title = el('b', null, 'Spent this month');
+  text.append(title, hint);
   r.append(text);
-  list.append(r);
-  if (!farmId) { hint.textContent = 'No FarmBox open.'; return list; }
-  const open = el('button', 'btn btn-sm', 'Open');
+  if (!farmId) { hint.textContent = 'No FarmBox open.'; return r; }
+  const open = el('button', 'btn btn-sm', 'Spend by day');
+  open.title = 'Every day, by kind of call, the last calls and what a photo costs';
   open.onclick = () => openAiCost(farmId);
   r.append(open);
-  rpc('ai_cost', { p_farm: farmId, p_days: 30 }).then(j => {
+  rpc('ai_cost', { p_farm: farmId, p_days: 31 }).then(j => {
+    const m = j.this_month || {};
+    const month = new Date(String(j.today).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' });
+    title.textContent = `Spent in ${month}: ${both(j, m.usd)}`;
     hint.textContent = j.since
-      ? `Today ${both(j, j.day?.usd)} for ${j.day?.calls || 0} call${j.day?.calls === 1 ? '' : 's'} · the last 30 days ${both(j, j.month30?.usd)}` +
-        (j.per_photo_usd != null ? ` · a photo ${usd(j.per_photo_usd, 3)} on average` : '')
+      ? `${m.calls || 0} call${m.calls === 1 ? '' : 's'} to Claude, ${m.photos || 0} photo${m.photos === 1 ? '' : 's'} · today ${usd(j.day?.usd)}` +
+        (j.per_photo_usd != null ? ` · a photo ${usd(j.per_photo_usd, 3)} on average` : '') + ' · counted from the tokens Anthropic billed'
       : 'Nothing logged yet: every AI call from now on is counted here, with the tokens Anthropic billed.';
   }).catch(e => { hint.textContent = /ai_cost/.test(e.message) ? 'Not available on this database yet.' : e.message; });
-  return list;
+  return r;
 }
 
 export function openAiCost(farmId) {

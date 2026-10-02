@@ -1,5 +1,5 @@
 {
-  "version": "0.7.192",
+  "version": "0.7.193",
   "released": "2026-10-02",
-  "note": "Settings: what the AI costs, call by call, with the tokens Anthropic billed"
+  "note": "Settings: the month's AI spend under the Anthropic key, the days behind a click"
 }

@@ -11,7 +11,7 @@ import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
 import { familiesRow } from './families.js';
-import { aiCostRow } from './aicost.js';
+import { aiSpendLine } from './aicost.js';
 
 const THEME_KEY = 'fbc_theme';
 const START_KEY = 'fbc_start';
@@ -62,8 +62,7 @@ export function openSettings(ctx) {
     section('Notion', notion(ctx)),
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Task feedback', taskFeedback(ctx)),
-    section('Integrations', integrations()),
-    section('AI cost', aiCostRow(ctx.farmId)),
+    section('Integrations', integrations(ctx)),
     section('Account', account(ctx, d)),
     section('Version', version()),
     section('Version log', versionLog()),
@@ -216,7 +215,7 @@ function taskFeedback(ctx) {
   return list;
 }
 
-function integrations() {
+function integrations(ctx) {
   const list = el('div', 'set-list');
   const rows = INTEGRATIONS.map(def => {
     const status = el('small', null, 'Reading…');
@@ -233,6 +232,9 @@ function integrations() {
     a.rel = 'noopener';
     help.append(a);
     list.append(r, help);
+    // what the key has spent this month, under the key itself, with the days behind a click (0.7.193, owner 2 Oct 2026:
+    // "in the settings page where we add the Anthropic key, total spent per month and a click to open the full spend per day")
+    if (def.name === 'anthropic') list.append(aiSpendLine(ctx?.farmId));
     return { def, r, status };
   });
 

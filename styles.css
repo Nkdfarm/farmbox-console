@@ -2065,3 +2065,4 @@ table.table tr.off td { opacity: .5; }
 .ac-h { margin-top: var(--space-4); }
 .ac-foot { margin-top: var(--space-4); }
 .sp-table td.num { text-align: right; } .sp-table th:not(:first-child) { text-align: right; }
+.set-row.ac-line { border-top: 1px dashed var(--border); }

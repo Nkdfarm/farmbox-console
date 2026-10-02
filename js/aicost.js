@@ -12,7 +12,7 @@
 // zone opinions were: they kept their own tokens).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, drawer, num } from './ui.js';
+import { el, drawer, num, toast } from './ui.js';
 
 const KIND = { 'scout-photo': 'Plant photo read by the AI', 'trap-species': 'Trap photo: the species', 'zone-opinion': 'A zone\'s AI opinion',
                assistant: 'The assistant', 'photo-note': 'AI note on the phone' };
@@ -47,6 +47,40 @@ export function aiSpendLine(farmId) {
         (j.per_photo_usd != null ? ` · a photo ${usd(j.per_photo_usd, 3)} on average` : '') + ' · counted from the tokens Anthropic billed'
       : 'Nothing logged yet: every AI call from now on is counted here, with the tokens Anthropic billed.';
   }).catch(e => { hint.textContent = /ai_cost/.test(e.message) ? 'Not available on this database yet.' : e.message; });
+  return r;
+}
+
+// the model every AI function uses, under the key (0.7.194, 0192, owner: "add in the Anthropic setting the model choice
+// rolling menu"): a menu for the franchisor, words for everybody else; nothing chosen = each function keeps its own
+export function aiModelLine() {
+  const r = el('div', 'set-row ac-line');
+  const hint = el('small', null, 'Reading…');
+  const text = el('div', 'set-text');
+  text.append(el('b', null, 'Model'), hint);
+  r.append(text);
+  const OWN = 'Each function its own — Opus 5.5, and Sonnet 5 for the note asked on the phone';
+  const words = o => `${o.label || o.model} — $${num(o.input_usd, 2)} in / $${num(o.output_usd, 2)} out per million tokens`;
+  const paint = st => {
+    r.querySelectorAll('select').forEach(n => n.remove());
+    const cur = (st.options || []).find(o => o.model === st.model);
+    hint.textContent = st.model
+      ? `Every AI call uses ${cur?.label || st.model}: a photo read, a trap, the note on the phone, a zone's opinion, the assistant. The cost above follows.`
+      : 'Nothing chosen: each function uses its own model. Choosing one applies it to every AI call.';
+    if (!st.may_edit) { if (!st.model) hint.textContent = OWN + '.'; return; }
+    const sel = el('select');
+    sel.setAttribute('aria-label', 'The Claude model the AI functions use');
+    const o0 = el('option', null, OWN); o0.value = ''; sel.append(o0);
+    (st.options || []).forEach(o => { const op = el('option', null, words(o)); op.value = o.model; sel.append(op); });
+    sel.value = st.model || '';
+    sel.style.maxWidth = '340px';
+    sel.onchange = async () => {
+      sel.disabled = true;
+      try { const st2 = await rpc('set_ai_model', { p_model: sel.value || null }); toast(sel.value ? 'Model changed — the next AI call uses it' : 'Each function uses its own model again', 'ok'); paint(st2); }
+      catch (e) { toast(e.message, 'bad'); paint(st); }
+    };
+    r.append(sel);
+  };
+  rpc('ai_model_setting', {}).then(paint).catch(e => { hint.textContent = /ai_model_setting/.test(e.message) ? 'Not available on this database yet.' : e.message; });
   return r;
 }
 

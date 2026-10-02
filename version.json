@@ -1,5 +1,5 @@
 {
-  "version": "0.7.193",
+  "version": "0.7.194",
   "released": "2026-10-02",
-  "note": "Settings: the month's AI spend under the Anthropic key, the days behind a click"
+  "note": "Settings: choose the Claude model the AI uses, under the Anthropic key"
 }

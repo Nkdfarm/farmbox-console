@@ -122,7 +122,7 @@ const READ_RPCS = new Set([
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'price_table', 'procedure',
   'procedures', 'purchasing', 'seedling_orders', 'reports', 'system_catalog', 'integration_status', 'task_families',
   'farm_holidays', 'scouting_day', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'crop_pests', 'scouting_dates', 'pest_dot', 'basket_plan',
-  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'crop_validations', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view', 'robot_scouting', 'task_feedback_list', 'task_feedback_state', 'sump_history', 'zone_growth', 'removed_photos', 'ai_cost',
+  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'crop_validations', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view', 'robot_scouting', 'task_feedback_list', 'task_feedback_state', 'sump_history', 'zone_growth', 'removed_photos', 'ai_cost', 'ai_model_setting',
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
 

@@ -11,7 +11,7 @@ import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
 import { familiesRow } from './families.js';
-import { aiSpendLine } from './aicost.js';
+import { aiSpendLine, aiModelLine } from './aicost.js';
 
 const THEME_KEY = 'fbc_theme';
 const START_KEY = 'fbc_start';
@@ -234,7 +234,7 @@ function integrations(ctx) {
     list.append(r, help);
     // what the key has spent this month, under the key itself, with the days behind a click (0.7.193, owner 2 Oct 2026:
     // "in the settings page where we add the Anthropic key, total spent per month and a click to open the full spend per day")
-    if (def.name === 'anthropic') list.append(aiSpendLine(ctx?.farmId));
+    if (def.name === 'anthropic') list.append(aiModelLine(), aiSpendLine(ctx?.farmId));
     return { def, r, status };
   });
 

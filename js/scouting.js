@@ -40,13 +40,19 @@
 // A scouting done before its day counts on the day it was done (app.work_day).
 // Since 0.7.184 (0188): what the robot sent is in the day too — a line that opens beside Growth and Traps in the zone it
 // named, or under the day's zones when it named none; a day only the robot worked gets its own date line.
+// Since 0190 (console 0.7.187, owner 2 Oct 2026): on the right of Plant health, above Insects a day, the sump that
+// feeds the zone — EC, pH and water temperature over 30 days, a click opens its window (js/sump.js). Growth is no
+// longer a line that opens: its photos sit under the plant-health ones, with the sizes of 30 days as a curve
+// (zone_growth). Every photo has a ✕ in its corner: it leaves the reports and is kept (remove_photo — the person who
+// took it the same day, a manager any day); "Removed photos…" in the head puts one back within 30 days.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
-import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill } from './ui.js';
+import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection } from './robot.js';
+import { sumpBlock } from './sump.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
@@ -131,10 +137,13 @@ function paint() {
   const sizeBtn = el('button', 'btn', 'Map size…');
   sizeBtn.title = 'How the trap map draws a zone';
   sizeBtn.onclick = () => kit?.openSize();
+  const removedBtn = el('button', 'btn', 'Removed photos…');
+  removedBtn.title = 'The photos taken off the reports in the last 30 days; a manager can put one back';
+  removedBtn.onclick = openRemoved;
   mount.append(pageHead('Pest & diseases',
     'The daily scouting by date, zone by zone: plant health first, with the trap curves and the zone\'s trap map, then the traps and the growth photos. ' +
     'A dot says the worst thing inside: red severe or over the threshold, orange open or on watch, green improving or resolved.',
-    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), openBtn));
+    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, openBtn));
 
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());
@@ -450,9 +459,9 @@ function zoneBand(z, day, withAi = false) {
   if (shared) body.append(el('div', 'hint pd-shared', `${shared} of these name ${z.zone_name || 'the zone'} without its table, so they are in each of its reports.`));
   // plant health first, open: its photos on two thirds, the zone's insect curve and trap map on the last third; the
   // day's trap photos behind the map; Growth underneath (0.7.175)
-  const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'), traps);
+  const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'), traps, photos.filter(p => p.section === 'growth'));
   const bottom = el('div', 'pd-hbottom');
-  bottom.append(growthBlock(z, day, photos.filter(p => p.section === 'growth')), trapsBlock(z, day, traps));
+  bottom.append(trapsBlock(z, day, traps));
   const rb = robotIn(z, robotDay(day.day));
   if (rb.length) { bottom.append(robotSection(rb, robotOpts())); det.open = true; }
   body.append(hs, bottom);
@@ -475,6 +484,66 @@ function viewerCtx(p, z, day) {
   };
 }
 
+// ── a photo taken off the reports (0190): the ✕ in its corner ──
+function removeX(p) {
+  const x = el('span', 'pd-x', '✕');
+  x.setAttribute('role', 'button'); x.tabIndex = 0;
+  x.title = 'Remove this photo from the reports';
+  x.setAttribute('aria-label', 'Remove this photo');
+  const go = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const trap = p.kind === 'trap';
+    const ok = await confirmDrawer('Remove this photo?',
+      (trap ? `Trap ${p.code}: its count of ${num(p.total, 0)} leaves the insect curve with it, and the photo after it is counted against the one before. `
+            : (p.measures || []).length ? 'Its sizes leave the growth curve with it. ' : '')
+      + 'The photo is kept for 30 days under Removed photos…, where a manager can put it back.', 'Remove', true);
+    if (!ok) return;
+    try {
+      await rpc('remove_photo', { p_kind: trap ? 'trap' : 'observation', p_id: p.id, p_reason: null });
+      toast('Photo removed — Removed photos… puts it back');
+      reload();
+    } catch (err) { toast(String(err.message || err).replace(/^\d+ /, ''), 'bad'); }
+  };
+  x.onclick = go;
+  x.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') go(e); };
+  return x;
+}
+
+async function openRemoved() {
+  const d = drawer('Removed photos', 'Taken off the reports in the last 30 days');
+  const paintList = async () => {
+    d.body.textContent = ''; d.body.append(el('div', 'hint', 'Reading…'));
+    let r;
+    try { r = await rpc('removed_photos', { p_farm: farm.id }); }
+    catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
+    d.body.textContent = '';
+    if (!(r.rows || []).length) { d.body.append(el('div', 'empty', 'No photo was removed in the last 30 days.')); return; }
+    if (!r.may_restore) d.body.append(el('div', 'hint', 'A manager can put a photo back.'));
+    const list = el('div', 'pd-removed');
+    r.rows.forEach(x => {
+      const row = el('div', 'pd-removed-row');
+      const im = el('img'); im.src = x.photo_data || ''; im.alt = ''; im.loading = 'lazy';
+      const txt = el('div');
+      txt.append(el('b', null, x.label || (x.kind === 'trap' ? 'Trap photo' : 'Plant photo')),
+        el('div', 'hint', [x.zone, x.day ? shortDay(x.day) : null].filter(Boolean).join(' · ')),
+        el('div', 'hint', `Removed ${shortDay(x.removed_at)} ${hhmm(x.removed_at)}${x.by ? ' by ' + x.by : ''}${x.reason ? ' — ' + x.reason : ''}`));
+      row.append(im, txt);
+      if (r.may_restore) {
+        const b = el('button', 'btn btn-sm', 'Put back');
+        b.onclick = async () => {
+          busy(b, true, 'Putting back…');
+          try { await rpc('restore_photo', { p_id: x.id }); toast('Photo back in its report'); await paintList(); reload(); }
+          catch (e) { busy(b, false, 'Put back'); toast(String(e.message || e).replace(/^\d+ /, ''), 'bad'); }
+        };
+        row.append(b);
+      }
+      list.append(row);
+    });
+    d.body.append(list);
+  };
+  paintList();
+}
+
 function trapCard(p, z, day) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.src = p.photo_data || ''; im.alt = `trap ${p.code}`; im.loading = 'lazy';
@@ -486,6 +555,7 @@ function trapCard(p, z, day) {
   const chk = trapCheckPill(p.check, p.total);
   if (chk) card.append(chk);
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
+  if (day.may_write !== false && p.id) card.append(removeX({ ...p, kind: 'trap' }));
   card.onclick = () => openViewer(viewerCtx(p, z, day));
   return card;
 }
@@ -534,6 +604,7 @@ function photoFig(p, z, day) {
   cap.append(el('div', 'hint', [hhmm(p.taken_at), p.note, st].filter(Boolean).join(' · ')));
   if (p.ai?.summary) cap.append(el('div', 'sc-ai-line', '✦ ' + p.ai.summary));
   fig.append(cap);
+  if (day.may_write !== false && p.id) fig.append(removeX(p));
   fig.onclick = () => openViewer(viewerCtx(p, z, day));
   return fig;
 }
@@ -610,7 +681,7 @@ function opinionCard(u = cur(), compact = false) {
 // ── a zone's plant health (0.7.175, owner 30 Sept 2026: "2/3 of the width for the health pictures, 1/3 on the right:
 // on top the average insects a day for the whole bay with its curve over time, at the bottom the heat map with all
 // the information of the traps; the traps block can go if its information is in the daily report") ──
-function healthSection(z, day, health, traps) {
+function healthSection(z, day, health, traps, growth = []) {
   const sec = el('details', 'pd-sec pd-health');
   sec.open = true;
   const sum = el('summary');
@@ -623,16 +694,23 @@ function healthSection(z, day, health, traps) {
     health.forEach(p => g.append(photoFig(p, z, day)));
     left.append(g);
   } else left.append(el('div', 'hint pd-hnone', 'No plant-health photo that day.'));
-  // right, one third: the zone's insects a day over time, then its traps as they stand
+  // under them, the growth photos and the sizes of 30 days (0190: no longer a line that opens)
+  const gcurve = el('div', 'pd-gcurve');
+  left.append(growthPart(z, day, growth, gcurve));
+  // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
   const right = el('div', 'pd-hright');
+  const sump = sumpBlock(farm, z, day);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
-  right.append(curve, trapBlock(z, day, traps));
+  right.append(sump, curve, trapBlock(z, day, traps));
   grid.append(left, right);
   sec.append(sum, grid);
   sec.load = async () => {
     if (sec.dataset.loaded) return;
     sec.dataset.loaded = '1';
+    sump.load();
+    rpc('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
+      .then(g => { gcurve.textContent = ''; const c = growthCurve(g); if (c) gcurve.append(c); }).catch(() => {});
     try {
       const h = await rpc('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
       curve.textContent = '';
@@ -769,19 +847,65 @@ function trapsBlock(z, day, traps) {
   return det;
 }
 
-// ── Growth: a tile, its photos behind it ──
-function growthBlock(z, day, growth) {
-  const sized = growth.find(p => (p.measures || []).length);
-  const sizes = sized ? sized.measures.map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)}`).join(' · ') + ' mm' : '';
-  const det = el('details', 'pd-sec pd-growth');
-  const sum = el('summary');
-  sum.append(dotEl(worst(growth.map(p => p.dot))), el('b', null, 'Growth'),
-             el('span', 'hint', growth.length ? `${growth.length} photo${growth.length === 1 ? '' : 's'}${sizes ? ' · ' + sizes : ''}` : 'no photo that day'));
-  det.append(sum);
+// ── Growth: under the plant-health photos — the day's photos with their sizes, the sizes of 30 days as a curve ──
+function growthPart(z, day, growth, gcurve) {
+  const box = el('div', 'pd-growth');
+  const head = el('div', 'pd-growth-head');
+  const sized = growth.filter(p => (p.measures || []).length).length;
+  head.append(dotEl(worst(growth.map(p => p.dot))), el('b', null, 'Growth'),
+    el('span', 'hint', growth.length ? `${growth.length} photo${growth.length === 1 ? '' : 's'}${sized < growth.length ? ` · ${growth.length - sized} without a size` : ''}` : 'no photo that day'));
+  box.append(head);
+  const row = el('div', 'pd-growth-row');
   if (growth.length) {
-    const grid = el('div', 'sc-grid pd-sec-body');
+    const grid = el('div', 'sc-grid pd-hphotos');
     growth.forEach(p => grid.append(photoFig(p, z, day)));
-    det.append(grid);
+    row.append(grid);
   }
-  return det;
+  row.append(gcurve);
+  box.append(row);
+  return box;
+}
+
+// the sizes measured on the growth photos of 30 days: a line per crop and dimension, a day's photos averaged
+const G_WORD = { length: 'Length', diameter: 'Diameter', width: 'Width', height: 'Height' };
+function growthCurve(g) {
+  const pts = g?.points || [];
+  if (!pts.length) return null;
+  const crops = new Set(pts.map(p => p.crop || ''));
+  const series = new Map();
+  pts.forEach(p => { const k = (p.crop || '') + '|' + p.what; if (!series.has(k)) series.set(k, { crop: p.crop, what: p.what, pts: [] }); series.get(k).pts.push(p); });
+  const box = el('div', 'pd-curvebox pd-gbox');
+  box.append(el('div', 'pd-hlabel', 'Sizes · 30 days'));
+  const W = 300, H = 110, L = 24, R = 6, T = 8, B = 16;
+  const d0 = parse(g.from).getTime(), d1 = parse(g.day).getTime();
+  const first = Math.min(...pts.map(p => parse(p.day).getTime()));
+  const t0 = Math.max(d0, Math.min(first - 864e5, d1 - 6 * 864e5)), span = Math.max(1, d1 - t0);
+  const max = Math.max(...pts.map(p => Number(p.mm))) * 1.1 || 1;
+  const x = d => L + (parse(d).getTime() - t0) * (W - L - R) / span, y = v => H - B - v * (H - T - B) / max;
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('class', 'pd-curve pd-gsvg'); svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Sizes measured on the growth photos, ${shortDay(ymd(new Date(t0)))} to ${shortDay(g.day)}`);
+  const mk = (tag, at) => { const n = document.createElementNS(SVG_NS, tag); Object.entries(at).forEach(([k, v]) => n.setAttribute(k, v)); svg.append(n); return n; };
+  mk('line', { x1: L, x2: W - R, y1: H - B, y2: H - B, class: 'pd-axis' });
+  [0, max / 1.1].forEach(v => { const t = mk('text', { x: L - 3, y: y(v) + 3, class: 'pd-ax-t', 'text-anchor': 'end' }); t.textContent = num(v, 0); });
+  [[ymd(new Date(t0)), 'start'], [g.day, 'end']].forEach(([d, a]) => { const t = mk('text', { x: x(d), y: H - 3, class: 'pd-ax-t', 'text-anchor': a }); t.textContent = shortDay(d); });
+  const legend = el('div', 'pd-glegend');
+  [...series.values()].forEach((sr, i) => {
+    const cls = 'pd-g' + (i % 4);
+    if (sr.pts.length > 1) mk('polyline', { points: sr.pts.map(p => `${x(p.day).toFixed(1)},${y(Number(p.mm)).toFixed(1)}`).join(' '), class: 'pd-gline ' + cls });
+    sr.pts.forEach(p => {
+      const c = mk('circle', { cx: x(p.day), cy: y(Number(p.mm)), r: 2.6, class: 'pd-gpt ' + cls });
+      const tt = document.createElementNS(SVG_NS, 'title');
+      tt.textContent = `${shortDay(p.day)}: ${G_WORD[p.what] || p.what} ${num(p.mm, 0)} mm${p.n > 1 ? ` (average of ${p.n})` : ''}${p.crop ? ' · ' + p.crop : ''}`;
+      c.append(tt);
+    });
+    const last = sr.pts[sr.pts.length - 1], before = sr.pts[sr.pts.length - 2];
+    const item = el('span', 'pd-gitem');
+    const sw = el('span', 'pd-gsw ' + cls);
+    item.append(sw, el('span', null, `${crops.size > 1 && sr.crop ? sr.crop + ' · ' : ''}${G_WORD[sr.what] || sr.what}`), el('b', null, `${num(last.mm, 0)} mm`));
+    if (before) { const dd = Number(last.mm) - Number(before.mm); item.append(el('span', 'hint', `${dd >= 0 ? '+' : '−'}${num(Math.abs(dd), 0)} since ${shortDay(before.day)}`)); }
+    legend.append(item);
+  });
+  box.append(svg, legend);
+  return box;
 }

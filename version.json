@@ -1,5 +1,5 @@
 {
-  "version": "0.7.191",
+  "version": "0.7.192",
   "released": "2026-10-02",
-  "note": "Scouting: the sump's water temperature is a figure with its trend, not a curve"
+  "note": "Settings: what the AI costs, call by call, with the tokens Anthropic billed"
 }

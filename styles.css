@@ -2052,3 +2052,16 @@ table.table tr.off td { opacity: .5; }
 .pd-removed-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center;
   padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .pd-removed-row img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; background: #000; display: block; }
+
+/* what the AI costs (0.7.192, 0191) */
+.ac-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
+.ac-tile { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
+.ac-tile .pd-hlabel { margin: 0; }
+.ac-tile b { font-size: 1.4rem; line-height: 1.2; }
+.ac-bars { display: flex; align-items: flex-end; gap: 2px; height: 90px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.ac-bar { flex: 1; min-width: 2px; max-width: 28px; height: 100%; display: flex; align-items: flex-end; }
+.ac-bar span { display: block; width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; }
+.ac-bar:hover span { background: var(--text); }
+.ac-h { margin-top: var(--space-4); }
+.ac-foot { margin-top: var(--space-4); }
+.sp-table td.num { text-align: right; } .sp-table th:not(:first-child) { text-align: right; }

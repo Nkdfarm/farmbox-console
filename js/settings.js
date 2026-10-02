@@ -11,6 +11,7 @@ import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
 import { familiesRow } from './families.js';
+import { aiCostRow } from './aicost.js';
 
 const THEME_KEY = 'fbc_theme';
 const START_KEY = 'fbc_start';
@@ -62,6 +63,7 @@ export function openSettings(ctx) {
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Task feedback', taskFeedback(ctx)),
     section('Integrations', integrations()),
+    section('AI cost', aiCostRow(ctx.farmId)),
     section('Account', account(ctx, d)),
     section('Version', version()),
     section('Version log', versionLog()),

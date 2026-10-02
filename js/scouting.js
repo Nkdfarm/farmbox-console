@@ -45,6 +45,9 @@
 // longer a line that opens: its photos sit under the plant-health ones, with the sizes of 30 days as a curve
 // (zone_growth). Every photo has a ✕ in its corner: it leaves the reports and is kept (remove_photo — the person who
 // took it the same day, a manager any day); "Removed photos…" in the head puts one back within 30 days.
+// Since 0197 (console 0.7.199, owner 2 Oct 2026): on the right of Plant health, first, the zone's treatments — a flag
+// when an IPM program runs there, eight weeks as a small calendar (applied and to come, a colour per product) and
+// Apply… to start a program of the library on the tables chosen (js/treatments.js).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
@@ -53,6 +56,7 @@ import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection } from './robot.js';
 import { sumpBlock } from './sump.js';
+import { treatBlock } from './treatments.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
@@ -771,19 +775,21 @@ function healthSection(z, day, health, traps, growth = []) {
   left.append(growthPart(z, day, growth));
   // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
   const right = el('div', 'pd-hright');
+  const treat = treatBlock(farm, z, day, calm, reload);   // the IPM programs on this zone's tables (0197)
   const sump = sumpBlock(farm, z, day, calm);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
   // the insects a day sit on top of the trap map, in one block (0.7.190)
   const tb = trapBlock(z, day, traps);
   tb.prepend(curve);
-  right.append(sump, tb, gcurve);
+  right.append(treat, sump, tb, gcurve);
   grid.append(left, right);
   sec.append(sum, grid);
   sec.load = async () => {
     if (sec.dataset.loaded) return;
     sec.dataset.loaded = '1';
     sump.load();
+    treat.load();
     calm('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
       .then(g => { gcurve.textContent = ''; const c = growthCurve(g); if (c) gcurve.append(c); }).catch(() => {});
     try {

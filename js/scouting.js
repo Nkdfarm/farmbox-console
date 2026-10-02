@@ -281,7 +281,7 @@ function dashboard() {
       t.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFound(); } };
     }
   }
-  tile(c.to_review, 'photos not read yet', c.to_review ? 'warn' : '');
+  tile(c.to_review, 'health photos not read yet', c.to_review ? 'warn' : '');
   tile(`${c.scouted_days ?? 0}/${c.scouting_days ?? 0}`, 'days scouted this week');
   box.append(tiles);
 

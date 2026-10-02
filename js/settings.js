@@ -217,7 +217,7 @@ function taskFeedback(ctx) {
 }
 
 // ── automatic AI scan (0.7.196, migration 0194) ────────────────────────────
-// A plant-health or trap photo with no AI note is read by the AI when its full photo
+// A plant-health photo with no AI note (0196: not trap photos, not growth) is read by the AI when its full photo
 // arrives — up to a number of photos a day. Off until a manager switches it on;
 // the sister units of a site switch together and share the cap.
 function aiScan(ctx) {
@@ -235,10 +235,10 @@ function aiScan(ctx) {
   const capRow = el('div', 'set-row');
   capRow.append(capText);
   const words = st => (!st.ai_ready ? 'No Anthropic API key yet (Integrations, below): nothing can be sent. '
-    : st.on ? 'On — a plant-health or trap photo with no AI note goes to the AI when its full photo arrives. A photo already read on the phone, and growth photos, are left alone. The AI proposes: it opens no case and tags nothing. '
+    : st.on ? 'On — a plant-health photo with no AI note goes to the AI when its full photo arrives (the last 14 days too). Growth and trap photos are read only when somebody asks, here or on the phone; a photo already read on the phone is left alone. The AI proposes: it opens no case and tags nothing. '
             : 'Off — a photo goes to the AI only when somebody presses Ask the AI. ') + (st.may_switch ? '' : 'A manager of this FarmBox switches it.');
   const capWords = st => `Sent today: ${st.used_today} of ${st.cap}` + (st.waiting ? ` · ${st.waiting} waiting` : '') +
-    '. Over the number, photos wait for the next day (three days at most). What a photo costs is under the Anthropic key, below.';
+    '. Over the number, photos wait for the next day. What a photo costs is under the Anthropic key, below.';
   const paint = st => { hint.textContent = words(st); capHint.textContent = capWords(st); };
   rpc('ai_scan_state', { p_farm: ctx.farmId }).then(st => {
     paint(st);

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.201",
+  "version": "0.7.202",
   "released": "2026-10-02",
-  "note": "The daily report opens faster"
+  "note": "Daily report: only today opens by itself"
 }

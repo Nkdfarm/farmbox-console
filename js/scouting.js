@@ -264,10 +264,10 @@ function paint() {
     .sort((x, y) => String(y.day).localeCompare(String(x.day)));
   if (zoneFilter) list.append(el('div', 'pd-zone-head', `${zoneName(zoneFilter)} — the scouting report by date`));
   if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
-  // today's and yesterday's reports open by themselves (0.7.174); with neither, the latest
-  const today = String(over.today), yday = ymd(new Date(parse(today).getTime() - 864e5));
-  const opens = d => d.day === today || d.day === yday, any = shown.some(opens);
-  shown.forEach((d, i) => { const o = opens(d) || (!any && i === 0); list.append(dayRow(d, o, o)); });   // the AI line on the days that open
+  // only today's report opens by itself (0.7.202, owner 2 Oct 2026: "only today report is opened, other reports are
+  // closed"; it was today and yesterday, or the latest, since 0.7.174) — a day opens, and is read, when it is clicked
+  const today = String(over.today);
+  shown.forEach(d => { const o = d.day === today; list.append(dayRow(d, o, o)); });   // the AI line on the day that opens
   mount.append(list);
   if (!moreDone) {
     const more = el('button', 'btn btn-sm', 'Show older reports');

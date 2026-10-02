@@ -2092,6 +2092,13 @@ table.table tr.off td { opacity: .5; }
 
 /* ── IPM programs (0.7.199, migration 0197): the treatments block of a zone's report, the apply window, the library ── */
 .tr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* "updating…" on a day's line while the database is asked (0.7.201) */
+.pd-upd { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--text-faint); }
+.pd-upd[hidden] { display: none; }
+.pd-upd .spin { width: 11px; height: 11px; }
+/* a picture whose phone copy has not landed yet (0.7.201) */
+img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface-offset) 50%, var(--surface-2) 70%); background-size: 200% 100%; animation: pdWait 1.2s linear infinite; min-height: 60px; }
+@keyframes pdWait { to { background-position: -200% 0; } }
 /* the right column's folds (0.7.200): one line with the KPI, the rest inside */
 .pd-fold > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; list-style: none; }
 .pd-fold > summary::-webkit-details-marker { display: none; }

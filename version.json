@@ -1,5 +1,5 @@
 {
-  "version": "0.7.200",
+  "version": "0.7.201",
   "released": "2026-10-02",
-  "note": "Zone report: Treatments and Traps fold to one line with their figure"
+  "note": "The daily report opens faster"
 }

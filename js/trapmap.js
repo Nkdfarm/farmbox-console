@@ -131,8 +131,9 @@ export function trapKit(K) {
     const body = el('div', 'tm-spot-body');
     const photo = el('button', 'tm-photo');
     photo.type = 'button';
-    if (s.photo_data) { const im = el('img'); im.src = s.photo_data; im.alt = 'trap ' + shortCode(s.code); photo.append(im); }
-    else photo.append(el('span', 'hint', 'no photo'));
+    const showPhoto = src => { photo.textContent = ''; const im = el('img'); im.src = src; im.alt = 'trap ' + shortCode(s.code); photo.append(im); };
+    if (s.photo_data) showPhoto(s.photo_data);
+    else photo.append(el('span', 'hint', s.reading_id ? 'reading the photo…' : 'no photo'));
     photo.disabled = !s.reading_id;
     const info = el('div', 'tm-info');
     info.append(weekBars(s));
@@ -161,6 +162,11 @@ export function trapKit(K) {
     const more = el('button', 'btn btn-sm', 'History');
     let readings = null;
     const getReadings = async () => readings || (readings = (await rpc('trap_spot', { p_farm: farm.id, p_spot: s.spot })).readings || []);
+    // the map comes without its photos since 0198 (console 0.7.201): the trap's own is read when the trap is opened
+    if (!s.photo_data && s.reading_id) {
+      const none = () => { photo.textContent = ''; photo.append(el('span', 'hint', 'no photo')); };
+      getReadings().then(r => { const x = r.find(y => y.id === s.reading_id); if (x?.photo_data) { s.photo_data = x.photo_data; showPhoto(x.photo_data); } else none(); }).catch(none);
+    }
     more.onclick = async () => {
       busy(more, true, 'Reading…');
       try {

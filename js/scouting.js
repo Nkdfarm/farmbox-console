@@ -49,7 +49,7 @@
 // when an IPM program runs there, eight weeks as a small calendar (applied and to come, a colour per product) and
 // Apply… to start a program of the library on the tables chosen (js/treatments.js).
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, openFast } from './api.js';
+import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
 import { openViewer, tagChips, photoTitle } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
@@ -106,6 +106,90 @@ async function calm(name, args) {
   }
 }
 
+// ── a report that opens fast (0.7.201, migration 0198, owner 2 Oct 2026: "it takes time to charge the daily report") ──
+// A day is read without its photos (scouting_day_light, a few kB instead of 5 MB); the photos' phone copies come in one
+// answer beside it (scouting_thumbs) and fill the pictures in as they land; a zone's four blocks come in one answer for
+// the whole day (zone_panels) instead of four calls a zone. Every day opens on the copy this device kept, at once, with
+// "updating…" on its line while the database is asked; the screen is drawn again only when the answer differs (owner:
+// "open instantly the old copy with a small logo running like updating data"). Only the pictures of a day before
+// yesterday are not asked again when this device has them — a photo's phone copy does not change — unless one is missing.
+const isOld = dstr => String(dstr) < ymd(new Date(parse(String(over.today)).getTime() - 864e5));
+const thumbMaps = new Map(), pendings = new Map(), panelReads = new Map();
+const thumbsLive = new Set(), thumbsKept = new Set();   // days whose pictures were asked of the database / answered from the copy
+const dayRows = new Map();                              // day → { repaint(), upd } of the row on screen
+// "updating…" on a day's line while something of it is being asked
+function updater() {
+  const node = el('span', 'pd-upd'); node.hidden = true;
+  node.append(el('span', 'spin'), document.createTextNode(' updating…'));
+  node.title = 'Showing the copy this computer kept; asking the database for the latest';
+  let n = 0;
+  return { node, begin() { n++; node.hidden = false; }, end() { n = Math.max(0, n - 1); if (!n) node.hidden = true; } };
+}
+const watched = (dstr, promise) => { const u = dayRows.get(String(dstr))?.upd; u?.begin(); return promise.finally(() => u?.end()); };
+// a picture of a day's report: its phone copy when it is here, else when it lands
+function thumb(im, p, day) {
+  const k = String(day?.day || '');
+  const got = p.photo_data || thumbMaps.get(k)?.[p.id];
+  if (got) { p.photo_data = got; im.src = got; return; }
+  im.classList.add('pd-wait');
+  (pendings.get(k) || pendings.set(k, []).get(k)).push([im, p]);
+  if (thumbsKept.has(k)) liveThumbs(k);            // the kept pictures do not hold this one (a photo put back, a late one)
+}
+function landThumbs(dstr, map) {
+  const k = String(dstr);
+  thumbMaps.set(k, { ...(thumbMaps.get(k) || {}), ...(map || {}) });
+  const all = thumbMaps.get(k);
+  pendings.set(k, (pendings.get(k) || []).filter(([im, p]) => {
+    if (!all[p.id]) return im.isConnected;          // still waiting, unless its picture left the page
+    p.photo_data = all[p.id]; im.src = all[p.id]; im.classList.remove('pd-wait'); return false;
+  }));
+}
+function liveThumbs(dstr) {
+  if (thumbsLive.has(dstr)) return;
+  thumbsLive.add(dstr);
+  watched(dstr, calm('scouting_thumbs', { p_farm: farm.id, p_day: dstr })).then(r => landThumbs(dstr, r?.photos)).catch(() => thumbsLive.delete(dstr));
+}
+async function readThumbs(dstr) {
+  const copy = await cachedRpc('scouting_thumbs', { p_farm: farm.id, p_day: dstr }).catch(() => null);
+  if (copy) landThumbs(dstr, copy.photos);
+  if (copy && isOld(dstr)) { thumbsKept.add(dstr); if ((pendings.get(dstr) || []).length) liveThumbs(dstr); }
+  else liveThumbs(dstr);
+}
+// the four blocks of every zone of a day, read once: the kept copy at once, the database's answer behind it — when it
+// differs the day is drawn again from it. The first ask of each block is answered from that read, a later one (after a
+// change) goes to the database.
+function readPanels(dstr) {
+  if (panelReads.has(dstr)) return panelReads.get(dstr);
+  const a = { p_farm: farm.id, p_day: dstr };
+  const live = () => watched(dstr, calm('zone_panels', a));
+  const p = cachedRpc('zone_panels', a).catch(() => null).then(copy => {
+    if (!copy) return live();
+    live().then(fresh => {
+      if (JSON.stringify(fresh) === JSON.stringify(copy) || panelReads.get(dstr) !== p) return;
+      panelReads.set(dstr, Promise.resolve(fresh));
+      dayRows.get(dstr)?.repaint();
+    }).catch(() => {});
+    return copy;
+  });
+  panelReads.set(dstr, p); p.catch(() => panelReads.delete(dstr));
+  return p;
+}
+function panelCall(dstr) {
+  const used = new Set();
+  return async (name, args) => {
+    const key = name + '|' + (args.p_system || args.p_zone);
+    const plain = name !== 'sump_history' || (args.p_days === 30 && !args.p_sump);
+    if (plain && !used.has(key)) {
+      used.add(key);
+      try {
+        const hit = (await readPanels(dstr))?.units?.[args.p_system || args.p_zone]?.[name];
+        if (hit != null) return hit;
+      } catch (e) { /* asked one by one below */ }
+    }
+    return calm(name, args);
+  };
+}
+
 export async function renderScouting(container, currentFarm) {
   if (farm?.id !== currentFarm.id) {
     dayData.clear(); cropFilter = null;
@@ -132,7 +216,7 @@ async function load(fresh = false) {
       kit = tmap ? trapKit({ farm, data: tmap, reload }) : null;
       useFarm(farm, catalog);
       moreDone = dates.length < 21;
-      dayData.clear();
+      dayData.clear(); panelReads.clear(); pendings.clear(); dayRows.clear(); thumbsLive.clear(); thumbsKept.clear();
       paint();
     },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the farm…')); },
@@ -444,6 +528,8 @@ function dayRow(d, openFirst, latest = false) {
   });
   const rbDay = robotDay(d.day);
   if (rbDay.length) { const p = el('span', 'pill' + (rbDay.some(r => r.status === 'new') ? ' warn' : ''), `robot ${rbDay.length}`); p.title = 'Observations the robot sent that day'; facts.append(p); }
+  const upd = updater();
+  facts.append(upd.node);
   sum.append(facts);
   det.append(sum);
   const body = el('div', 'pd-day-body');
@@ -452,9 +538,29 @@ function dayRow(d, openFirst, latest = false) {
     if (body.dataset.done) return;
     body.dataset.done = '1';
     body.append(el('div', 'hint', 'Reading the day…'));
-    let day = dayData.get(d.day);
-    try { if (!day) { day = await calm('scouting_day', { p_farm: farm.id, p_day: d.day }); dayData.set(d.day, day); } }
-    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); delete body.dataset.done; return; }
+    const a = { p_farm: farm.id, p_day: d.day };
+    let day = dayData.get(d.day), shown = null;
+    dayRows.set(String(d.day), { upd, repaint: () => { const x = dayData.get(d.day); if (x && body.isConnected) paintDay(x); } });
+    readThumbs(String(d.day));               // the pictures, beside the report: they fill in as they land
+    if (!day) {
+      upd.begin();
+      try {
+        // this device's copy at once, the database's answer behind it
+        const copy = await cachedRpc('scouting_day_light', a).catch(() => null);
+        if (copy) { shown = JSON.stringify(copy); dayData.set(d.day, copy); paintDay(copy); }
+        day = await calm('scouting_day_light', a);
+        dayData.set(d.day, day);
+      } catch (e) {
+        if (!shown) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); delete body.dataset.done; }
+        else body.prepend(el('div', 'hint', 'Could not reach the database: this is the copy kept on this computer.'));
+        return;
+      } finally { upd.end(); }
+    }
+    if (shown !== JSON.stringify(day)) paintDay(day);
+  };
+  const paintDay = day => {
+    // the zones a person opened or closed stay as they were when the fresh answer repaints the day
+    const was = new Map([...body.querySelectorAll('.pd-zone-band')].map(b => [b.dataset.unit, b.open]));
     body.textContent = '';
     // only a Not OK says anything here, in one line: its why (0174; the sections are on the date's line)
     const tk = day.task;
@@ -468,7 +574,10 @@ function dayRow(d, openFirst, latest = false) {
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
     else if (!full.length && !rbDay.length && !(robotNames() && String(d.day) === String(over.today))) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
-    full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true; body.append(b); });
+    full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true;
+      b.dataset.unit = z.unit_id || z.zone_id || z.name;
+      if (was.has(b.dataset.unit) && was.get(b.dataset.unit) !== b.open) b.open = was.get(b.dataset.unit);
+      body.append(b); });
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
     // the robot's rows that name no zone of the day's bands: one line under the zones (not in a zone's own report)
     const loose = rbDay.filter(r => !full.some(z => robotIn(z, [r]).length));
@@ -621,7 +730,7 @@ async function openRemoved() {
 
 function trapCard(p, z, day) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
-  const im = el('img'); im.src = p.photo_data || ''; im.alt = `trap ${p.code}`; im.loading = 'lazy';
+  const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
   head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
@@ -662,7 +771,7 @@ function trapCurve(pts, th) {
 
 function photoFig(p, z, day) {
   const fig = el('figure', 'sc-fig' + (p.dot ? ' ' + p.dot : ''));
-  const im = el('img'); im.src = p.photo_data || ''; im.alt = photoTitle(p); im.loading = 'lazy';
+  const im = el('img'); im.alt = photoTitle(p); im.loading = 'lazy'; thumb(im, p, day);
   fig.append(im);
   const cap = el('figcaption');
   const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
@@ -775,8 +884,9 @@ function healthSection(z, day, health, traps, growth = []) {
   left.append(growthPart(z, day, growth));
   // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
   const right = el('div', 'pd-hright');
-  const treat = treatBlock(farm, z, day, calm, reload);   // the IPM programs on this zone's tables (0197)
-  const sump = sumpBlock(farm, z, day, calm);
+  const call = panelCall(String(day.day));               // the zone's four blocks come in one answer for the day (0198)
+  const treat = treatBlock(farm, z, day, call, reload);   // the IPM programs on this zone's tables (0197)
+  const sump = sumpBlock(farm, z, day, call);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
   // the insects a day sit on top of the trap map, in one block (0.7.190)
@@ -790,10 +900,10 @@ function healthSection(z, day, health, traps, growth = []) {
     sec.dataset.loaded = '1';
     sump.load();
     treat.load();
-    calm('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
+    call('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
       .then(g => { gcurve.textContent = ''; const c = growthCurve(g); if (c) gcurve.append(c); }).catch(() => {});
     try {
-      const h = await calm('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
+      const h = await call('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
       curve.textContent = '';
       const strip = insectStrip(h, z);
       curve.append(strip);

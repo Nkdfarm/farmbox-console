@@ -87,6 +87,20 @@ const cropInZone = c => { const u = cur(); if (!u) return true;
   return u.system_id ? (c.system_ids || []).includes(u.system_id) : (c.zones || []).some(z => z.id === u.zone_id); };
 const caseInZone = k => !zoneFilter || inUnit(cur(), k.zone_id, k.system_id);
 const dayData = new Map();          // day → scouting_day, read when the day is opened
+// The reads a report makes when it opens (0.7.188, owner 2 Oct 2026: "canceling statement due to statement timeout" on
+// today's and yesterday's reports, right after an update): two days of five zones asked for 30 curves at once while the
+// console was saving every page for offline, and the database cancels a statement after 8 s. Now three at a time, and a
+// read the database cancelled or that never arrived is asked again, twice, a little later.
+let running = 0; const waiting = [];
+const pump = () => { while (running < 3 && waiting.length) { running++; const [fn, res, rej] = waiting.shift(); fn().then(res, rej).finally(() => { running--; pump(); }); } };
+const queued = fn => new Promise((res, rej) => { waiting.push([fn, res, rej]); pump(); });
+const BUSY = /statement timeout|canceling statement|timed out|Failed to fetch|NetworkError|57014|50[234]/i;
+async function calm(name, args) {
+  for (let i = 0; ; i++) {
+    try { return await queued(() => rpc(name, args)); }
+    catch (e) { if (i >= 2 || !BUSY.test(String(e.message || e))) throw e; await new Promise(r => setTimeout(r, 1500 * (i + 1))); }
+  }
+}
 
 export async function renderScouting(container, currentFarm) {
   if (farm?.id !== currentFarm.id) {
@@ -378,7 +392,7 @@ function dayRow(d, openFirst, latest = false) {
     body.dataset.done = '1';
     body.append(el('div', 'hint', 'Reading the day…'));
     let day = dayData.get(d.day);
-    try { if (!day) { day = await rpc('scouting_day', { p_farm: farm.id, p_day: d.day }); dayData.set(d.day, day); } }
+    try { if (!day) { day = await calm('scouting_day', { p_farm: farm.id, p_day: d.day }); dayData.set(d.day, day); } }
     catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); delete body.dataset.done; return; }
     body.textContent = '';
     // only a Not OK says anything here, in one line: its why (0174; the sections are on the date's line)
@@ -699,7 +713,7 @@ function healthSection(z, day, health, traps, growth = []) {
   left.append(growthPart(z, day, growth, gcurve));
   // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
   const right = el('div', 'pd-hright');
-  const sump = sumpBlock(farm, z, day);
+  const sump = sumpBlock(farm, z, day, calm);
   const curve = el('div', 'pd-hcurve');
   curve.append(el('div', 'hint', 'Reading the curve…'));
   right.append(sump, curve, trapBlock(z, day, traps));
@@ -709,10 +723,10 @@ function healthSection(z, day, health, traps, growth = []) {
     if (sec.dataset.loaded) return;
     sec.dataset.loaded = '1';
     sump.load();
-    rpc('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
+    calm('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
       .then(g => { gcurve.textContent = ''; const c = growthCurve(g); if (c) gcurve.append(c); }).catch(() => {});
     try {
-      const h = await rpc('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
+      const h = await calm('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
       curve.textContent = '';
       curve.append(zoneCurve(h, z));
     } catch (e) { curve.textContent = ''; curve.append(el('div', 'note bad', e.message)); delete sec.dataset.loaded; }

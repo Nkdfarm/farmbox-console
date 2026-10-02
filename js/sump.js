@@ -109,15 +109,23 @@ function paintBlock(box, farm, h) {
   box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
 }
 
-// the block; .load() reads it once, when its zone band opens
-export function sumpBlock(farm, z, day) {
+// the block; .load() reads it once, when its zone band opens; a zone and day already read are not asked again when the
+// page repaints (0.7.188). `call` is the page's own way of asking (three at a time, asked again when cancelled).
+const blockReads = new Map();
+export function sumpBlock(farm, z, day, call = rpc) {
   const box = el('div', 'pd-sump');
   box.append(el('div', 'hint', 'Reading the sump…'));
   box.load = async () => {
     if (box.dataset.loaded) return;
     box.dataset.loaded = '1';
     try {
-      paintBlock(box, farm, await rpc('sump_history', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day, p_days: 30, p_sump: null }));
+      const key = [farm.id, z.zone_id, z.system_id || '', day.day].join('|');
+      if (!blockReads.has(key)) {
+        if (blockReads.size > 60) blockReads.clear();
+        const p = call('sump_history', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day, p_days: 30, p_sump: null });
+        blockReads.set(key, p); p.catch(() => blockReads.delete(key));
+      }
+      paintBlock(box, farm, await blockReads.get(key));
     } catch (e) {
       // a database from before 0190 has no sump history: the block says so and stays out of the way
       box.textContent = ''; box.append(el('div', 'pd-hlabel', 'Sump'), el('div', 'hint', /sump_history/.test(e.message) ? 'Not available on this database yet.' : e.message));

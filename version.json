@@ -1,5 +1,5 @@
 {
-  "version": "0.7.187",
+  "version": "0.7.188",
   "released": "2026-10-02",
-  "note": "Scouting: the sump (EC, pH, temperature) over time, growth beside plant health, a ✕ to remove a photo"
+  "note": "Scouting: a report no longer fails with a statement timeout when the database is busy"
 }

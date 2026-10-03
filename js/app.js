@@ -1,6 +1,6 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select, rpc,
-         connection, onConnection, newPage, reconnect } from './api.js';
+         connection, onConnection, newPage, reconnect, pruneData } from './api.js';
 import { el, toast, icon, avatar, pref, setPhotos, loading } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek, nextWeek } from './week.js';
@@ -269,10 +269,19 @@ function forgetConversations() {
   try { Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_') && k !== 'fbc_ai_open').forEach(k => localStorage.removeItem(k)); }
   catch { /* storage off: nothing kept either */ }
 }
+// the next person on this tab starts from nothing (review 3 Oct 2026): with `booted` still true from
+// the last person, a start that failed on the network was never retried and a reconnect drew the
+// last person's farm with the new token
+function resetState() {
+  booted = false; farm = null; farms = []; choices = []; myRoles = [];
+  startError = null; startRetried = false; bootBar = null;
+  const pick = $('farmPick'); if (pick) pick.textContent = '';
+}
 function doSignOut() {
   warmed.clear();   // the next person on this tab gets their own offline copies
   forgetConversations();
   signOut();
+  resetState();
   location.hash = '';
   showSignin();
 }
@@ -280,7 +289,7 @@ $('signout').addEventListener('click', doSignOut);
 // a session refused in the middle of the day: back to the form, the offline copies cleared (0.7.112)
 addEventListener('fbc:session-ended', () => {
   if ($('shell').hidden) return;
-  warmed.clear(); forgetConversations(); signOut(); location.hash = '';
+  warmed.clear(); forgetConversations(); signOut(); resetState(); location.hash = '';
   showSignin('Your session has ended. Sign in again.');
 });
 
@@ -316,7 +325,7 @@ async function loadFarms() {
   // minutes ago cannot be configured: it is exactly the farm somebody needs
   // to open. Its state is shown beside the name rather than hidden.
   farms = await select('farm',
-    'select=id,name,code,status,org_id,operating_days,sister_group,badge_label,badge_colour,created_at&status=in.(active,setup)&order=name');
+    'select=id,name,code,status,org_id,operating_days,sister_group,badge_label,badge_colour,created_at,currency,nursery_default,timezone&status=in.(active,setup)&order=name');
   // sister units are one site (0.7.158): oldest first, its id the home unit's
   const groups = new Map();
   farms.filter(f => f.sister_group).forEach(f => { if (!groups.has(f.sister_group)) groups.set(f.sister_group, []); groups.get(f.sister_group).push(f); });
@@ -354,7 +363,8 @@ async function paintMyRole() {
                      : here ? roleLabel(here.role) + ' here'
                      : 'No role here';
     pill.className = 'pill' + (franchisor || here ? ' ok' : ' warn');
-  } catch { pill.hidden = true; }
+    pill.hidden = false;
+  } catch { myRoles = []; pill.hidden = true; }   // never the previous farm's or person's roles
 }
 
 // Switching FarmBox from anywhere: the picker, or a row on All FarmBoxes.
@@ -426,17 +436,21 @@ function paintConnection({ phase, attempt, attempts, savedAt }) {
 paintConnection(connection());
 $('net').addEventListener('click', () => reconnect());
 
-let wasOnline = connection().online;
+// Redraw only after the console really was offline (or showed a kept copy): one failed request
+// that the first health check answered used to toast "Connected again" and redraw the page,
+// losing its scroll and anything half typed on it (review 3 Oct 2026).
+let wasOffline = !connection().online && connection().phase === 'offline';
 onConnection(state => {
   paintConnection(state);
-  if (state.online && !wasOnline) {
+  if (state.phase === 'offline' || state.savedAt != null) wasOffline = true;
+  if (state.online && wasOffline) {
+    wasOffline = false;
     // Back: replace the copy on screen with the real thing, or finish a start
     // that the lost signal interrupted.
     toast('Connected again', 'ok');
     if (!booted) { if (getSession()) start(); }
     else route();
   }
-  wasOnline = state.online;
 });
 
 // Read every page's data ahead, once per farm per visit, so a page never
@@ -519,7 +533,9 @@ async function paintPestDot() {
   if (!a || !farm) return;
   // a site: the worst of its units (0.7.158)
   const rank = { red: 3, orange: 2, green: 1 };
+  const asked = farm;
   const ds = await Promise.all(unitsOf(farm).map(u => rpcCall('pest_dot', { p_farm: u.id }).catch(() => null)));
+  if (farm !== asked) return;              // switched FarmBox meanwhile: that farm's dot is not this one's
   const d = ds.reduce((a, x) => (rank[x] || 0) > (rank[a] || 0) ? x : a, null);
   a.querySelector('.rail-dot')?.remove();
   if (d) {
@@ -567,8 +583,8 @@ async function route() {
     if (farm.site && PAGE_KIND[key]) await renderUnits(view, farm, key, tab, PAGE_KIND[key]);
     else await tab[2](view, farm, { switchFarm, reloadFarms: loadFarms, site: farm.site ? farm : null });
   } catch (err) {
-    page.textContent = '';
-    page.append(el('div', 'note bad', err.message));
+    if (!view.isConnected) return;         // a page already left: its error is not this page's
+    view.replaceChildren(el('div', 'note bad', err.message));
   }
 }
 
@@ -587,7 +603,13 @@ let booted = false;
 // The start-up, step by step (0.7.105): signing in, the FarmBoxes, the role, then the
 // page, which carries on with its own bar while it reads.
 let bootBar = null;
-async function start() {
+// one start at a time: the 4 s retry, a reconnect and Try again could each run one
+let starting = null;
+function start() {
+  starting ||= startOnce().finally(() => { starting = null; });
+  return starting;
+}
+async function startOnce() {
   $('signin').hidden = true;
   $('shell').hidden = false;
   bootBar = loading('Signing in…', 8);
@@ -625,11 +647,13 @@ async function start() {
     bootBar.set(70, 'Checking your role…');
     await paintMyRole();
     bootBar.set(85, 'Opening the page…');
-    if (!location.hash) location.hash = '#/' + startPage();
+    // replaceState, not location.hash: that queued a hashchange and drew the start page twice
+    if (!location.hash) history.replaceState(null, '', '#/' + startPage());
     booted = true;
     bootBar = null;
     await route();
     warm();
+    setTimeout(() => pruneData(), 60_000);   // old offline copies out, once the page and warm() are done
   } catch (err) {
     // The server answering "no" about who you are is a dead session: expired or
     // revoked (401), or the account itself deleted (403, "user from sub claim

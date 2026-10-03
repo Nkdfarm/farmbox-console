@@ -74,7 +74,7 @@ async function load() {
     show: ([d]) => { map = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Drawing the farm…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
+    stillHere: () => here.isConnected && mount === here && view() === 'map',   // not after a switch to the Timeline
   });
 }
 
@@ -345,7 +345,7 @@ function openPosition(p, s, cur) {
     } else {
       const crop = selectBox(fits.map(c => [c.id, c.name]));
       const when = input({ type: 'date', value: p.free_on });
-      const nurs = nurseryField(fits[0]);
+      const nurs = nurseryField(fits[0], farm.nursery_default);
       crop.onchange = () => nurs.set(fits.find(c => c.id === crop.value));
       d.body.append(field('Crop', crop), field('Transplant on', when,
         'Defaults to the day this position is free. The sowing date follows from the cycle.'), nurs.field);

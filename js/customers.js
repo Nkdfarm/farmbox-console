@@ -9,12 +9,12 @@
 // customer took in the last 90 days and when they last had a delivery.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref, curSign } from './ui.js';
 
 export const CUSTOMER_KINDS = [['direct', 'Direct client'], ['super_user', 'Super user'], ['restaurant', 'Restaurant'],
   ['retailer', 'Retailer'], ['community', 'Community'], ['market_agent', 'Market agent'], ['other', 'Other']];
 const kindLabel = k => (CUSTOMER_KINDS.find(x => x[0] === k) || [k, k])[1];
-const money = n => `R ${Math.round(Number(n || 0)).toLocaleString()}`;
+const money = n => `${curSign(farm)} ${Math.round(Number(n || 0)).toLocaleString()}`;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 let farm = null, mount = null, data = null, showInactive = false, kindFilter = '', q = '';
@@ -108,11 +108,14 @@ export function editCustomer(c, onSaved) {
   const channel = selectBox([['direct', 'Direct price'], ['retail', 'Retail price']], c?.channel || 'direct');
   const factor = inp(c?.price_factor ?? 1, { type: 'number', step: '0.05', min: '0.1' });
   const terms = inp(c?.payment_terms_days, { type: 'number', min: '0', placeholder: 'days' });
-  const credit = inp(c?.credit_limit, { type: 'number', min: '0', placeholder: 'R' });
+  const credit = inp(c?.credit_limit, { type: 'number', min: '0', placeholder: curSign(farm) });
   const subOn = el('input'); subOn.type = 'checkbox'; subOn.checked = !!c?.subscription_active;
   const subKg = inp(c?.subscription_kg, { type: 'number', step: '0.5', min: '0', placeholder: 'kg a harvest day' });
   const others = (data?.customers || []).filter(x => x.id !== c?.id && x.kind === 'super_user');
-  const ref = selectBox([['', '—'], ...others.map(x => [x.id, x.name])], c?.referred_by || '');
+  // an inactive referrer (not loaded) stays chosen instead of being cleared on Save
+  const refOpts = others.map(x => [x.id, x.name]);
+  if (c?.referred_by && !refOpts.some(o => o[0] === c.referred_by)) refOpts.push([c.referred_by, c.referred_by_name || 'current']);
+  const ref = selectBox([['', '—'], ...refOpts], c?.referred_by || '');
   const notes = el('textarea', 'input'); notes.value = c?.notes || '';
   const active = el('input'); active.type = 'checkbox'; active.checked = c ? !!c.active : true;
   const g1 = el('div', 'grid2'); g1.append(field('Kind', kind), field('Name', name));

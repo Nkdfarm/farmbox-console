@@ -123,9 +123,9 @@ function paintBlock(box, farm, h) {
   box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
 }
 
-// the block; .load() reads it once, when its zone band opens; a zone and day already read are not asked again when the
-// page repaints (0.7.188). `call` is the page's own way of asking (three at a time, asked again when cancelled).
-const blockReads = new Map();
+// the block; .load() reads it once, when its zone band opens. `call` is the page's own way of asking (three at a time,
+// the day's zone_panels answer first). No cache of its own any more (review 3 Oct 2026): it kept the first answer for
+// the page's whole life, so the "updating…" refresh and a reading just added never reached the block.
 export function sumpBlock(farm, z, day, call = rpc) {
   const box = el('div', 'pd-sump');
   box.append(el('div', 'hint', 'Reading the sump…'));
@@ -133,13 +133,7 @@ export function sumpBlock(farm, z, day, call = rpc) {
     if (box.dataset.loaded) return;
     box.dataset.loaded = '1';
     try {
-      const key = [farm.id, z.zone_id, z.system_id || '', day.day].join('|');
-      if (!blockReads.has(key)) {
-        if (blockReads.size > 60) blockReads.clear();
-        const p = call('sump_history', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day, p_days: 30, p_sump: null });
-        blockReads.set(key, p); p.catch(() => blockReads.delete(key));
-      }
-      paintBlock(box, farm, await blockReads.get(key));
+      paintBlock(box, farm, await call('sump_history', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day, p_days: 30, p_sump: null }));
     } catch (e) {
       // a database from before 0190 has no sump history: the block says so and stays out of the way
       box.textContent = ''; box.append(el('div', 'pd-hlabel', 'Sump'), el('div', 'hint', /sump_history/.test(e.message) ? 'Not available on this database yet.' : e.message));
@@ -155,10 +149,12 @@ export function openSump(farm, { sump, day = null } = {}) {
   const d = drawer('Sump', 'EC, pH and water temperature over time');
   d.box.classList.add('sump-drawer');
   const body = d.body;
+  let readSeq = 0;               // 30 → 365 → another sump clicked quickly: only the last choice draws
   const read = async () => {
+    const my = ++readSeq;
     body.textContent = ''; body.append(el('div', 'hint', 'Reading…'));
-    try { h = await rpc('sump_history', { p_farm: farm.id, p_zone: null, p_system: null, p_day: day, p_days: days, p_sump: cur }); paint(); }
-    catch (e) { body.textContent = ''; body.append(el('div', 'note bad', e.message)); }
+    try { const r = await rpc('sump_history', { p_farm: farm.id, p_zone: null, p_system: null, p_day: day, p_days: days, p_sump: cur }); if (my !== readSeq) return; h = r; paint(); }
+    catch (e) { if (my !== readSeq) return; body.textContent = ''; body.append(el('div', 'note bad', e.message)); }
   };
   const paint = () => {
     body.textContent = '';

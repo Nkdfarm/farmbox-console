@@ -41,11 +41,13 @@ const convo = () => {
   }
   return convos.get(id);
 };
-const save = () => {
-  const f = ctx.farm(); if (!f) return;
+// id: the farm the conversation belongs to — an answer that lands after a switch of FarmBox is saved with its own
+// conversation, not the one now on screen (review 3 Oct 2026)
+const save = (id = ctx.farm()?.id) => {
+  if (!id || !convos.has(id)) return;
   try {
-    const s = JSON.stringify(convo());
-    if (s.length < 3_000_000) localStorage.setItem('fbc_ai_' + f.id, s); else localStorage.removeItem('fbc_ai_' + f.id);
+    const s = JSON.stringify(convos.get(id));
+    if (s.length < 3_000_000) localStorage.setItem('fbc_ai_' + id, s); else localStorage.removeItem('fbc_ai_' + id);
   } catch { /* private window, or full */ }
 };
 
@@ -163,10 +165,10 @@ async function send(text) {
     (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, rpc: a.rpc, args: a.args, summary: a.summary }));
   } catch (e) {
     c.view.push({ role: 'error', text: e.message });
-    if (text) input.value = text;
+    if (ctx.farm()?.id === f.id) { if (text) input.value = text; if (!files.length) { files = sent; paintFiles(); } }   // the attachments too
   }
   busyRow.hidden = true; sendBtn.disabled = false; sending = false;
-  save(); paint();
+  save(f.id); paint();
 }
 
 function paintFiles() {

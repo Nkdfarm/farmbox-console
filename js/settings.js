@@ -115,10 +115,11 @@ function switchBox(on, onChange, label) {
   b.setAttribute('role', 'switch');
   b.setAttribute('aria-checked', String(on));
   b.setAttribute('aria-label', label);
-  b.onclick = () => {
+  b.onclick = async () => {
     const next = b.getAttribute('aria-checked') !== 'true';
     b.setAttribute('aria-checked', String(next));
-    onChange(next);
+    // a change the server refused puts the switch back: it used to read "on" while the server still said off
+    try { await onChange(next); } catch { b.setAttribute('aria-checked', String(!next)); }
   };
   return b;
 }
@@ -210,7 +211,7 @@ function taskFeedback(ctx) {
         hint.textContent = words(now);
         toast(on ? 'Feedback switched on — the phones show the 💬 button at their next sync' : 'Feedback switched off', 'ok');
         ctx.refresh?.();
-      } catch (e) { toast(e.message, 'bad'); }
+      } catch (e) { toast(e.message, 'bad'); throw e; }
     }, 'Feedback on tasks'));
   }).catch(e => { hint.textContent = e.message; });
   return list;
@@ -250,7 +251,7 @@ function aiScan(ctx) {
         paint(st);
         toast(on ? 'Automatic AI scan on — new photos are read within ten minutes' : 'Automatic AI scan off', 'ok');
         ctx.refresh?.();
-      } catch (e) { toast(e.message, 'bad'); }
+      } catch (e) { toast(e.message, 'bad'); throw e; }
     }, 'Automatic AI scan'));
     const cap = el('input'); cap.type = 'number'; cap.min = 1; cap.max = 500; cap.step = 1; cap.value = st.cap;
     cap.setAttribute('aria-label', 'Most photos a day'); cap.style.width = '5.5em';

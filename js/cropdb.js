@@ -351,7 +351,7 @@ async function openPlan(full) {
       posBox.append(lbl);
     });
   };
-  const nurs = nurseryField(crops.find(x => x.id === crop.value));
+  const nurs = nurseryField(crops.find(x => x.id === crop.value), farm.nursery_default);
   crop.onchange = () => { nurs.set(crops.find(x => x.id === crop.value)); paintZones(); };
   zone.onchange = paintPositions;
   paintZones();
@@ -380,8 +380,10 @@ async function openPlan(full) {
     try {
       const v = ids.length ? await rpc('validate_crop_plan', { p_ids: ids }) : { validated: 0, tasks_created: 0 };
       d.close();
+      const clash = (v.conflicts || []).length;   // overlapping proposals stay unvalidated: say so
       toast(`${v.validated} batch${v.validated === 1 ? '' : 'es'} planned · ${v.tasks_created} task${v.tasks_created === 1 ? '' : 's'} created` +
-            (refused.length ? ` · ${refused.length} refused — ${refused.join('; ')}` : ''), refused.length ? 'bad' : 'ok');
+            (clash ? ` · ${clash} not validated: another batch holds the position then` : '') +
+            (refused.length ? ` · ${refused.length} refused — ${refused.join('; ')}` : ''), refused.length || clash ? 'bad' : 'ok');
       await load();
     } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); await load(); }
   };

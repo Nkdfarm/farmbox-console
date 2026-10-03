@@ -96,10 +96,12 @@ export async function renderWeek(container, currentFarm) {
 }
 let refreshTimer = null;
 // read the weeks on screen again, quietly: the board is redrawn only when something moved, and stays where it was scrolled
+let loadGen = 0;          // bumped by load(): a minute's refresh read before a change must not undo it on screen
 async function refresh() {
-  const mondays = mondaysOnScreen(), here = mount;
+  const mondays = mondaysOnScreen(), here = mount, gen = loadGen;
   try {
     const got = await Promise.all(mondays.map(m => rpc('labour_week', { p_farm: farm.id, p_week: m })));
+    if (gen !== loadGen) return;
     if (!here.isConnected || mount !== here || mondaysOnScreen().join() !== mondays.join()) return;
     if (manual.on || dragging || document.querySelector('.drawer')) return;
     if (!got.some((g, i) => JSON.stringify(g) !== JSON.stringify(weeks.get(mondays[i])))) return;
@@ -136,6 +138,7 @@ const mayPlanNow = () => !!(data?.may_plan) && data?.plan?.status !== 'locked';
 
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
+  loadGen++;
   const here = mount, mondays = mondaysOnScreen(), onScreen = mondays.join();
   await openFast(mondays.map(m => ['labour_week', { p_farm: farm.id, p_week: m }]), {
     show: got => {
@@ -206,6 +209,13 @@ function timeWord(t) {
   if (t.date < today()) return say('Not done', timedBy(t), 'late');
   if (m < 1) return null;
   return say('To continue', timedBy(t), '');     // started and given back: free for anybody (a held one says 🔒 Paused above)
+}
+// a day's line from every task of that day the other filters leave — whatever the Status filter says: under the
+// default "open" every done task was gone and the line read "0 of 2 done" (review 3 Oct 2026)
+function dayLine(date) {
+  const st = filters.status;
+  filters.status = 'all';
+  try { return dayWorked(visible(tasksOnScreen()).filter(t => t.date === date)); } finally { filters.status = st; }
 }
 // a day's line: 5 of 8 done · 3 h 10 worked
 function dayWorked(list) {
@@ -480,6 +490,10 @@ function filterBar() {
   bar.append(q);
 
   const sel = (key, label, options) => {
+    // a remembered filter with nothing on screen still shows in its menu (it used to read blank while hiding everything)
+    const v = filters[key];
+    if (v && key !== 'status' && !options.some(o => o[0] === v))
+      options = [...options, [v, (key === 'worker' || key === 'unit' ? 'Chosen' : v) + ' (none here)']];
     const s = selectBox([['', label], ...options], filters[key] || '');
     s.setAttribute('aria-label', label);
     const isOn = () => key === 'status' ? filters.status !== 'open' : !!filters[key];
@@ -589,7 +603,7 @@ function weekBoard(tasks) {
     head.append(el('span', null, shortDay(date)), el('span', 'tk-count', n ? String(n) : ''));
     if (hol) head.append(el('span', 'tk-hol', hol));
     // what the day came to: done and worked, once anything is done or timed (0.7.163)
-    const dw = dayWorked(tasks.filter(t => t.date === date));
+    const dw = dayLine(date);
     if (dw.done || dw.worked >= 1) { const x = el('span', 'tk-worked', dw.text); head.append(x); }
     grid.append(head);
   }
@@ -614,7 +628,7 @@ function dayView(tasks) {
   const list = tasks.filter(t => t.date === day).sort(byTime);
   if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
-  box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h planned · ${dayWorked(list).text}`));
+  box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h planned · ${dayLine(day).text}`));
   BANDS.forEach(slot => {
     const part = list.filter(t => bandOf(t) === slot);
     const band = el('div', 'tk-band ' + slot);
@@ -669,9 +683,9 @@ function listView(tasks) {
     head.append(el('b', null, longDate(date)));
     const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
     head.append(el('span', 'pill', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h`));
-    const dw = dayWorked(list);
+    const dw = dayLine(date);
     if (dw.done || dw.worked >= 1) head.append(el('span', 'pill ok', dw.text));
-    const none = list.filter(t => !t.workers.length && t.status !== 'done').length;
+    const none = list.filter(t => !(t.workers || []).length && isOpenTask(t)).length;   // a cancelled task needs nobody
     if (none) head.append(el('span', 'pill bad', `${none} with nobody`));
     card.append(head);
     const wrap = el('div', 'table-wrap');
@@ -791,11 +805,14 @@ function dropTarget(cell, date, slot) {
     const sameDay = t.date === date;
     const sameSlot = slot === null || bandOf(t) === slot;
     if (sameDay && sameSlot) return;
+    // a folded card moves every open zone of the day, not only those a filter leaves; a refusal half way
+    // (0201: that day has the zone already) reloads, so the board shows what really moved
+    const ids = (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
     try {
-      for (const id of openIds(t)) await rpc('move_task', { p_task: id, p_date: date, p_slot: slot });   // a folded card: every zone
+      for (const id of ids) await rpc('move_task', { p_task: id, p_date: date, p_slot: slot });
       toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}`, 'ok');
-      await load();
     } catch (err) { toast(err.message, 'bad'); }
+    finally { await load(); }
   };
 }
 

@@ -87,7 +87,7 @@ export function aiModelLine() {
     (st.functions || []).forEach(f => {
       const row = el('div', 'set-row ac-fn');
       const t = el('div', 'set-text');
-      const uses = st.options.find(o => o.model === f.uses);
+      const uses = (st.options || []).find(o => o.model === f.uses);
       t.append(el('b', null, f.label),
         el('small', null, `Uses ${nameOf(st, f.uses)}${uses ? ' (' + price(uses) + ')' : ''}` +
           (f.model ? ' — its own choice' : st.model ? ' — the general choice' : ' — the model it was written for')));

@@ -193,7 +193,7 @@ function editCost(e) {
     busy(go, true, 'Saving…');
     try {
       await rpc('save_cost', { p_farm: farm.id, p: { id: e?.id || null, day: day.value, category: cat.value, kind: kind.value, amount: amount.value,
-        description: desc.value, supplier: sup.value, crop_plan_id: e?.crop_plan_id || null } });
+        description: desc.value, supplier: sup.value, crop_plan_id: e?.crop_plan_id || null, zone_id: e?.zone_id || null } });   // an edit kept the zone it had
       d.close(); load(true);
     } catch (x) { busy(go, false, 'Save'); toast(x.message, 'bad'); }
   };

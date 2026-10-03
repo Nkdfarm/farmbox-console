@@ -9,7 +9,7 @@
 // Bump CACHE when the shell changes; the old one is deleted on activate.
 // TAG is the ?v= index.html puts on styles.css and app.js: the two must match
 // (the precached URL is the requested URL), so bump both together.
-const TAG = '20261003a';
+const TAG = '20261003b';
 const CACHE = 'farmbox-console-' + TAG;
 
 const SHELL = [
@@ -18,31 +18,52 @@ const SHELL = [
   './styles.css?v=' + TAG,
   './manifest.json',
   './js/app.js?v=' + TAG,
+  // every module: app.js imports them all at start, and one missing offline leaves a blank console
+  './js/aicost.js',
   './js/api.js',
-  './js/ui.js',
-  './js/people.js',
-  './js/week.js',
-  './js/farm.js',
-  './js/crops.js',
-  './js/dashboard.js',
-  './js/weather.js',
-  './js/update.js',
-  './js/procedures.js',
-  './js/procedure-edit.js',
+  './js/assistant.js',
+  './js/baskets.js',
+  './js/cases.js',
   './js/catalog.js',
+  './js/connect.js',
   './js/crop-edit.js',
-  './js/families.js',
   './js/cropdb.js',
-  './js/maintenance.js',
-  './js/purchasing.js',
-  './js/prices.js',
-  './js/reports.js',
-  './js/network.js',
-  './js/issues.js',
+  './js/crops.js',
+  './js/customers.js',
+  './js/dashboard.js',
+  './js/families.js',
+  './js/farm.js',
   './js/feedback.js',
-  './js/ipm.js',
+  './js/forecast.js',
   './js/harvest.js',
+  './js/hours.js',
+  './js/ipm.js',
+  './js/issues.js',
+  './js/maintenance.js',
+  './js/money.js',
+  './js/network.js',
+  './js/orders.js',
+  './js/people.js',
+  './js/prices.js',
+  './js/procedure-edit.js',
+  './js/procedures.js',
+  './js/purchasing.js',
+  './js/reports.js',
+  './js/robot.js',
+  './js/scouting.js',
   './js/settings.js',
+  './js/sump.js',
+  './js/timeline.js',
+  './js/trapmap.js',
+  './js/treatments.js',
+  './js/ui.js',
+  './js/update.js',
+  './js/validation.js',
+  './js/viewer.js',
+  './js/weather.js',
+  './js/week.js',
+  './js/yield.js',
+  './scale-card.html',
   './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -88,7 +109,9 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(req.url, { cache: 'no-cache' })
       .then(res => {
-        if (res && res.ok) {
+        // a URL with a query other than ?v= (version.json?t=…, update.js?probe=…, ?updated=…) is
+        // asked once and never again: keeping each would grow the cache by an entry a minute
+        if (res && res.ok && (!url.search || /^\?v=[^&]*$/.test(url.search))) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy));
         }

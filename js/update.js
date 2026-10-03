@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.7.205';
+export const VERSION = '0.7.206';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -42,8 +42,12 @@ export function watchForUpdates() {
   addEventListener('focus', check);
 }
 
+let lastCheck = 0;
 async function check() {
   if (updating) return;
+  // focus and visibilitychange fire together: two checks milliseconds apart met the "said twice" guard at once
+  if (Date.now() - lastCheck < 20_000) return;
+  lastCheck = Date.now();
   const latest = (await checkForUpdate())?.version;
   if (updating) return;
   // The server behind version.json is a CDN: right after a deploy it can say
@@ -154,19 +158,10 @@ async function update(latest) {
   updating = true;
   document.getElementById('updateCard')?.remove();
   await step(10, 'Preparing the update');
-  try {
-    await step(30, 'Stopping the old version');
-    const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
-    await Promise.all(regs.map(r => r.unregister()));
-    await step(55, 'Clearing the old copy');
-    // the shell only: fbc-data is the farm's data kept for reading offline
-    const keys = await caches?.keys() ?? [];
-    await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
-  } catch { /* whatever is left, the new URL still wins */ }
-  await step(75, `Downloading ${latest}`);
+  // the new files first: when they have not reached this connection yet, the old worker and its shell cache
+  // stay, so the console still opens offline (they used to be removed before the check)
+  await step(30, `Downloading ${latest}`);
   await refreshShell();
-  // Reloading into the old files is the loop the owner saw: the new files must
-  // be reachable from here before the page is thrown away.
   if (!(await arrived(latest))) {
     updating = false;
     notYet = Date.now();
@@ -174,6 +169,16 @@ async function update(latest) {
     hideTimer = setTimeout(() => { const s = slot(); if (s) { s.hidden = true; s.textContent = ''; } }, 8000);
     return;
   }
+  try {
+    await step(55, 'Stopping the old version');
+    const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
+    await Promise.all(regs.map(r => r.unregister()));
+    await step(75, 'Clearing the old copy');
+    // the shell only: fbc-data is the farm's data kept for reading offline
+    const keys = await caches?.keys() ?? [];
+    await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
+  } catch { /* whatever is left, the new URL still wins */ }
+  // Reloading into the old files is the loop the owner saw: the new files were checked above.
 
   set(sessionStorage, TARGET, latest);
   const params = new URLSearchParams(location.search);

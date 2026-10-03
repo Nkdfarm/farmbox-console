@@ -69,6 +69,7 @@ function row(b) {
   phase.value = b.current_phase || b.planned_phase?.phase_type || 'vegetative';
   const days = el('input', 'input'); days.type = 'number'; days.min = '0'; days.max = '365'; days.value = dated ? Math.max(0, Number(b.days_to_harvest)) : '';
   const kg = el('input', 'input'); kg.type = 'number'; kg.min = '0'; kg.step = '0.5'; kg.value = Math.round(Number(b.expected_kg || 0) * 10) / 10;
+  const kgShown = kg.value;          // compared with what was shown, not the unrounded figure (each Save rewrote it)
   [phase, days, kg].forEach(x => { x.disabled = !may; });
   const f = el('div', 'fc-fields');
   const lab = (t, x) => { const w = el('label', 'fc-f'); w.append(el('span', 'hint', t), x); return w; };
@@ -80,13 +81,13 @@ function row(b) {
     same.title = 'Confirm: it is where the plan says';
     same.onclick = () => save(same, b, b.planned_phase?.phase_type || phase.value, Number(b.days_to_harvest), null);
     const go = el('button', 'btn btn-sm btn-primary', 'Save');
-    go.onclick = () => { if (days.value === '') { toast('How many days to harvest?', 'bad'); return; } save(go, b, phase.value, Number(days.value), Number(kg.value) !== Number(b.expected_kg) ? Number(kg.value) : null); };
+    go.onclick = () => { if (days.value === '') { toast('How many days to harvest?', 'bad'); return; } save(go, b, phase.value, Number(days.value), kg.value !== '' && kg.value !== kgShown ? Number(kg.value) : null); };
     if (dated) acts.append(same);
     acts.append(go);
     if (b.camera) {
       const cam = el('button', 'btn btn-sm btn-ghost', `Camera: ${b.camera.days_to_harvest ?? '—'} d · ${b.camera.kg_est != null ? Math.round(b.camera.kg_est) + ' kg' : '—'}`);
       cam.title = 'Fill in what the camera estimated, then Save';
-      cam.onclick = () => { if (b.camera.days_to_harvest != null) days.value = b.camera.days_to_harvest; if (b.camera.kg_est != null) kg.value = Math.round(b.camera.kg_est); if (b.camera.stage) phase.value = b.camera.stage; };
+      cam.onclick = () => { if (b.camera.days_to_harvest != null) days.value = b.camera.days_to_harvest; if (b.camera.kg_est != null) kg.value = Math.round(b.camera.kg_est); if (b.camera.stage && PHASES.some(([v]) => v === b.camera.stage)) phase.value = b.camera.stage; };
       acts.append(cam);
     }
   }

@@ -248,6 +248,9 @@ export function trapCheckPill(check, total) {
 }
 
 // A local date, printed short. Never through toISOString.
+// the farm's money sign: R for a South African farm, else its currency code (farm.currency, 0028)
+export const curSign = farm => !farm?.currency || farm.currency === 'ZAR' ? 'R' : farm.currency;
+
 export function shortDate(s) {
   if (!s) return '—';
   const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
@@ -459,13 +462,19 @@ export function loading(text = 'Reading…', pct = null) {
 // Internal or external nursery for a batch (0101). The field hides itself for a
 // crop that starts in place (no nursery phase: microgreens, strawberry runners).
 export const NURSERY = [['internal', 'Internal nursery — we sow them'], ['external', 'External nursery — we order them']];
-export function nurseryField(crop) {
+// farmDefault: the farm's nursery_default (FarmBox1 orders everything) wins over the crop's own.
+// value() is null until the person changes the menu, so the database's default decides — a
+// batch planned at FarmBox1 used to be switched to "we sow them" by the field's untouched
+// "internal" (review 3 Oct 2026).
+export function nurseryField(crop, farmDefault = null) {
   const sel = selectBox(NURSERY, 'internal');
+  let touched = false;
+  sel.addEventListener('change', () => { touched = true; });
   const f = field('Seedlings', sel, 'Internal: the sowing is planned in our nursery from the cycle. External: an Office task '
     + 'orders them from the nursery in time (with the farm\'s spare, at most 3 %), and a task receives them the working day before the transplant.');
-  const set = c => { f.style.display = c?.nursery ? '' : 'none'; if (c?.nursery) sel.value = c.nursery; };
+  const set = c => { f.style.display = c?.nursery ? '' : 'none'; if (c?.nursery && !touched) sel.value = farmDefault || c.nursery; };
   set(crop);
-  return { field: f, select: sel, set, value: () => f.style.display === 'none' ? null : sel.value };
+  return { field: f, select: sel, set, value: () => f.style.display === 'none' || !touched ? null : sel.value };
 }
 const dm = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
 export function nurseryLine(b) {

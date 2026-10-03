@@ -103,7 +103,7 @@ function paint() {
   const ent = data.entries || [];
   const rec = el('div', 'card card-pad');
   rec.append(el('div', 'sec-title', `Clock record · ${ent.length}`));
-  if (!ent.length) rec.append(el('div', 'hint', 'Nobody has clocked in during this period. People clock in and out on Naked Brain (the phone).'));
+  if (!ent.length) rec.append(el('div', 'hint', 'Nothing recorded in this period. Hours come from the task timers on Naked Brain (the phone); a manager can add them here.'));
   else {
     const t2 = el('table', 'table');
     t2.innerHTML = '<thead><tr><th>Person</th><th>In</th><th>Out</th><th class="num">Time</th><th>From</th><th></th></tr></thead>';
@@ -154,6 +154,8 @@ function editEntry(e) {
   }
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
+    if (!cin.value) { toast('When did it start?', 'bad'); return; }      // an empty field threw "Invalid time value"
+    if (cout.value && cout.value <= cin.value) { toast('The end is before the start.', 'bad'); return; }
     busy(go, true, 'Saving…');
     try {
       await rpc('save_time_entry', { p_farm: farm.id, p: { id: e?.id || null, worker_id: who.value, clock_in: new Date(cin.value).toISOString(),

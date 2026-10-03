@@ -37,7 +37,7 @@ export async function newCase(ctx) {
     { onClose: () => { if (!saved) ctx.onCancel?.(); } });
   const opts = [];
   ['pest', 'disease', 'disorder'].forEach(k => cat.filter(c => c.kind === k).forEach(c => opts.push([c.code, `${KIND_WORD[k]}: ${c.label}`])));
-  const code = selectBox(opts, ctx.code && opts.some(o => o[0] === ctx.code) ? ctx.code : opts[0][0]);
+  const code = selectBox(opts, ctx.code && opts.some(o => o[0] === ctx.code) ? ctx.code : opts[0]?.[0] ?? '');
   const sev = selectBox([[1, 'slight'], [2, 'clear'], [3, 'severe']], ctx.severity || 1);
   const note = el('textarea'); note.rows = 3; note.placeholder = 'What was seen, how widespread.';
   d.body.append(field('What it is', code), field('How bad now', sev));
@@ -148,7 +148,9 @@ export async function openCase(id, onChange, f) {
     d.body.append(el('div', 'sec-title', 'Treatment'));
     (det.programs || []).forEach(p => d.body.append(programCard(p, det, changed)));
     if (!(det.programs || []).length) d.body.append(el('div', 'hint', 'No treatment yet.'));
-    if (det.may_manage && c.status !== 'closed') {
+    // treatments are the Admin's, the Farm manager's and the agronomist's since 0197 (may_treat);
+    // closing the case stays with the managers
+    if ((det.may_treat ?? det.may_manage) && c.status !== 'closed') {
       const start = el('button', 'btn btn-sm', 'Start a treatment…');
       start.onclick = () => programForm(det, null, changed);
       d.body.append(start);
@@ -173,7 +175,11 @@ function programCard(p, det, changed) {
   head.append(el('b', null, `${p.product || p.name}`), el('span', 'pill', p.method),
               el('span', 'pill' + (p.state === 'running' ? ' info' : p.state === 'done' ? ' ok' : ''), p.state));
   card.append(head);
-  card.append(el('div', 'hint', [p.rate, `${p.applications} application${p.applications > 1 ? 's' : ''} every ${p.interval_days} day${p.interval_days > 1 ? 's' : ''}`,
+  // a program started from the IPM library (0197) has its applications as rows, not a count and an interval
+  const fromLibrary = !!p.template_id || (p.applications_list || []).some(a => a.application_id);
+  const nApps = fromLibrary ? (p.applications_list || []).length : p.applications;
+  card.append(el('div', 'hint', [p.rate, fromLibrary ? (p.template ? `${p.template} · ` : '') + `${nApps} application${nApps === 1 ? '' : 's'}`
+      : `${p.applications} application${p.applications > 1 ? 's' : ''} every ${p.interval_days} day${p.interval_days > 1 ? 's' : ''}`,
     p.withholding_days ? `withholding ${p.withholding_days} days` : 'no withholding',
     p.harvest_after ? `harvest from ${day(p.harvest_after)}` : null].filter(Boolean).join(' · ')));
   const apps = el('div', 'vw-chips'); apps.style.marginTop = '6px';
@@ -181,9 +187,10 @@ function programCard(p, det, changed) {
     `${a.n}: ${day(a.date)}${a.status === 'done' ? ' ✓' : a.status === 'skipped' ? ' skipped' : ''}`)));
   card.append(apps);
   if (p.note) card.append(el('div', 'hint', p.note));
-  if (det.may_manage && p.state === 'running' && det.case.status !== 'closed') {
+  if ((det.may_treat ?? det.may_manage) && p.state === 'running' && det.case.status !== 'closed') {
     const acts = el('div', 'row'); acts.style.marginTop = '6px';
     const edit = el('button', 'btn btn-sm', 'Change…'); edit.onclick = () => programForm(det, p, changed);
+    if (fromLibrary) edit.hidden = true;   // the hand-typed form would rewrite a library program's applications
     const stop = el('button', 'btn btn-sm btn-ghost', 'Stop');
     stop.onclick = async () => { busy(stop, true, '…'); try { await rpc('stop_program', { p_program: p.id }); toast('Stopped — the applications not done are gone', 'ok'); changed(); } catch (e) { busy(stop, false, 'Stop'); toast(e.message, 'bad'); } };
     acts.append(edit, stop);
@@ -292,9 +299,10 @@ export function caseChart(det) {
       const flush = () => { if (seg.length > 1) mk('polyline', { points: seg.map(p => p.join(',')).join(' '), class: cls }); seg = []; };
       t.readings.forEach(r => {
         const px = x(new Date(r.at).getTime()), py = yc(r.total || 0);
-        if (r.replaced) { flush(); mk('text', { x: px, y: H - B - 3, class: 'cc-reset', 'text-anchor': 'middle' }, '↺'); }
+        // replaced = the last photo of the old card: the line ends on it, the next card starts after (as trapCurve)
         seg.push([px.toFixed(1), py.toFixed(1)]);
         mk('circle', { cx: px, cy: py, r: 2.2, class: cls });
+        if (r.replaced) { flush(); mk('text', { x: px, y: H - B - 3, class: 'cc-reset', 'text-anchor': 'middle' }, '↺'); }
       });
       flush();
       const last = t.readings[t.readings.length - 1];

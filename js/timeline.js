@@ -32,7 +32,7 @@ const nice = s => s ? new Date(dn(s) * DAY).toLocaleDateString(undefined, { day:
 const money = (n, cur) => n == null ? '—' : `${cur} ${Math.round(Number(n)).toLocaleString()}`;
 
 // shell (0.7.120): the planner's top bar from crops.js — this view fills its left part and its ⓘ text
-let farm = null, mount = null, data = null, offset = 0, selected = new Set(), shell = null;
+let farm = null, mount = null, data = null, offset = 0, selected = new Set(), shell = null, lastWin = null;
 // choosing the zones of a steady harvest (0.7.135): the mode, the zones ticked, the banner's live parts
 // since 0.7.140 a FarmBox keeps several groups: steadyEdit is the group being changed (null = a new one)
 let steadyMode = false, steadyPick = new Set(), steadyBanner = null, steadyEdit = null;
@@ -57,8 +57,10 @@ async function load(fresh = false) {
   await openFast([['crop_timeline', { p_farm: farm.id, ...timelineRange(offset) }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Drawing the plan…')); },
-    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here && my === loadSeq, fresh,
+    // a reload after a change that fails keeps the board on screen and says so
+    failed: e => { if (fresh && data && mount.querySelector('.tl-board')) { toast(e.message, 'bad'); return; } mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
+    // the Map may have taken the same box meanwhile (crops.js: fbc_planner_view)
+    stillHere: () => here.isConnected && mount === here && my === loadSeq && (!shell || pref.get('fbc_planner_view') !== 'map'), fresh,
   });
 }
 const reload = () => load(true);
@@ -79,6 +81,11 @@ function clashOn(pid, from, to, except) {
 
 // ── the page ─────────────────────────────────────────────────────────────────
 function paint() {
+  // the same window drawn again (a selection, a drop, a move): keep where the person was looking —
+  // it used to jump back to today and to the top every time (review 3 Oct 2026)
+  const win = data.from + '|' + data.to, oldBoard = mount.querySelector('.tl-board');
+  const keep = oldBoard && win === lastWin ? { x: oldBoard.scrollLeft, y: oldBoard.scrollTop } : null;
+  lastWin = win;
   mount.textContent = '';
   const may = data.may_plan, cur = data.currency || 'ZAR';
   const from = dn(data.from), to = dn(data.to), days = to - from + 1, today = dn(data.today);
@@ -191,7 +198,10 @@ function paint() {
   board.addEventListener('scroll', () => { if (syncing) { syncing = false; return; } syncing = true; hs.scrollLeft = board.scrollLeft; });
   mount.append(hs, board);
   // open on today, a week in
-  requestAnimationFrame(() => { board.scrollLeft = hs.scrollLeft = Math.max(0, (today - from - 3) * px); });
+  requestAnimationFrame(() => {
+    if (keep) { board.scrollLeft = hs.scrollLeft = keep.x; board.scrollTop = keep.y; }
+    else board.scrollLeft = hs.scrollLeft = Math.max(0, (today - from - 3) * px);
+  });
 
   mount.append(legend());
 }
@@ -390,7 +400,8 @@ function palette() {
 let dragCrop = null, ghost = null;
 function markRows(crop) {
   const sysOf = id => (data.systems || []).find(s => s.id === id);
-  mount.querySelectorAll('.tl-row').forEach(r => r.classList.toggle('no-fit', !fits(crop, sysOf(r.dataset.sys))));
+  // only the position rows: the kg and plants lines carry no zone, and fits(crop, undefined) threw
+  mount.querySelectorAll('.tl-row[data-pos]').forEach(r => r.classList.toggle('no-fit', !fits(crop, sysOf(r.dataset.sys) || {})));
 }
 function unmarkRows() { mount.querySelectorAll('.tl-row.no-fit').forEach(r => r.classList.remove('no-fit')); }
 function clearGhost() { ghost?.remove(); ghost = null; }
@@ -466,7 +477,7 @@ function pressable(box, b, sys, p, from, px) {
         if (!(data.may_plan && b.movable && crop)) return;   // in the ground: a click only
         moving = true; box.classList.add('dragging'); document.body.classList.add('tl-dragging'); markRows(crop);
       }
-      const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.tl-row');
+      const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.tl-row[data-pos]');
       if (!under) { clearGhost(); target = null; return; }
       const track = under.querySelector('.tl-track');
       const s = (data.systems || []).find(x => x.id === under.dataset.sys);
@@ -1297,15 +1308,17 @@ function openClear(sys) {
   const n = st => mine.filter(b => b.status === st).length;
   const prop = n('proposed'), val = n('validated'), act = n('active');
   const d = drawer(`Clear ${sys.name}?`, 'What is removed, before anything is');
-  if (!prop && !val && !act) { d.body.append(el('div', 'hint', 'Nothing is planned or growing in this zone.')); return; }
+  // the counts are the batches in the window on screen; clear_zone takes every one in the zone,
+  // later ones too — so say so, and never refuse a zone whose batches are all further out (review 3 Oct 2026)
+  if (!prop && !val && !act) d.body.append(el('div', 'hint', 'Nothing planned or growing in the window on screen.'));
   const lines = el('ul', 'tl-clear-list');
   if (prop) lines.append(el('li', null, `${prop} proposal${prop === 1 ? '' : 's'} — removed`));
   if (val) lines.append(el('li', null, `${val} validated batch${val === 1 ? '' : 'es'} — cancelled, their open tasks removed`));
   if (act) lines.append(el('li', null, `${act} batch${act === 1 ? '' : 'es'} growing — kept unless you tick below`));
-  d.body.append(lines);
+  d.body.append(lines, el('div', 'hint', 'Counted in the window on screen. Batches planned later in this zone are removed too.'));
   const growing = el('input'); growing.type = 'checkbox';
-  const gl = el('label', 'row'); gl.append(growing, el('span', null, `Also remove the ${act} crop${act === 1 ? '' : 's'} growing: they are marked cancelled and their tasks removed; harvests already recorded stay.`));
-  if (act) d.body.append(gl);
+  const gl = el('label', 'row'); gl.append(growing, el('span', null, `Also remove the crops growing${act ? ` (${act} on screen)` : ''}: they are marked cancelled and their tasks removed; harvests already recorded stay.`));
+  d.body.append(gl);
   d.body.append(el('div', 'note warn', 'This cannot be undone from here: a cancelled batch has to be planned again.'));
   const cancel = el('button', 'btn', 'Keep everything'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-danger', 'Clear the zone');

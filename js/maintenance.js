@@ -211,7 +211,10 @@ async function editRule(asset, r) {
     return;
   }
   // a routine runs a procedure (maintenance_rule.sop_id is required): without one it could never be saved (0.7.112)
-  const proc = selectBox(maintProcs.map(p => [p.id, p.title]), r?.sop_id || maintProcs[0].id);
+  // a routine on a procedure no longer in the list (archived, draft) keeps it instead of silently taking the first
+  const procOpts = maintProcs.map(p => [p.id, p.title]);
+  if (r?.sop_id && !procOpts.some(o => o[0] === r.sop_id)) procOpts.unshift([r.sop_id, (r.procedure || 'Its procedure') + ' (current)']);
+  const proc = selectBox(procOpts, r?.sop_id || maintProcs[0].id);
   const name = input({ value: r?.name || '', required: true });
   if (!r) { name.value = maintProcs[0].title; proc.onchange = () => { name.value = maintProcs.find(p => p.id === proc.value)?.title || name.value; }; }
   const every = input({ type: 'number', min: '1', value: r?.every_days ?? 30 });
@@ -232,6 +235,7 @@ async function editRule(asset, r) {
   const save = el('button', 'btn btn-primary', 'Save');
   save.onclick = async () => {
     if (!name.value.trim()) { toast('It needs a name', 'bad'); return; }
+    if (!/^\d+$/.test(every.value) || Number(every.value) < 1) { toast('Every how many days? A whole number, 1 or more.', 'bad'); return; }
     busy(save, true, 'Saving…');
     try {
       await rpc('save_maintenance_rule', { p: {

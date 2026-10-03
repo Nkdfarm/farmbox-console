@@ -127,11 +127,17 @@ async function propose() {
   const photo = el('input'); photo.type = 'file'; photo.accept = 'image/*';
   const fCrop = field('Crop', crop), fPhase = field('Phase', phase), fSys = field('System', sys), fTgt = field('Target', tgt),
         fProc = field('Procedure', proc), fCur = field('What it says now', current);
+  // always the chosen crop's phases: only the last answer fills the menu (two quick crop changes
+  // used to append both), and it is refilled whenever the crop or "About" changes (review 3 Oct 2026)
+  let phaseSeq = 0, phaseCrop = null;
   const fillPhases = async () => {
-    phase.textContent = '';
+    const my = ++phaseSeq, want = crop.value;
+    phase.textContent = ''; phaseCrop = null;
     try {
-      const det = await rpc('crop_detail', { p_crop: crop.value, p_farm: farm.id });
+      const det = await rpc('crop_detail', { p_crop: want, p_farm: farm.id });
+      if (my !== phaseSeq) return;
       (det.phases || det.cycle || []).forEach(p => { const o = el('option', null, `${p.name} · ${p.days} d`); o.value = p.id; phase.append(o); });
+      phaseCrop = want;
     } catch { /* the phase list is a help, not a must */ }
   };
   const shape = () => {
@@ -139,15 +145,17 @@ async function propose() {
     fCrop.hidden = !['phase_days', 'yield', 'target', 'pest', 'material'].includes(e);
     fPhase.hidden = e !== 'phase_days'; fSys.hidden = e !== 'yield'; fTgt.hidden = e !== 'target';
     fProc.hidden = e !== 'procedure_step'; fCur.hidden = ['phase_days', 'yield', 'target'].includes(e);
-    value.placeholder = { phase_days: 'e.g. 26 days', yield: 'kg a position, e.g. 42', target: 'a range, e.g. 1.6–2.0', procedure_step: 'what the step should say' }[e] || 'what it should be';
+    value.placeholder = { phase_days: 'e.g. 26 days', yield: 'kg a plant, e.g. 0.18', target: 'a range, e.g. 1.6–2.0', procedure_step: 'what the step should say' }[e] || 'what it should be';
   };
-  entity.onchange = shape; crop.onchange = () => { if (entity.value === 'phase_days') fillPhases(); };
+  entity.onchange = () => { shape(); if (entity.value === 'phase_days' && phaseCrop !== crop.value) fillPhases(); };
+  crop.onchange = () => { if (entity.value === 'phase_days') fillPhases(); else { phase.textContent = ''; phaseCrop = null; } };
   d.body.append(field('About', entity), fCrop, fPhase, fSys, fTgt, fProc, fCur, field('Should be', value), field('Evidence', note), field('Photo', photo, 'optional, kept with the correction'));
   shape(); fillPhases();
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Propose');
   go.onclick = async () => {
     if (!value.value.trim()) { toast('What should it be?', 'bad'); return; }
+    if (entity.value === 'phase_days' && (!phase.value || phaseCrop !== crop.value)) { toast('Choose the phase (its list is still loading?)', 'bad'); return; }
     busy(go, true, 'Sending…');
     try {
       const evidence = photo.files?.[0] ? await uploadEvidence(photo.files[0]) : null;

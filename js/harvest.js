@@ -107,6 +107,7 @@ function paint() {
   mount.append(cardWith('Still standing', `${standing.length} batch${standing.length === 1 ? '' : 'es'} planted — soonest harvest first`, table([
     { key: 'crop', label: 'Crop', fmt: (v, r) => { const b = el('div'); b.append(el('b', null, v)); b.append(el('div', 'hint', `${r.batch || ''}${r.position ? ' · ' + r.position : ''}${r.system ? ' · ' + r.system : ''}`)); return b; } },
     { key: 'harvest_start', label: 'Harvest', fmt: (v, r) => {
+        if (r.due_in_days == null) return el('span', 'pill warn', 'no dates');   // a dateless batch is not "today"
         const d = Number(r.due_in_days);
         const s = el('span', 'pill' + (d < 0 ? ' warn' : d <= 7 ? ' ok' : ''), d < 0 ? `${-d} day${d === -1 ? '' : 's'} ago` : d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`);
         s.title = `${shortDate(v)}${r.harvest_end ? ' – ' + shortDate(r.harvest_end) : ''}`;

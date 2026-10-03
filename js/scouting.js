@@ -226,8 +226,13 @@ async function load(fresh = false) {
 }
 const reload = () => load(true);   // after a change: the server's answer, not the old copy
 
+// the days a person opened stay open, and the page keeps its scroll, when it is drawn again after a tag, an AI
+// answer or a case point (review 3 Oct 2026: it went back to "today open" at the top every time)
+const openDays = new Set();
 function paint() {
+  const keepY = mount.childElementCount ? window.scrollY : null;
   mount.textContent = '';
+  if (keepY != null) requestAnimationFrame(() => window.scrollTo(0, keepY));
   const openBtn = el('button', 'btn btn-primary', 'Open a case');
   openBtn.onclick = () => newCase({ farm, crop_id: cropFilter, crops: over.crops || [], onDone: reload });
   const scaleBtn = el('a', 'btn', 'Scale card');
@@ -505,6 +510,7 @@ function cropBar() {
 // ── one report day ──
 function dayRow(d, openFirst, latest = false) {
   const det = el('details', 'pd-day');
+  det.dataset.day = String(d.day);
   const sum = el('summary');
   sum.append(dotEl(d.dot), el('b', null, longDay(d.day) + (d.day === String(over.today) ? ' · today' : '')));
   const facts = el('span', 'pd-day-facts');
@@ -562,6 +568,9 @@ function dayRow(d, openFirst, latest = false) {
   const paintDay = day => {
     // the zones a person opened or closed stay as they were when the fresh answer repaints the day
     const was = new Map([...body.querySelectorAll('.pd-zone-band')].map(b => [b.dataset.unit, b.open]));
+    // and the folds inside a band (Plant health, Treatments, Traps…), by their place in it
+    const inner = new Map();
+    body.querySelectorAll('.pd-zone-band').forEach(b => b.querySelectorAll('details').forEach((x, i) => inner.set(`${b.dataset.unit}|${x.className}|${i}`, x.open)));
     body.textContent = '';
     // only a Not OK says anything here, in one line: its why (0174; the sections are on the date's line)
     const tk = day.task;
@@ -578,6 +587,7 @@ function dayRow(d, openFirst, latest = false) {
     full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true;
       b.dataset.unit = z.unit_id || z.zone_id || z.name;
       if (was.has(b.dataset.unit) && was.get(b.dataset.unit) !== b.open) b.open = was.get(b.dataset.unit);
+      b.querySelectorAll('details').forEach((x, i) => { const k = `${b.dataset.unit}|${x.className}|${i}`; if (inner.has(k) && inner.get(k) !== x.open) x.open = inner.get(k); });
       body.append(b); });
     if (empty.length && full.length) body.append(el('div', 'hint', 'Nothing photographed in ' + empty.map(z => z.name).join(', ') + '.'));
     // the robot's rows that name no zone of the day's bands: one line under the zones (not in a zone's own report)
@@ -585,8 +595,8 @@ function dayRow(d, openFirst, latest = false) {
     const waiting = !rbDay.length && robotNames() && String(d.day) === String(over.today);   // registered, nothing sent yet today
     if ((loose.length || waiting) && !zoneFilter && !cropFilter) { const s = robotSection(loose, robotOpts()); s.open = !full.length && loose.length > 0; body.append(s); }
   };
-  det.addEventListener('toggle', () => { if (det.open) fill(); });
-  if (openFirst) { det.open = true; fill(); }
+  det.addEventListener('toggle', () => { if (det.open) { openDays.add(String(d.day)); fill(); } else openDays.delete(String(d.day)); });
+  if (openFirst || openDays.has(String(d.day))) { det.open = true; fill(); }
   return det;
 }
 

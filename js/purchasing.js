@@ -15,15 +15,24 @@ import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
          num, shortDate, selectBox, confirmDrawer } from './ui.js';
 
 let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
+let stockOnly = false;
+// a phone number for wa.me: digits only, 00 = international, a ten-digit 0… number is South African
+// ("0027 82…" used to become "2702782…")
+const waNumber = ph => {
+  let n = String(ph || '').replace(/[^0-9]/g, '');
+  if (n.startsWith('00')) n = n.slice(2);
+  else if (n.length === 10 && n.startsWith('0')) n = '27' + n.slice(1);
+  return n;
+};                            // Office › Stock shows the stock alone, no Buy chips
 
 export async function renderPurchasing(container, currentFarm) {
-  farm = currentFarm; mount = container; chosen = new Set();
+  farm = currentFarm; mount = container; chosen = new Set(); stockOnly = false;
   if (tab === 'stock') tab = 'requests';          // Buy opens on what to order; Stock has its own tab (0.7.152)
   await load();
 }
-// Office › Stock: the same page, opened on the stock (0.7.152)
+// Office › Stock: the same page, the stock only
 export async function renderStock(container, currentFarm) {
-  farm = currentFarm; mount = container; chosen = new Set();
+  farm = currentFarm; mount = container; chosen = new Set(); stockOnly = true;
   tab = 'stock';
   await load();
 }
@@ -31,7 +40,8 @@ export async function renderStock(container, currentFarm) {
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
   const here = mount;
-  await openFast([['purchasing', { p_farm: farm.id }], ['seedling_orders', { p_farm: farm.id }]], {
+  // seedling orders are optional: an older database without them still opens Buy
+  await openFast([['purchasing', { p_farm: farm.id }], ['seedling_orders', { p_farm: farm.id }, true]], {
     show: ([d, s]) => { data = d; seed = s; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading purchasing…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
@@ -51,6 +61,13 @@ function paint() {
   const compute = el('button', 'btn btn-primary', 'Work out what to buy');
   compute.title = 'From the validated crop plan, the bill of materials, stock and open orders.';
   compute.onclick = () => recompute(compute);
+
+  if (stockOnly) {
+    mount.append(pageHead(null, `${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in stock` +
+      `${below ? `, ${below} below the reorder point` : ''}. What to buy is under Buy.`));
+    mount.append(stockCard(may));
+    return;
+  }
 
   mount.append(pageHead(null,        // the tab already says Buy / Stock (0.7.162)
     `${toOrder.length} to order${late ? `, ${late} already late` : ''}` +
@@ -73,7 +90,6 @@ function paint() {
    ['seedlings', `Seedlings · ${seedOpen.length}${seedNow ? ` (${seedNow} today)` : ''}`],
    ['orders', `Purchase orders · ${openPos.length}`],
    ['ordered', `On the way · ${ordered.length}`],
-   ['stock', `Stock · ${data.stock.length}`],
    ['suppliers', `Suppliers · ${data.suppliers.length}`]].forEach(([k, label]) => {
     const c = el('button', 'chip' + (tab === k ? ' on' : ''), label);
     c.onclick = () => { tab = k; paint(); };
@@ -262,10 +278,13 @@ async function receive(button, row) {
   cancel.onclick = d.close;
   const ok = el('button', 'btn btn-primary', 'Receive');
   ok.onclick = async () => {
+    // an empty field would book 0 and close the request (review 3 Oct 2026)
+    const rq = qty.value === '' ? NaN : Number(qty.value);
+    if (!Number.isFinite(rq) || rq <= 0) { toast('Type the quantity that arrived.', 'bad'); return; }
     busy(ok, true, 'Saving…');
     try {
       const r = await rpc('receive_purchase', {
-        p_id: row.id, p_qty: Number(qty.value), p_on: when.value || null });
+        p_id: row.id, p_qty: rq, p_on: when.value || null });
       d.close();
       toast(`Received — ${num(r.on_hand, 2)} ${row.unit || ''} on hand`, 'ok');
       await load();
@@ -288,7 +307,9 @@ function countStock(row) {
   cancel.onclick = d.close;
   const ok = el('button', 'btn btn-primary', 'Save the count');
   ok.onclick = async () => {
-    const diff = Number(counted.value) - Number(row.on_hand ?? 0);
+    const n = counted.value === '' ? NaN : Number(counted.value);
+    if (!Number.isFinite(n) || n < 0) { toast('How many are there? Type the count (0 or more).', 'bad'); return; }
+    const diff = Math.round((n - Number(row.on_hand ?? 0)) * 1e4) / 1e4;
     if (!diff) { d.close(); toast('Nothing to correct'); return; }
     busy(ok, true, 'Saving…');
     try {
@@ -375,7 +396,7 @@ function sendOrder(po) {
   const links = el('div', 'row');
   links.append(copy);
   if (po.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${po.supplier_email}?subject=${encodeURIComponent(po.number)}&body=${encodeURIComponent(pre.value)}`; links.append(a); }
-  if (po.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${String(po.supplier_phone).replace(/[^0-9]/g, '').replace(/^0/, '27')}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; links.append(a); }
+  if (po.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${waNumber(po.supplier_phone)}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; links.append(a); }
   const ref = input({ placeholder: 'their confirmation, or how it was sent' });
   const when = input({ type: 'date', value: po.expected_delivery ? String(po.expected_delivery).slice(0, 10) : '' });
   d.body.append(field('The order', pre), links, field('Reference', ref), field('Expected delivery', when));
@@ -500,7 +521,7 @@ function seedMessage(o) {
   copy.onclick = async () => { try { await navigator.clipboard.writeText(pre.value); toast('Copied', 'ok'); } catch { pre.select(); } };
   row.append(copy);
   if (o.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${o.supplier_email}?subject=${encodeURIComponent('Seedling order ' + o.unit)}&body=${encodeURIComponent(pre.value)}`; row.append(a); }
-  if (o.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${String(o.supplier_phone).replace(/[^0-9]/g, '').replace(/^0/, '27')}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; row.append(a); }
+  if (o.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${waNumber(o.supplier_phone)}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; row.append(a); }
   d.body.append(field('The order', pre), row, el('div', 'hint', 'Whole trays per crop and delivery. Once it is placed, press "Mark as ordered" on the order.'));
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;
   d.footer.append(el('div', 'spacer'), close);

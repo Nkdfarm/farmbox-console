@@ -154,6 +154,18 @@ async function recall(key) {
   } catch { return null; }
 }
 
+// Copies older than 45 days go (review 3 Oct 2026): one entry per week, period and day ever opened — a day's
+// thumbnails are a few MB — and nothing pruned it until sign-out. Run once a visit, when the page is idle.
+export async function pruneData(maxDays = 45) {
+  try {
+    const c = await caches.open(DATA_CACHE), cut = Date.now() - maxDays * 864e5;
+    for (const req of await c.keys()) {
+      try { const j = await (await c.match(req)).json(); if (!(j?.saved_at > cut)) await c.delete(req); }
+      catch { await c.delete(req); }
+    }
+  } catch { /* no Cache API: nothing kept */ }
+}
+
 function forgetAll() {
   try { caches.delete(DATA_CACHE); } catch { /* nothing kept */ }
 }
@@ -248,10 +260,13 @@ let lastWrite = 0;
 export async function api(path, opts = {}) {
   if (!session) throw new ApiError('sign in first', 401);
   const read = isRead(path, opts);
+  // the key and the person are fixed when the request leaves: an answer landing after a sign-out (or after the
+  // next person signed in) must not be kept, nor kept under somebody else's name (review 3 Oct 2026)
+  const s0 = session, key = read ? keyOf(path, opts) : null;
   try {
     const body = await live(path, opts);
     setOnline(true);
-    if (read) remember(keyOf(path, opts), body); else lastWrite = Date.now();
+    if (read) { if (session === s0) remember(key, body); } else lastWrite = Date.now();
     return body;
   } catch (e) {
     // The server answered: that is a real answer, online or not.
@@ -260,7 +275,7 @@ export async function api(path, opts = {}) {
     // in the background; the copy is shown at once rather than after the tries.
     if (net.phase === 'online') setOnline(false);
     if (!read) throw new ApiError(OFFLINE_WRITE, 0);
-    const copy = await recall(keyOf(path, opts));
+    const copy = await recall(key);
     if (!copy) {
       throw new ApiError('Offline — this was never opened on this device while connected, ' +
         'so there is no copy of it to show.', 0);
@@ -310,18 +325,25 @@ export async function cachedRpc(name, args) {
 // page left behind — another page, another farm, an older period — must not paint over it.
 // A page that says where it draws (stillHere) is trusted with that instead (0.7.158): a site's
 // "Both" view draws two units' pages side by side, and neither may cancel the other.
+// And whatever stillHere says, a later call for the same reads of the same farm wins (review 3 Oct
+// 2026): a page that reloads in place — another period, "include closed" — kept the same box, so a
+// slow first answer (last year) used to paint over the quick second one (last week).
 let openSeq = 0;
+const openLatest = new Map();
 export async function openFast(reads, { show, waiting, failed, stillHere, fresh = false }) {
   const mine = ++openSeq;
+  const key = [...new Set(reads.map(r => r[0]))].join('|') + '@' + (reads[0]?.[1]?.p_farm ?? '');
+  openLatest.set(key, mine);
+  const alive = () => openLatest.get(key) === mine && (stillHere ? stillHere() : mine === openSeq);
   const old = fresh ? reads.map(() => null) : await Promise.all(reads.map(([n, a]) => cachedRpc(n, a)));
-  if (stillHere ? !stillHere() : mine !== openSeq) return;
+  if (!alive()) return;
   const had = reads.every(([, , optional], i) => optional || old[i] != null) ? JSON.stringify(old) : null;
   if (had) show(old, false); else if (!fresh) waiting?.();
   let now;
   try {
     now = await Promise.all(reads.map(([n, a, optional]) => optional ? rpc(n, a).catch(() => null) : rpc(n, a)));
-  } catch (e) { if (!had && (stillHere ? stillHere() : mine === openSeq)) failed?.(e); return; }
-  if (stillHere ? !stillHere() : mine !== openSeq) return;
+  } catch (e) { if (!had && alive()) failed?.(e); return; }
+  if (!alive()) return;
   if (had && JSON.stringify(now) === had) return;
   show(now, true);
 }

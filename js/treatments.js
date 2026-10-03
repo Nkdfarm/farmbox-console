@@ -249,9 +249,12 @@ export async function openApply(farm, z, opts = {}) {
         b.setAttribute('aria-pressed', String(!!t.on));
         b.title = [t.crop || 'nothing standing', t.area_m2 != null ? `${num(t.area_m2, 1)} m²` : null, `${num(t.plants)} places`].filter(Boolean).join(' · ');
         b.onclick = () => {
-          const on = new Set(tables.filter(x => x.on).map(x => x.id));
+          // from the choice already made, not from the last preview: a click before the program is chosen,
+          // or two quick clicks, used to bring back a table just taken off (review 3 Oct 2026)
+          const on = new Set(state.positions ?? tables.filter(x => x.on).map(x => x.id));
           on.has(t.id) ? on.delete(t.id) : on.add(t.id);
           state.positions = [...on];
+          b.classList.toggle('on', on.has(t.id)); b.setAttribute('aria-pressed', String(on.has(t.id)));
           refresh();
         };
         g.append(b);

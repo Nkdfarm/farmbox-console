@@ -63,7 +63,9 @@ export function openViewer(ctx) {
   const panel = el('aside', 'vw-panel');
   root.append(stage, panel);
   document.body.append(root);
-  const close = () => { root.remove(); document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', onResize); };
+  // the browser's Back (another page) closes it too: it used to stay over the next page with its key handler
+  const close = () => { root.remove(); document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', onResize); window.removeEventListener('hashchange', close); };
+  window.addEventListener('hashchange', close);
 
   // ── a pane: one photo with its zoom ──
   const panes = [];
@@ -139,6 +141,8 @@ export function openViewer(ctx) {
       // a window opened from the viewer is on top: Escape is its own (ui.js drawer); else it closes the viewer,
       // before a drawer underneath the viewer takes it (0.7.162 — the capture phase, see addEventListener below)
       if ([...document.querySelectorAll('.drawer')].some(dr => root.compareDocumentPosition(dr) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+      // a question half typed in the chat: Escape leaves the box first, a second Escape closes the viewer
+      if (e.target?.tagName === 'TEXTAREA' && e.target.value.trim()) { e.stopImmediatePropagation(); e.target.blur(); return; }
       e.stopImmediatePropagation(); close();
     }
     else if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;   // typing (the chat, 0195) is not a zoom key
@@ -322,7 +326,8 @@ export function openViewer(ctx) {
       // the form opens filled in; the person saves it — only then is the card done
       await new Promise((resolve, reject) => newCase({ farm: ctx.farm, zone_id: ctx.zoneId || photo.zone_id || null,
         crop_id: photo.crop_id || ctx.cropId || null, crops: ctx.crops || [], from_kind: photo.kind, from_id: photo.id,
-        code: a.code, severity: a.severity || 1, onDone: () => { paintCases(); resolve(); }, onCancel: () => reject(new Error('cancelled')) }));
+        code: a.code, severity: a.severity || 1, onDone: () => { paintCases(); resolve(); }, onCancel: () => reject(new Error('cancelled')) })
+        ?.catch?.(reject));                // the catalogue failing to load used to leave the button spinning
     } else throw new Error('unknown card');
     m.actions = await rpc('photo_chat_action', { p_message: m.id, p_index: i, p_status: 'done' });
     ctx.onChange?.(photo);
@@ -409,11 +414,14 @@ export function openViewer(ctx) {
 
   // the cases (0097): add this photo to an open case of the zone, or open one from it
   const secCase = el('div');
+  let casesSeq = 0;                 // two paints in flight used to list the cases twice
   const paintCases = async () => {
-    secCase.textContent = '';
-    secCase.append(el('div', 'sec-title', 'Cases'));
+    const my = ++casesSeq;
     let list = [];
     try { list = ctx.openCases ? await ctx.openCases() : []; } catch { list = []; }
+    if (my !== casesSeq) return;
+    secCase.textContent = '';
+    secCase.append(el('div', 'sec-title', 'Cases'));
     const firstCode = (photo.tags || [])[0]?.code || (photo.ai?.findings || [])[0]?.code || null;
     const firstSev = (photo.tags || [])[0]?.severity ?? (photo.ai?.findings || [])[0]?.severity ?? 1;
     if (!list.length) secCase.append(el('div', 'hint', 'No open case in this zone.'));

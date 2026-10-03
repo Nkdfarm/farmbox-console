@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
-import { loading, el, toast, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf } from './ui.js';
+import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -99,6 +99,7 @@ function tiles() {
        : i.open ? `oldest ${i.oldest_days} day${i.oldest_days === 1 ? '' : 's'} old`
        : 'none raised',
     list: i.list.map(x => `${x.title} · ${x.severity}, ${x.days_open} d`),
+    more: Number(i.open) - 3,          // the dashboard sends five at most: "and n more" counts the open ones
     go: '#/dashboard/issues',
   }));
 
@@ -153,7 +154,7 @@ function tiles() {
       value: p.waiting,
       tone: p.late ? 'bad' : 'warn',
       sub: p.late ? `${p.late} already past the order-by date`
-                  : `next order by ${p.next_order_by ?? '—'}`,
+                  : `next order by ${p.next_order_by ? shortDate(p.next_order_by) : '—'}`,
       go: '#/office/buy',
     }));
   }
@@ -161,7 +162,7 @@ function tiles() {
   return wrap;
 }
 
-function tile({ label, value, sub, tone, list, families, go, icon: glyph }) {
+function tile({ label, value, sub, tone, list, more, families, go, icon: glyph }) {
   const node = el(go ? 'a' : 'div', 'tile' + (tone ? ' ' + tone : ''));
   if (go) node.href = go;
   if (glyph) {
@@ -188,7 +189,8 @@ function tile({ label, value, sub, tone, list, families, go, icon: glyph }) {
   if (list?.length) {
     const ul = el('ul', 'tile-list');
     list.slice(0, 3).forEach(x => ul.append(el('li', null, x)));
-    if (list.length > 3) ul.append(el('li', 'more', `and ${list.length - 3} more`));
+    const rest = more ?? list.length - 3;
+    if (rest > 0) ul.append(el('li', 'more', `and ${rest} more`));
     body.append(ul);
   }
   node.append(body);

@@ -10,11 +10,12 @@
 // the Crop planner, where the machine's own proposals make way for them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
-import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel } from './ui.js';
+import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign } from './ui.js';
 
 let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
+const kg = n => `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`;   // 2.5 kg of herbs is not 3
+const R = () => curSign(farm);
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const KIND_WORD = { direct: 'direct client', super_user: 'super user', restaurant: 'restaurant', retailer: 'retailer', community: 'community', market_agent: 'market agent', other: 'other' };
 const STATUS = { open: ['open', ''], planned: ['planned', 'ok'], short: ['short', 'bad'], delivered: ['delivered', 'ok'], cancelled: ['cancelled', ''] };
@@ -63,7 +64,7 @@ function orderCard(o) {
   const st = STATUS[o.status] || [o.status, ''];
   head.append(el('b', 'ord-customer', o.customer), el('span', 'pill ' + st[1], st[0]));
   if (o.customer_kind) head.append(el('span', 'pill', KIND_WORD[o.customer_kind] || o.customer_kind));
-  if (Number(o.delivered_kg)) head.append(el('span', 'hint', `${kg(o.delivered_kg)} delivered · R ${Math.round(Number(o.revenue || 0)).toLocaleString()}`));
+  if (Number(o.delivered_kg)) head.append(el('span', 'hint', `${kg(o.delivered_kg)} delivered · ${R()} ${Math.round(Number(o.revenue || 0)).toLocaleString()}`));
   if (o.notes) head.append(el('span', 'hint', o.notes));
   head.append(el('div', 'spacer'));
   if (data.may_edit && !['cancelled', 'delivered'].includes(o.status)) {
@@ -147,7 +148,7 @@ function lineRow(o, l) {
     const dl = el('div', 'ord-deliveries');
     l.delivered.forEach(x => {
       const chip = el('span', 'ord-dchip');
-      chip.append(el('span', null, `${nice(x.on)} · ${Number(x.kg).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` + (x.price != null ? ` · R ${Number(x.price).toFixed(2)}/kg = R ${Math.round(Number(x.amount || 0)).toLocaleString()}` : '')));
+      chip.append(el('span', null, `${nice(x.on)} · ${Number(x.kg).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` + (x.price != null ? ` · ${R()} ${Number(x.price).toFixed(2)}/kg = ${R()} ${Math.round(Number(x.amount || 0)).toLocaleString()}` : '')));
       if (data.may_edit) {
         const u = el('button', 'tl-chip-x', '✕'); u.title = 'Undo this delivery';
         u.onclick = async () => {
@@ -171,14 +172,17 @@ function deliver(o, l) {
   const price = input({ type: 'number', min: 0, step: '0.01', value: l.price_hint ?? '' });
   const note = input({ placeholder: 'optional' });
   const total = el('div', 'hint');
-  const sum = () => { total.textContent = `R ${Math.round(Number(q.value || 0) * Number(price.value || 0)).toLocaleString()}`; };
+  const sum = () => { total.textContent = `${R()} ${Math.round(Number(q.value || 0) * Number(price.value || 0)).toLocaleString()}`; };
   [q, price].forEach(x => x.addEventListener('input', sum)); sum();
   const g = el('div', 'grid2'); g.append(field('Day', on), field('Kilograms', q));
-  const g2 = el('div', 'grid2'); g2.append(field('Price a kg (R)', price, 'the price book for this customer; change it if it was sold at another price'), field('Amount', total));
+  const g2 = el('div', 'grid2'); g2.append(field(`Price a kg (${R()})`, price, 'the price book for this customer; change it if it was sold at another price'), field('Amount', total));
   d.body.append(g, g2, field('Note', note));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Record the delivery');
   go.onclick = async () => {
+    // an empty kg counted as a delivery of 0 kg and could close the line
+    if (!on.value) { toast('Which day was it delivered?', 'bad'); return; }
+    if (q.value === '' || !(Number(q.value) > 0)) { toast('How many kg were delivered?', 'bad'); return; }
     busy(go, true, 'Saving…');
     try {
       await rpc('deliver_line', { p_line: l.id, p_on: on.value, p_kg: Number(q.value), p_price: price.value === '' ? null : Number(price.value), p_note: note.value || null });

@@ -162,7 +162,8 @@ function edit(c, onSaved) {
       if (!m.saved) {
         const x = el('button', 'btn btn-sm', '✕');
         x.title = 'Not saved yet — drop it';
-        x.onclick = () => { media.splice(media.indexOf(m), 1); paintMedia(); paintSystems(); };
+        // its code leaves the systems' default media too, or the save is refused for a medium that is not there
+        x.onclick = () => { media.splice(media.indexOf(m), 1); systems.forEach(s => { s.default_media = (s.default_media || []).filter(c => c !== m.code); }); paintMedia(); paintSystems(); };
         line.append(x);
       }
       mediaBox.append(line);

@@ -236,6 +236,8 @@ async function editRule(asset, r) {
   save.onclick = async () => {
     if (!name.value.trim()) { toast('It needs a name', 'bad'); return; }
     if (!/^\d+$/.test(every.value) || Number(every.value) < 1) { toast('Every how many days? A whole number, 1 or more.', 'bad'); return; }
+    // the database keeps the date it has when the field is emptied: say so rather than "Saved" with nothing changed
+    if (r?.last_done && !last.value) { toast('Last done cannot be emptied — give the date it was really done.', 'bad'); last.value = String(r.last_done).slice(0, 10); return; }
     busy(save, true, 'Saving…');
     try {
       await rpc('save_maintenance_rule', { p: {

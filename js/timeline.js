@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
 import { loading, el, drawer, field, input, selectBox, toast, busy, confirmDrawer, pref, cropAvatar, cropHue,
-         systemLabel, mediumLabel, nurseryLine } from './ui.js';
+         systemLabel, mediumLabel, nurseryLine, farmDate } from './ui.js';
 
 const SPANS = [['35', '5 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'Year']];
 const SPAN_KEY = 'fbc_tl_span';
@@ -40,7 +40,7 @@ const span = () => Number(pref.get(SPAN_KEY)) || 91;
 
 // the window on screen: a week back from today, then the span (warm() reads the same)
 export function timelineRange(off = 0) {
-  const t = new Date(); const today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / DAY;
+  const t = farmDate(); const today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / DAY;
   const from = today - 7 + off;
   return { p_from: ds(from), p_to: ds(from + span() - 1) };
 }

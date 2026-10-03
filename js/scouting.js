@@ -71,6 +71,7 @@ const MEASURE_WORD = { diameter: 'Ø', length: 'L', width: 'W', height: 'H' };
 const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
 
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
+let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 let tmap = null, kit = null, opinions = [], robot = null;
 // what the robot sent (0188): that day's rows, and those naming a zone band
@@ -213,7 +214,7 @@ async function load(fresh = false) {
   ], {
     show: ([o, c, d, cat, tm, op, rb]) => {
       over = o; cases = c; dates = d; catalog = cat; tmap = tm; opinions = op || []; robot = rb || null;
-      kit = tmap ? trapKit({ farm, data: tmap, reload }) : null;
+      kit = tmap ? trapKit({ farm, data: tmap, reload, catalog: () => catalog || [], aiReady: () => aiReadyKnown }) : null;
       useFarm(farm, catalog);
       moreDone = dates.length < 21;
       dayData.clear(); panelReads.clear(); pendings.clear(); dayRows.clear(); thumbsLive.clear(); thumbsKept.clear();
@@ -566,6 +567,7 @@ function dayRow(d, openFirst, latest = false) {
     if (shown !== JSON.stringify(day)) paintDay(day);
   };
   const paintDay = day => {
+    if (day?.ai_ready != null) aiReadyKnown = day.ai_ready;
     // the zones a person opened or closed stay as they were when the fresh answer repaints the day
     const was = new Map([...body.querySelectorAll('.pd-zone-band')].map(b => [b.dataset.unit, b.open]));
     // and the folds inside a band (Plant health, Treatments, Traps…), by their place in it

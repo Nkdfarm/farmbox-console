@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
-import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate } from './ui.js';
+import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -21,7 +21,7 @@ let farm = null, data = null, mount = null;
 
 export async function renderDashboard(container, currentFarm) {
   farm = currentFarm; mount = container;
-  cal.anchor = new Date();          // the view is remembered, the period is not
+  cal.anchor = farmDate();          // the view is remembered, the period is not
   await load();
 }
 
@@ -208,7 +208,7 @@ function tile({ label, value, sub, tone, list, more, families, go, icon: glyph }
 const CAL_KEY = 'fbc_cal_view';
 const VIEWS = [['week', 'Week'], ['month', 'Month'], ['year', 'Year']];
 const KIND_ORDER = { harvest: 0, transplant: 1, sow: 2, seedlings: 3 };
-const cal = { view: 'week', anchor: new Date() };
+const cal = { view: 'week', anchor: farmDate() };
 {
   const v = pref.get(CAL_KEY);
   if (VIEWS.some(x => x[0] === v)) cal.view = v;
@@ -264,7 +264,7 @@ function periodLabel(view, d) {
 // years. The arrows go further than the menu reaches, and the menu follows.
 function periodMenu(view, anchor) {
   const span = { week: 26, month: 12, year: 3 }[view];
-  const now = periodKey(view, new Date());
+  const now = periodKey(view, farmDate());
   const s = el('select');
   s.setAttribute('aria-label', 'Which ' + view);
   for (let i = -span; i <= span; i++) {
@@ -349,8 +349,8 @@ function paintControls(parts) {
   const back = el('button', 'btn btn-sm',
     { week: 'This week', month: 'This month', year: 'This year' }[cal.view]);
   back.type = 'button';
-  back.hidden = periodKey(cal.view, cal.anchor) === periodKey(cal.view, new Date());
-  back.onclick = () => goCalendar(parts, cal.view, new Date());
+  back.hidden = periodKey(cal.view, cal.anchor) === periodKey(cal.view, farmDate());
+  back.onclick = () => goCalendar(parts, cal.view, farmDate());
 
   controls.append(seg, arrow('chevronLeft', -1, 'Earlier'), pick,
                   arrow('chevronRight', 1, 'Later'), back);
@@ -445,7 +445,7 @@ const byDate = rows => {
 };
 const dayIndex = rows => new Map((rows || []).map(r => [String(r.date).slice(0, 10), r]));
 const openOn = (res, d) => !res.operating_days || res.operating_days.includes(isoDow(d));
-const todayKey = res => String(res.today || ymd(new Date())).slice(0, 10);
+const todayKey = res => String(res.today || ymd(farmDate())).slice(0, 10);
 const eventDetail = x => x.kind === 'harvest' ? `${x.position} · ${x.kg ?? '—'} kg` + (x.recorded === true ? ' harvested' : x.recorded === false ? ' expected' : '')
                        : x.kind === 'transplant' ? `${x.position} · in`
                        : x.kind === 'seedlings' ? `${x.position} · from the nursery`
@@ -534,7 +534,7 @@ function yearView(res, year, parts) {
     m.sowings += r.sowings || 0;
   });
   const max = Math.max(1, ...months.map(m => m.kg));
-  const now = new Date();
+  const now = farmDate();
   const chart = el('div', 'year-chart');
   months.forEach((m, i) => {
     const first = new Date(year, i, 1);
@@ -608,7 +608,7 @@ export const calendarView = () => cal.view;
 // The window the calendar opens on today, as the arguments it fetches with —
 // app.js reads it ahead so the dashboard opens offline too.
 export function calendarRange() {
-  const w = windowOf(cal.view, new Date());
+  const w = windowOf(cal.view, farmDate());
   return { p_from: ymd(w.from), p_to: ymd(w.to) };
 }
 

@@ -30,11 +30,13 @@ function sizeLines(measures) {
   return [...by.entries()].map(([k, ms]) => ({ item: k, text: ms.map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)}`).join(' · ') + ' mm' }));
 }
 
-let ctx = { mayWrite: false, onChange: () => {} };
+// each section carries its own options down to its cards: two units of a site draw their own sections, and one
+// shared ctx sent a Confirm to the other unit's reload with the other unit's rights (review 3 Oct 2026)
+const NO_OPTS = { mayWrite: false, onChange: () => {} };
 
 // a line that opens on the robot's observations: its name, how many, how many wait for a person
 export function robotSection(rows, opts) {
-  ctx = { ...ctx, ...opts };
+  const ctx = { ...NO_OPTS, ...opts };
   const det = el('details', 'pd-sec pd-robot');
   const names = [...new Set(rows.map(r => r.robot).filter(Boolean))].join(', ') || opts?.names || 'Robot';
   const w = rows.filter(r => r.status === 'new').length;
@@ -42,14 +44,14 @@ export function robotSection(rows, opts) {
   sum.append(el('b', null, names), el('span', 'hint', rows.length ? `robot · ${rows.length} observation${rows.length === 1 ? '' : 's'}` : 'robot · nothing sent that day'));
   if (w) sum.append(el('span', 'pill warn', `${w} to validate`));
   const grid = el('div', rows.length ? 'sc-grid pd-sec-body' : 'pd-sec-body');
-  rows.forEach(r => grid.append(card(r)));
+  rows.forEach(r => grid.append(card(r, ctx)));
   // a registered robot has its line on today's report before it has sent anything (0.7.185)
   if (!rows.length) grid.append(el('div', 'hint', 'Nothing received yet. What the robot counts and measures on its round shows here, for a manager to confirm.'));
   det.append(sum, grid);
   return det;
 }
 
-function card(r) {
+function card(r, ctx) {
   const fig = el('figure', 'sc-fig rb-fig' + (r.status === 'dismissed' ? ' rb-off' : ''));
   if (r.photo_data) { const im = el('img'); im.src = r.photo_data; im.alt = what(r); im.loading = 'lazy'; fig.append(im); }
   else fig.append(el('div', 'rb-nophoto', 'no photo'));
@@ -67,11 +69,11 @@ function card(r) {
   if (sizes.length) cap.append(el('b', null, sizes.length === 1 ? sizes[0].text : `${sizes.length} measured · ${sizes[0].text}…`));
   cap.append(el('div', 'hint', [hhmm(r.at), r.robot, r.confidence != null ? `${Math.round(r.confidence * 100)} % sure` : null, r.note].filter(Boolean).join(' · ')));
   fig.append(cap);
-  fig.onclick = () => open(r);
+  fig.onclick = () => open(r, ctx);
   return fig;
 }
 
-function open(r) {
+function open(r, ctx) {
   const dr = drawer(what(r), [longDay(r.day), hhmm(r.at), r.robot].filter(Boolean).join(' · '));
   if (r.photo_data) { const im = el('img', 'rb-photo'); im.src = r.photo_data; im.alt = what(r); dr.body.append(im); }
   const facts = el('div', 'rb-facts');

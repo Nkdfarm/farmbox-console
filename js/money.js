@@ -11,7 +11,7 @@
 // the cost structure. For the unit's Admin, the Farm manager and the office.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday } from './ui.js';
 
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const PERIODS = [['month', 'This month'], ['quarter', 'Last 3 months'], ['year', 'This year'], ['12m', 'Last 12 months']];
@@ -22,7 +22,7 @@ const KIND_WORD = { direct: 'Direct clients', super_user: 'Super users', restaur
   market_agent: 'Market agents', other: 'Other', unknown: 'Not in the book' };
 
 export function moneyRange(p = pref.get('fbc_money_period') || 'quarter') {
-  const t = new Date();
+  const t = farmDate();
   if (p === 'month') return { p_from: ymd(new Date(t.getFullYear(), t.getMonth(), 1)), p_to: ymd(t) };
   if (p === 'year') return { p_from: `${t.getFullYear()}-01-01`, p_to: ymd(t) };
   if (p === '12m') return { p_from: ymd(new Date(t.getFullYear() - 1, t.getMonth() + 1, 1)), p_to: ymd(t) };
@@ -170,7 +170,7 @@ function paint() {
 
 function editCost(e) {
   const d = drawer(e ? 'Cost' : 'Add a cost', 'Indirect: rent, energy, water, insurance, admin… Direct: something a batch used that is not in its bill of materials');
-  const day = el('input', 'input'); day.type = 'date'; day.value = e?.day || ymd(new Date());
+  const day = el('input', 'input'); day.type = 'date'; day.value = e?.day || farmToday();
   const cat = selectBox(CATS, e?.category || 'energy');
   const kind = selectBox([['indirect', 'Indirect (shared by all batches)'], ['direct', 'Direct (belongs to the farm’s production)']], e?.kind || 'indirect');
   const amount = el('input', 'input'); amount.type = 'number'; amount.min = '0'; amount.step = '0.01'; amount.value = e?.amount ?? '';

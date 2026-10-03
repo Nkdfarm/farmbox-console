@@ -9,16 +9,16 @@
 // dashboard reads it).
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate } from './ui.js';
 
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const h = m => { m = Math.round(Number(m || 0)); return m ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : '—'; };
 const nice = s => s ? new Date(s).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const dayShort = s => new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
-const localInput = s => { if (!s) return ''; const d = new Date(s); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const localInput = s => farmLocal(s);           // shown and typed on the farm's clock, whatever the laptop's
 
 export function hoursRange(which = pref.get('fbc_hours_period') || 'week') {
-  const t = new Date(); const monday = new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((t.getDay() + 6) % 7));
+  const t = farmDate(); const monday = new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((t.getDay() + 6) % 7));
   if (which === 'last') { const m = new Date(monday); m.setDate(m.getDate() - 7); const s = new Date(m); s.setDate(s.getDate() + 6); return { p_from: ymd(m), p_to: ymd(s) }; }
   if (which === 'month') return { p_from: ymd(new Date(t.getFullYear(), t.getMonth(), 1)), p_to: ymd(new Date(t.getFullYear(), t.getMonth() + 1, 0)) };
   const s = new Date(monday); s.setDate(s.getDate() + 6);
@@ -139,8 +139,8 @@ function editEntry(e) {
   const d = drawer(e ? `Hours of ${e.name}` : 'Add hours', 'For a day somebody forgot to clock, or clocked wrong');
   const who = selectBox((data.people || []).map(p => [p.worker_id, p.name]), e?.worker_id);
   who.disabled = !!e;
-  const cin = el('input', 'input'); cin.type = 'datetime-local'; cin.value = localInput(e?.clock_in || new Date(new Date().setHours(8, 0, 0, 0)));
-  const cout = el('input', 'input'); cout.type = 'datetime-local'; cout.value = localInput(e ? e.clock_out : new Date(new Date().setHours(16, 0, 0, 0)));
+  const cin = el('input', 'input'); cin.type = 'datetime-local'; cin.value = e ? localInput(e.clock_in) : farmToday() + 'T08:00';
+  const cout = el('input', 'input'); cout.type = 'datetime-local'; cout.value = e ? localInput(e.clock_out) : farmToday() + 'T16:00';
   const note = el('input', 'input'); note.value = e?.note || ''; note.placeholder = 'why it was corrected';
   d.body.append(field('Person', who), field('In', cin), field('Out', cout, 'empty = still in'), field('Note', note));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
@@ -158,8 +158,8 @@ function editEntry(e) {
     if (cout.value && cout.value <= cin.value) { toast('The end is before the start.', 'bad'); return; }
     busy(go, true, 'Saving…');
     try {
-      await rpc('save_time_entry', { p_farm: farm.id, p: { id: e?.id || null, worker_id: who.value, clock_in: new Date(cin.value).toISOString(),
-        clock_out: cout.value ? new Date(cout.value).toISOString() : null, note: note.value } });
+      await rpc('save_time_entry', { p_farm: farm.id, p: { id: e?.id || null, worker_id: who.value, clock_in: farmInstant(cin.value),
+        clock_out: cout.value ? farmInstant(cout.value) : null, note: note.value } });
       d.close(); load(true);
     } catch (x) { busy(go, false, 'Save'); toast(x.message, 'bad'); }
   };

@@ -14,7 +14,7 @@
 // paper tracker's. Nothing here sets a limit: they are the unit's own, in Connections.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, drawer, toast, busy, input, field } from './ui.js';
+import { el, num, drawer, toast, busy, input, field, farmInstant } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const METRICS = [
@@ -214,7 +214,7 @@ export function openSump(farm, { sump, day = null } = {}) {
         if (!ec.value && !ph.value && !tc.value) { toast('Type at least one of EC, pH, temperature', 'bad'); return; }
         busy(add, true, 'Saving…');
         try {
-          await rpc('save_sump_reading', { p: { sump_id: h.sump.id, at: at.value ? new Date(at.value).toISOString() : null, ec: ec.value, ph: ph.value, water_temp: tc.value } });
+          await rpc('save_sump_reading', { p: { sump_id: h.sump.id, at: at.value ? farmInstant(at.value) : null, ec: ec.value, ph: ph.value, water_temp: tc.value } });
           toast('Reading saved'); read();
         } catch (e) { busy(add, false, 'Add a reading'); toast(e.message, 'bad'); }
       };

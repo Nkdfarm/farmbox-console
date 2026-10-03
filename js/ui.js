@@ -211,6 +211,35 @@ export const ymd = d =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const parseYmd = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
 export const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+// The farm's day, not the browser's: a laptop on another clock (a manager travelling, Europe in winter) used to see
+// yesterday's work without its "Not done" and the board open on the week before (review 3 Oct 2026).
+// who is signed in, as far as a page needs to know (app.js paintMyRole sets it); the server decides anyway
+let myRoleRows = [];
+export const setMyRoles = rows => { myRoleRows = rows || []; };
+export const isFranchisor = () => myRoleRows.some(r => r.role === 'franchisor_admin');
+
+export const FARM_TZ = 'Africa/Johannesburg';
+let farmTz = FARM_TZ;
+export const setFarmTz = tz => { farmTz = tz || FARM_TZ; };
+export const farmToday = (tz = farmTz) => {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); } catch { return ymd(new Date()); }
+};
+export const farmDate = () => parseYmd(farmToday());   // the farm's day as a local Date (for period arithmetic)
+// a datetime-local value typed as the farm's clock → an ISO instant ("2026-10-03T08:30" → …+02:00)
+export const farmInstant = (local, tz = farmTz) => {
+  if (!local) return null;
+  const guess = new Date(local + 'Z');                       // the wall clock read as UTC, then corrected by the zone's offset
+  const asTz = new Date(guess.toLocaleString('en-US', { timeZone: tz }));
+  const asUtc = new Date(guess.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return new Date(guess.getTime() - (asTz - asUtc)).toISOString();
+};
+// an instant → the farm's wall clock for a datetime-local field
+export const farmLocal = (iso, tz = farmTz) => {
+  if (!iso) return '';
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+};
 export const isoDow = d => ((d.getDay() + 6) % 7) + 1;           // Mon = 1 … Sun = 7
 export const mondayOf = d => addDays(d, 1 - isoDow(d));
 

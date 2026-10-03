@@ -1,7 +1,7 @@
 // Boot, sign-in, farm switcher, router. Everything else is a page module.
 import { getSession, signIn, signOut, me, select, rpc,
          connection, onConnection, newPage, reconnect, pruneData } from './api.js';
-import { el, toast, icon, avatar, pref, setPhotos, loading } from './ui.js';
+import { el, toast, icon, avatar, pref, setPhotos, loading, setFarmTz, setMyRoles } from './ui.js';
 import { renderPeople, roleLabel } from './people.js';
 import { renderWeek, defaultWeek, nextWeek } from './week.js';
 import { renderFarm, holidayRange } from './farm.js';
@@ -273,7 +273,7 @@ function forgetConversations() {
 // the last person, a start that failed on the network was never retried and a reconnect drew the
 // last person's farm with the new token
 function resetState() {
-  booted = false; farm = null; farms = []; choices = []; myRoles = [];
+  booted = false; farm = null; farms = []; choices = []; myRoles = []; setMyRoles([]);
   startError = null; startRetried = false; bootBar = null;
   const pick = $('farmPick'); if (pick) pick.textContent = '';
 }
@@ -287,6 +287,13 @@ function doSignOut() {
 }
 $('signout').addEventListener('click', doSignOut);
 // a session refused in the middle of the day: back to the form, the offline copies cleared (0.7.112)
+// a page shows the copy kept on this computer because the fresh read was refused (api.js openFast)
+let staleShown = 0;
+addEventListener('fbc:stale', e => {
+  if (Date.now() - staleShown < 10_000) return;       // one notice for a page's several reads
+  staleShown = Date.now();
+  toast('Showing the copy kept on this computer — the fresh read failed: ' + e.detail, 'bad');
+});
 addEventListener('fbc:session-ended', () => {
   if ($('shell').hidden) return;
   warmed.clear(); forgetConversations(); signOut(); resetState(); location.hash = '';
@@ -357,6 +364,7 @@ async function paintMyRole() {
     const rows = await select('membership',
       `select=role,farm_id,org_id&user_id=eq.${myUserId}&active=is.true`);
     myRoles = rows;
+    setMyRoles(rows);
     const franchisor = rows.some(r => r.role === 'franchisor_admin');
     const here = rows.find(r => r.farm_id === farm?.id);
     pill.textContent = franchisor ? 'Franchisor admin'
@@ -364,7 +372,7 @@ async function paintMyRole() {
                      : 'No role here';
     pill.className = 'pill' + (franchisor || here ? ' ok' : ' warn');
     pill.hidden = false;
-  } catch { myRoles = []; pill.hidden = true; }   // never the previous farm's or person's roles
+  } catch { myRoles = []; setMyRoles([]); pill.hidden = true; }   // never the previous farm's or person's roles
 }
 
 // Switching FarmBox from anywhere: the picker, or a row on All FarmBoxes.
@@ -546,6 +554,7 @@ async function paintPestDot() {
 }
 
 async function route() {
+  setFarmTz(farm?.timezone);                 // every page's "today" is the farm's (ui.js farmToday)
   paintPestDot();
   const { sec, tab } = currentRoute();
   const wanted = `#/${sec}/${tab[0]}`;

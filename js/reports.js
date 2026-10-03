@@ -10,7 +10,7 @@
 // person is a management tool, not a leaderboard.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, table, pageHead, card, toast, num, shortDate } from './ui.js';
+import { loading, el, table, pageHead, card, toast, num, shortDate, farmDate } from './ui.js';
 
 const RANGES = [[27, 'Last 4 weeks'], [6, 'Last week'], [90, 'Last quarter'],
                 [364, 'Last year']];
@@ -28,9 +28,9 @@ function ymd(d) {
 
 // the period on screen, as the arguments it fetches with (app.js reads it ahead)
 export function reportRange() {
-  const from = new Date();
+  const from = farmDate();
   from.setDate(from.getDate() - days);
-  return { p_from: ymd(from), p_to: ymd(new Date()) };
+  return { p_from: ymd(from), p_to: ymd(farmDate()) };
 }
 
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)

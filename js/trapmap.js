@@ -202,7 +202,8 @@ export function trapKit(K) {
 
   function view(photo, getReadings) {
     openViewer({
-      farm, photo: { ...photo, kind: 'trap' }, catalog: [], aiReady: true, mayWrite: !!data.may_edit,   // a worker only looks (0.7.162)
+      // the page's catalogue (a trap photo can be tagged from the map) and whether an AI key is set (review 3 Oct 2026)
+      farm, photo: { ...photo, kind: 'trap' }, catalog: K.catalog?.() || [], aiReady: K.aiReady?.() ?? true, mayWrite: !!data.may_edit,   // a worker only looks (0.7.162)
       zonePhotos: getReadings,                                  // Compare with… = this spot's other photos
       zoneId: photo.zone_id || null, crops: [], openCases: async () => [],
       onChange: () => load(),

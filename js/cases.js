@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, drawer, field, input, selectBox, toast, busy, num } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -92,7 +92,7 @@ export async function openCase(id, onChange, f) {
 
     // withholding: the one thing nobody may miss
     const wait = (det.programs || []).map(p => p.harvest_after).filter(Boolean).sort().pop();
-    if (wait && wait >= ymd(new Date())) d.body.append(el('div', 'note warn', `Do not harvest ${c.crop || 'this crop'} in ${c.zone || 'this zone'} before ${new Date(wait + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} — the withholding period of the last treatment.`));
+    if (wait && wait >= farmToday()) d.body.append(el('div', 'note warn', `Do not harvest ${c.crop || 'this crop'} in ${c.zone || 'this zone'} before ${new Date(wait + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} — the withholding period of the last treatment.`));
     if (c.detail) d.body.append(el('p', 'hint', c.detail));
 
     // the curve
@@ -205,7 +205,7 @@ function programForm(det, p, changed) {
   const method = selectBox(METHODS, p?.method || 'biological');
   const product = input({ value: p?.product || '', placeholder: 'e.g. Bacillus subtilis, Encarsia formosa' });
   const rate = input({ value: p?.rate || '', placeholder: 'e.g. 2 ml/l, 5 cards per 100 m²' });
-  const start = input({ type: 'date', value: p?.start_date || ymd(new Date(Date.now() + 864e5)) });
+  const start = input({ type: 'date', value: p?.start_date || ymd(new Date(farmDate().getTime() + 864e5)) });
   const every = input({ type: 'number', min: 1, max: 90, value: p?.interval_days ?? 7 });
   const count = input({ type: 'number', min: 1, max: 52, value: p?.applications ?? 3 });
   const wh = input({ type: 'number', min: 0, max: 180, value: p?.withholding_days ?? 0 });

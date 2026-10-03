@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
-         mondayOf, subFamilyTag } from './ui.js';
+         mondayOf, subFamilyTag, farmDate } from './ui.js';
 
 const PERIOD_KEY = 'fbc_harvest_period';
 const PERIODS = [['week', 'This week'], ['month', 'This month'], ['quarter', '3 months'], ['year', 'This year']];
@@ -19,7 +19,7 @@ let period = PERIODS.some(p => p[0] === pref.get(PERIOD_KEY)) ? pref.get(PERIOD_
 
 // the same arguments the page uses, for warm()
 export function harvestRange(p = period) {
-  const t = new Date();
+  const t = farmDate();
   if (p === 'week') { const m = mondayOf(t); return { p_from: ymd(m), p_to: ymd(addDays(m, 6)) }; }
   if (p === 'quarter') return { p_from: ymd(addDays(t, -90)), p_to: ymd(t) };
   if (p === 'year') return { p_from: `${t.getFullYear()}-01-01`, p_to: `${t.getFullYear()}-12-31` };

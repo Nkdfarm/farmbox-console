@@ -19,7 +19,7 @@
 // when the console is offline, and says how old it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { select, patch } from './api.js';
-import { el, icon, toast, busy, field, parseYmd } from './ui.js';
+import { el, icon, toast, busy, field, farmToday, ymd, addDays, parseYmd } from './ui.js';
 
 const FORECAST = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search';
@@ -206,9 +206,14 @@ function paint(tile, farm, row, wx, at, offline) {
     `Feels ${round(c.apparent_temperature)}° · humidity ${round(c.relative_humidity_2m)} %`));
   now.append(badge(glyph), body);
 
-  // today and tomorrow
+  // today and tomorrow — by their date: a copy kept from yesterday used to call yesterday "Today" (review 3 Oct 2026)
   const days = el('div', 'wx-days');
-  d.time.slice(0, 2).forEach((t, i) => {
+  const tday = farmToday(farm.timezone || undefined), tmrw = ymd(addDays(parseYmd(tday), 1));
+  const dayWord = t => t === tday ? 'Today' : t === tmrw ? 'Tomorrow'
+    : parseYmd(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+  const idx = d.time.map((t, i) => [t, i]).filter(([t]) => t >= tday).slice(0, 2);
+  if (!idx.length) days.append(el('div', 'tile-sub', 'This forecast is out of date — it will be read again when there is a connection.'));
+  idx.forEach(([t, i]) => {
     const [w, g] = wmo(d.weather_code[i]);
     const avg = dayAverage(wx, t), gust = d.wind_gusts_10m_max?.[i], dir = d.wind_direction_10m_dominant?.[i];
     const mm = Number(d.precipitation_sum[i] || 0), pct = d.precipitation_probability_max?.[i];
@@ -216,7 +221,7 @@ function paint(tile, farm, row, wx, at, offline) {
     day.title = `${w} · ${round(mm, 1)} mm` + (pct != null ? ` (${pct} %)` : '') +
       ` · wind from ${compass(dir)}, average ${round(avg)} km/h, gusts ${round(gust)} km/h`;
     const top = el('div', 'wx-day-top');
-    top.append(el('span', null, i === 0 ? 'Today' : 'Tomorrow'), icon(g));
+    top.append(el('span', null, dayWord(t)), icon(g));
     day.append(top);
     const temps = el('div');
     temps.append(el('b', null, `${round(d.temperature_2m_max[i])}°`),
@@ -236,8 +241,11 @@ function paint(tile, farm, row, wx, at, offline) {
   place.title = 'Change the farm’s location';
   place.append(icon('pin'), el('span', null, row.town || `${round(row.lat, 2)}, ${round(row.lng, 2)}`));
   place.onclick = () => pick(tile, farm, row, () => paint(tile, farm, row, wx, at, offline));
-  const when = el('span', 'wx-when' + (offline ? ' is-old' : ''),
-    offline ? `Offline — saved ${clock(at)}` : `Updated ${clock(at)}`);
+  const stale = Date.now() - at > 3 * 3600_000;              // "now" from hours ago is not now
+  const sameDay = new Date(at).toDateString() === new Date().toDateString();
+  const stamp = sameDay ? clock(at) : new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + clock(at);
+  const when = el('span', 'wx-when' + (offline || stale ? ' is-old' : ''),
+    offline ? `Offline — saved ${stamp}` : `${stale ? 'Saved' : 'Updated'} ${stamp}`);
   foot.append(place, when, forecastLinks(row));
 
   tile.append(now, days, foot);

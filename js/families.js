@@ -139,7 +139,8 @@ function editFamilies(onSaved) {
       add.onclick = () => {
         f.subfamilies.push({ name: '', old_name: null, sort: (f.subfamilies.length + 1) * 10, active: true });
         paint();
-        c.querySelectorAll('input')[f.subfamilies.length]?.focus();
+        // paint() built a new card: focus the new field in it, not in the card left behind
+        box.children[fams.indexOf(f)]?.querySelectorAll('input')[f.subfamilies.length]?.focus();
       };
       c.append(add);
       box.append(c);

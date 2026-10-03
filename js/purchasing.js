@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
-         num, shortDate, selectBox, confirmDrawer } from './ui.js';
+         num, shortDate, selectBox, confirmDrawer, isFranchisor } from './ui.js';
 
 let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
 let stockOnly = false;
@@ -538,11 +538,15 @@ function editItem(r) {
   const cost = input({ type: 'number', step: '0.01', min: 0, value: r?.unit_cost ?? '' });
   const rp = input({ type: 'number', step: 'any', min: 0, value: r?.reorder_point ?? '' });
   const rq = input({ type: 'number', step: 'any', min: 0, value: r?.reorder_qty ?? '', placeholder: 'empty = up to twice the point' });
+  const std = !own && isFranchisor();        // the franchisor sets a standard item's pack and cost for every farm
   if (own) {
     const g = el('div', 'grid2'); g.append(field('Name', name), field('Code', code));
     const g2 = el('div', 'grid2'); g2.append(field('Category', cat), field('Unit', unit));
     const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'orders are rounded up to it'), field(`Unit cost (${data.currency})`, cost));
     d.body.append(g, g2, g3);
+  } else if (std) {
+    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'for every farm — orders are rounded up to it'), field(`Unit cost (${data.currency})`, cost, 'for every farm'));
+    d.body.append(g3);
   }
   const g4 = el('div', 'grid2'); g4.append(field('Reorder at', rp, 'below it, "Work out what to buy" tops it up'), field('Reorder quantity', rq));
   d.body.append(g4);
@@ -552,6 +556,7 @@ function editItem(r) {
     busy(ok, true, 'Saving…');
     const p = { id: r?.item_id || null, reorder_point: rp.value, reorder_qty: rq.value };
     if (own) Object.assign(p, { name: name.value, code: code.value, category: cat.value, unit: unit.value, pack_size: pack.value, unit_cost: cost.value });
+    else if (std) Object.assign(p, { pack_size: pack.value, unit_cost: cost.value });
     try { await rpc('save_item', { p_farm: farm.id, p }); d.close(); toast('Saved', 'ok'); await load(); }
     catch (e) { busy(ok, false, 'Save'); toast(e.message, 'bad'); }
   };

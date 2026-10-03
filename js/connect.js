@@ -17,12 +17,12 @@
 // Until a device sends something every page says how to connect one.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon, farmDate } from './ui.js';
 
 const nice = s => s ? new Date(s).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const niceDay = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const daysAgo = n => { const t = new Date(); return ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - n)); };
+const daysAgo = n => { const t = farmDate(); return ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - n)); };
 const ago = s => {
   if (!s) return 'never';
   const m = Math.round((Date.now() - new Date(s).getTime()) / 60000);

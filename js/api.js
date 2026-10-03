@@ -342,7 +342,13 @@ export async function openFast(reads, { show, waiting, failed, stillHere, fresh 
   let now;
   try {
     now = await Promise.all(reads.map(([n, a, optional]) => optional ? rpc(n, a).catch(() => null) : rpc(n, a)));
-  } catch (e) { if (!had && alive()) failed?.(e); return; }
+  } catch (e) {
+    if (!had && alive()) failed?.(e);
+    // a kept copy is on screen and the server refused the fresh read (a timeout, a missing function after a migration,
+    // a role taken away): say so, or the page looks live while it is not (review 3 Oct 2026). Offline says so already.
+    else if (had && alive() && e instanceof ApiError && e.status) dispatchEvent(new CustomEvent('fbc:stale', { detail: e.message }));
+    return;
+  }
   if (!alive()) return;
   if (had && JSON.stringify(now) === had) return;
   show(now, true);

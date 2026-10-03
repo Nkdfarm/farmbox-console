@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
-         mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine } from './ui.js';
+         mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine, farmToday } from './ui.js';
 import { roleLabel } from './people.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -54,7 +54,7 @@ let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
 // 0.7.111: `drop` = the tasks to take a name off — the chosen person's, or everybody's when no face is chosen
 const manual = { on: false, worker: null, tasks: new Set(), drop: new Set() };
-const onTask = (t, w) => t.hub ? openIds(t).length > 0 && t.members.filter(isOpenTask).every(m => (m.workers || []).some(x => x.id === w))
+const onTask = (t, w) => t.hub ? openIds(t).length > 0 && (t.all || t.members).filter(isOpenTask).every(m => (m.workers || []).some(x => x.id === w))
                             : (t.workers || []).some(x => x.id === w);
 const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); };
 let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
@@ -67,7 +67,7 @@ const mondayOf = s => ymd(mondayOfDate(parseYmd(s)));
 const shift = (s, days) => ymd(addDays(parseYmd(s), days));
 const firstOfMonth = s => s.slice(0, 8) + '01';
 const shiftMonth = (s, n) => { const d = parseYmd(s); return ymd(new Date(d.getFullYear(), d.getMonth() + n, 1)); };
-const today = () => iso(new Date());
+const today = () => farmToday();                // the farm's day, not the browser's
 const hrs = m => (Math.round((Number(m) / 60) * 10) / 10).toFixed(1);
 const hhmm = t => (t || '').slice(0, 5);
 const longDate = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
@@ -108,14 +108,16 @@ async function refresh() {
     mondays.forEach((m, i) => weeks.set(m, got[i]));
     data = weeks.get(focusWeek());
     const cal = body?.querySelector('.tk-cal'), left = cal ? cal.scrollLeft : 0, top = window.scrollY;
-    paintBody();
+    // the whole page (plan status, filter menus) unless somebody is typing or choosing in it: then the board only
+    const busyField = mount.contains(document.activeElement) && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+    if (busyField) paintBody(); else paint();
     const cal2 = body?.querySelector('.tk-cal'); if (cal2) cal2.scrollLeft = left;
     window.scrollTo(0, top);
   } catch { /* offline or a hiccup: the next minute tries again */ }
 }
 
 // this week: what the page opens on, and what warm() reads ahead (next week too)
-export const defaultWeek = () => mondayOf(iso(new Date()));
+export const defaultWeek = () => mondayOf(farmToday());
 export const nextWeek = () => shift(defaultWeek(), 7);
 
 // the Mondays a month needs: from the Monday on or before the 1st to the one on or before the last day
@@ -259,7 +261,8 @@ function visible(tasks) {
 // zone's own task. The tasks themselves stay one a zone, so the phone, the report and the hours are unchanged.
 const HUB_MODULES = new Set(['scouting']);
 const isOpenTask = t => !['done', 'skipped', 'cancelled'].includes(t.status);
-const openIds = t => (t.hub ? t.members : [t]).filter(isOpenTask).map(m => m.id);
+// a folded card's actions cover every open zone of its day, not only the zones a filter leaves on screen
+const openIds = t => (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
 const flatTasks = list => list.flatMap(t => t.hub ? t.members : [t]);
 const hubKey = t => HUB_MODULES.has(t.module) ? [t.module, t.farm_id, t.date, t.sop_id].join('|') : null;
 // "Zone 4-1" → "4.1", "Bay 2A" → "2A": the card says "Zones 1 · 2 · 3 · 4.1 · 4.2"

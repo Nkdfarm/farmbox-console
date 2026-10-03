@@ -7,7 +7,7 @@
 // today, the fair thing to compare the scale with.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast } from './api.js';
-import { loading, el, pageHead, cropAvatar, pref } from './ui.js';
+import { loading, el, pageHead, cropAvatar, pref, farmDate } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -17,7 +17,7 @@ const pctOf = (a, b) => Number(b) > 0 ? Math.round(100 * Number(a) / Number(b)) 
 
 export function yieldRange() {
   const days = Number(pref.get('fbc_yield_period')) || 91;
-  const t = new Date();
+  const t = farmDate();
   return { p_from: ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - days + 1)), p_to: ymd(t) };
 }
 

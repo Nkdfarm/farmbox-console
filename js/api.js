@@ -266,7 +266,8 @@ export async function api(path, opts = {}) {
   try {
     const body = await live(path, opts);
     setOnline(true);
-    if (read) { if (session === s0) remember(key, body); } else lastWrite = Date.now();
+    if (read) { if (session === s0) remember(key, body); }
+    else { lastWrite = Date.now(); try { dispatchEvent(new Event('fbc:wrote')); } catch { /* no window */ } }   // live.js tells the others
     return body;
   } catch (e) {
     // The server answered: that is a real answer, online or not.

@@ -14,6 +14,7 @@
 // on Procedures and People, so Irrigation is the same blue everywhere.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
+import { liveWatch } from './live.js';
 import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
          mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine, farmToday } from './ui.js';
 import { roleLabel } from './people.js';
@@ -93,6 +94,11 @@ export async function renderWeek(container, currentFarm) {
     if (document.hidden || manual.on || dragging || document.querySelector('.drawer')) return;
     refresh();
   }, 60000);
+  // live (0.7.208): a phone or another console changed something — read again at once, under the same conditions
+  liveWatch(farm.id, () => {
+    if (!mount || !mount.isConnected || document.hidden || manual.on || dragging || document.querySelector('.drawer')) return;
+    refresh();
+  });
 }
 let refreshTimer = null;
 // read the weeks on screen again, quietly: the board is redrawn only when something moved, and stays where it was scrolled

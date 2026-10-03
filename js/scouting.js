@@ -632,7 +632,10 @@ function zoneBand(z, day, withAi = false) {
     if (zt.outcome) right.append(el('span', 'pill ' + (zt.outcome === 'nok' ? 'bad' : 'ok'), zt.outcome === 'nok' ? 'Not OK' : 'OK'));
     right.append(el('span', 'hint', zt.status === 'done'
       ? [zt.workers?.length ? zt.workers.join(', ') : null, zt.done_at ? hhmm(zt.done_at) : null].filter(Boolean).join(' · ') || 'done'
-      : zt.status === 'skipped' ? 'cancelled' : 'not done'));
+      : zt.status === 'skipped' ? 'cancelled'
+      // somebody has it open on a phone now (0203): the same lock as the Tasks board and the phones
+      : zt.held ? `🔒 ${zt.held.running ? 'in progress' : 'paused'} · ${String(zt.held.name || 'somebody').split(/\s+/)[0]}`
+      : 'not done'));
   } else if (z.item?.done_at) right.append(el('span', 'hint', hhmm(z.item.done_at)));
   else if (z.item && day.task?.status !== 'done') right.append(el('span', 'hint', 'not done'));   // a day scouted as one task never ticked its zones
   sum.append(right);

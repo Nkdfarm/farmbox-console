@@ -41,6 +41,18 @@ function toggles(options, chosen, onChange) {
 
 const grid = (cls, ...fields) => { const g = el('div', cls); g.append(...fields); return g; };
 
+// what a crop's growth photos can track (0207)
+export const TRACK_SUBJECTS = [
+  ['height', 'Plant height', 'how: e.g. from the substrate to the growing tip, 5 plants a row'],
+  ['fruit', 'Fruit', 'how: e.g. the biggest fruit of 5 plants, card beside it'],
+  ['leaf', 'Leaf', 'how: e.g. the youngest full-size leaf of 5 plants'],
+  ['head', 'Head', 'how: e.g. 5 heads from above, card at leaf level'],
+];
+export const trackingLine = t => TRACK_SUBJECTS.filter(([k]) => t?.[k]?.on).map(([k, label]) => {
+  const x = t[k], dims = k === 'height' ? '' : ' ' + ((x.dims || []).join(' + ') || 'no line chosen');
+  return `${label}${dims} (${x.stat === 'average' ? 'average' : 'longest'})`;
+}).join(' · ');
+
 export async function editCrop(c, onSaved, farm) {
   // the procedures a phase can carry: approved, per-batch ones first
   let sops = [];
@@ -327,6 +339,41 @@ export async function editCrop(c, onSaved, farm) {
   paintBom();
   d.body.append(bBox);
 
+  // ── what to track on the growth photos (0207): plant height, fruit, leaf, head — which of the phone's two
+  // straight lines, the day's longest or its average, and how to measure. Nothing reads it yet. ──
+  let trk = null, trkTouched = false;
+  try { trk = (await rpc('crop_tracking', { p_crop: c.id }))?.tracking || {}; } catch { trk = null; }   // a database before 0207
+  if (trk) {
+    d.body.append(el('div', 'sec-title', 'Growth to track'));
+    d.body.append(el('div', 'hint', 'What the scouting should measure on this crop. The phone draws two straight lines on a fruit, leaf or head: the longest from edge to edge, and the longest across it. Choose which count, and whether a day is its longest or its average.'));
+    const tBox2 = el('div', 'ce-trk');
+    TRACK_SUBJECTS.forEach(([key, label, hint]) => {
+      const t = trk[key] = { on: false, dims: key === 'height' ? undefined : ['longest'], stat: 'longest', how: '', ...(trk[key] || {}) };
+      const line = el('div', 'ce-trow');
+      const on = el('input'); on.type = 'checkbox'; on.checked = !!t.on;
+      const lab = el('label', 'ce-trk-on'); lab.append(on, el('b', null, label));
+      const rest = el('span', 'ce-trk-rest');
+      const dim = (code, text) => {
+        const b = el('button', 'btn btn-sm', text); b.type = 'button';
+        const paint = () => b.setAttribute('aria-pressed', String((t.dims || []).includes(code)));
+        b.onclick = () => { t.dims = (t.dims || []).includes(code) ? t.dims.filter(x => x !== code) : [...(t.dims || []), code]; trkTouched = true; paint(); };
+        paint(); return b;
+      };
+      if (key !== 'height') rest.append(dim('longest', 'Longest'), dim('across', 'Across'));
+      const stat = selectBox([['longest', 'the day\'s longest'], ['average', 'the day\'s average']], t.stat || 'longest');
+      stat.onchange = () => { t.stat = stat.value; trkTouched = true; };
+      const how = input({ value: t.how || '', placeholder: hint });
+      how.oninput = () => { t.how = how.value; trkTouched = true; };
+      rest.append(stat, how);
+      const show = () => { rest.hidden = !on.checked; };
+      on.onchange = () => { t.on = on.checked; trkTouched = true; show(); };
+      show();
+      line.append(lab, rest);
+      tBox2.append(line);
+    });
+    d.body.append(tBox2);
+  }
+
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Save');
@@ -360,6 +407,7 @@ export async function editCrop(c, onSaved, farm) {
           p_targets: targetsTouched ? targets.map(t => ({ ...t })) : null,
           p_bom: bomTouched ? bom.map(b => ({ id: b.id || null, item_id: b.item_id, quantity: b.quantity, per: b.per, phase_type: b.phase_type || null, notes: b.notes || null })) : null });
       }
+      if (trk && trkTouched) await rpc('save_crop_tracking', { p_crop: c.id, p: trk });
       toast(`${name.value.trim()} saved · ${r.cycle_days} day cycle` + (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
       d.close();
       await onSaved?.();

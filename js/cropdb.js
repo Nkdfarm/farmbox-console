@@ -12,7 +12,7 @@
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
          systemLabel, mediumLabel, systemsFor, nurseryField } from './ui.js';
-import { editCrop } from './crop-edit.js';
+import { editCrop, TRACK_SUBJECTS, trackingLine } from './crop-edit.js';
 
 // the words on screen, and a colour, for a category code
 const CATS = {
@@ -422,6 +422,14 @@ async function openCrop(row) {
   fact('Scope', c.scope);
   fact('Sowing', sowingLine(c.sowing) || '—');
   d.body.append(facts);
+  // what its growth photos should track (0207) — read beside the page: a database before 0207 shows nothing
+  rpc('crop_tracking', { p_crop: row.id }).then(t => {
+    const line = trackingLine(t?.tracking);
+    if (!facts.isConnected) return;
+    fact('Growth to track', line || 'nothing chosen yet');
+    const how = TRACK_SUBJECTS.filter(([k]) => t?.tracking?.[k]?.on && t.tracking[k].how).map(([k, label]) => `${label}: ${t.tracking[k].how}`);
+    if (how.length) facts.lastElementChild.title = how.join('\n');
+  }).catch(() => {});
 
   d.body.append(el('div', 'sec-title', 'Systems and yield'));
   d.body.append(table([

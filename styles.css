@@ -1777,6 +1777,13 @@ table.table tr.off td { opacity: .5; }
 .ce-range { display: inline-flex; align-items: center; gap: 3px; }
 .ce-range input { width: 62px; padding: 3px 6px; }
 .ce-brow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ce-trk { display: grid; gap: 8px; }
+.ce-trow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ce-trk-on { display: inline-flex; gap: 6px; align-items: center; min-width: 130px; cursor: pointer; }
+.ce-trk-rest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; }
+.ce-trk-rest[hidden] { display: none; }
+.ce-trk-rest input { flex: 1; min-width: 200px; }
+.ce-trk-rest .btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 .ce-brow select:first-child { min-width: 220px; flex: 1; }
 .ce-brow input { width: 90px; }
 .ce-targets > .btn, .ce-bom > .btn { justify-self: start; }

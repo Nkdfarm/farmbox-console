@@ -1274,6 +1274,11 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .pd-tcurve polyline { fill: none; stroke: var(--info); stroke-width: 1.6; }
 .sc-fig.red img { outline: 2px solid var(--error); } .sc-fig.orange img { outline: 2px solid var(--warning); } .sc-fig.green img { outline: 2px solid var(--success); }
 .pd-fig-title { display: flex; align-items: center; gap: 6px; }
+.sc-fig figcaption .pd-fig-title b { color: var(--text-muted); font-weight: 600; }
+.sc-fig figcaption .pd-fig-title.extra b { color: var(--accent); }
+.pd-people { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--text-xs); }
+.pd-who { color: var(--text-muted); white-space: nowrap; }
+.pd-who.extra { color: var(--accent); font-weight: 600; }
 @media (max-width: 900px) { .pd-dash { grid-template-columns: 1fr; } }
 
 /* ── the status of a task at a glance (0.7.103) ─────────────────────────────── */

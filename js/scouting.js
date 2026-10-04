@@ -74,7 +74,7 @@ let farm = null, mount = null, over = null, cases = null, dates = [], catalog = 
 let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 let tmap = null, kit = null, opinions = [], robot = null;
-let extras = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
+let extras = [], people = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
 // what the robot sent (0188): that day's rows, and those naming a zone band
 const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
 const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
@@ -233,20 +233,43 @@ const reload = () => load(true);   // after a change: the server's answer, not t
 // device's copy at once, then the database's; each date line gets its pill when the answer lands
 async function readExtras(here) {
   const a = { p_farm: farm.id, p_days: 90 };
-  const land = x => {
-    if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(extras)) return;
-    extras = x;
+  const repaintLines = () => {
     mount.querySelectorAll('details.pd-day').forEach(det => {
       det.querySelectorAll('.pd-xpill').forEach(n => n.remove());
       const p = extraPill(det.dataset.day), upd = det.querySelector('.pd-day-facts .pd-upd');
       if (p) { const f = det.querySelector('.pd-day-facts'); if (upd) f.insertBefore(p, upd); else f?.append(p); }
     });
   };
+  const land = x => {
+    if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(extras)) return;
+    extras = x; repaintLines();
+  };
+  // who contributed, day by day (0209): the responsible in grey, the extras in orange; a database before 0209 keeps the pill
+  const landPeople = x => {
+    if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(people)) return;
+    people = x; repaintLines();
+  };
+  cachedRpc('scouting_people', a).then(landPeople).catch(() => {});
+  rpc('scouting_people', a).then(landPeople).catch(() => {});
   land(await cachedRpc('extra_scoutings', a).catch(() => null));
   land(await rpc('extra_scoutings', a).catch(() => null));
 }
 const minWord = m => (m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}` : `${Math.round(m)} min`);
 function extraPill(day) {
+  // 0.7.216 (owner 4 Oct 2026): "Responsible · Francesco · 30 min" in the usual grey, "Extra · Oliver · 20 min" in orange —
+  // the name under a picture carries the same colour, so it says who took it as what
+  const ps = people.filter(x => String(x.day) === String(day));
+  if (ps.length) {
+    const first = n => String(n || 'somebody').trim().split(/\s+/)[0];
+    const box = el('span', 'pd-xpill pd-people');
+    ps.forEach(x => {
+      const t = el('span', 'pd-who' + (x.kind === 'extra' ? ' extra' : ''),
+        [x.kind === 'extra' ? 'Extra' : 'Responsible', first(x.name), Number(x.minutes) >= 1 ? minWord(Number(x.minutes)) : null].filter(Boolean).join(' · '));
+      t.title = x.kind === 'extra' ? 'Added photos or counts in an extra scouting' : 'Did the planned scouting';
+      box.append(t);
+    });
+    return box;
+  }
   const xs = extras.filter(x => String(x.day) === String(day));
   if (!xs.length) return null;
   const first = n => String(n || 'somebody').trim().split(/\s+/)[0];
@@ -850,7 +873,7 @@ function photoFig(p, z, day) {
   // one line under the picture (0.7.215, owner 4 Oct 2026: "Fruit - 10:25 - Oliver … remove the unnecessary tags"): what
   // it shows, when, who. The section, "extra", the AI's state and its sentence are the card's hover and the viewer's.
   const part = partLabel(p.part) || 'photo', who = p.by ? String(p.by).trim().split(/\s+/)[0] : null;
-  const title = el('div', 'pd-fig-title');
+  const title = el('div', 'pd-fig-title' + (p.extra ? ' extra' : ''));
   title.append(dotEl(p.dot), el('b', null, [part.charAt(0).toUpperCase() + part.slice(1), hhmm(p.taken_at), who].filter(Boolean).join(' · ')));
   cap.append(title, tagChips(p, true));
   // only what somebody measured or wrote: the position, the sizes on the scale card, the comment

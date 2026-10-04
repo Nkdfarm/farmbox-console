@@ -74,7 +74,7 @@ let farm = null, mount = null, over = null, cases = null, dates = [], catalog = 
 let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 let tmap = null, kit = null, opinions = [], robot = null;
-let extras = [], people = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
+let extras = [], people = [], coverage = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
 // what the robot sent (0188): that day's rows, and those naming a zone band
 const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
 const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
@@ -249,12 +249,56 @@ async function readExtras(here) {
     if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(people)) return;
     people = x; repaintLines();
   };
+  // did each day reach its targets (0211): the section pills take their colour from it
+  const landCov = x => {
+    if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(coverage)) return;
+    coverage = x;
+    mount.querySelectorAll('details.pd-day').forEach(det => {
+      const f = det.querySelector('.pd-day-facts'); if (!f) return;
+      const fresh = sectionPills(det.dataset.day, det._summary);
+      const old = [...f.querySelectorAll('.pd-secpill')];
+      if (!fresh.length) return;
+      const before = old[0] || f.querySelector('.pd-xpill') || f.querySelector('.pd-upd');
+      fresh.forEach(p => (before ? f.insertBefore(p, before) : f.append(p)));
+      old.forEach(n => n.remove());
+    });
+  };
+  const ca = { p_farm: farm.id, p_days: 45 };
+  cachedRpc('scouting_coverage', ca).then(landCov).catch(() => {});
+  rpc('scouting_coverage', ca).then(landCov).catch(() => {});
   cachedRpc('scouting_people', a).then(landPeople).catch(() => {});
   rpc('scouting_people', a).then(landPeople).catch(() => {});
   land(await cachedRpc('extra_scoutings', a).catch(() => null));
   land(await rpc('extra_scoutings', a).catch(() => null));
 }
 const minWord = m => (m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}` : `${Math.round(m)} min`);
+// The section pills of a day (0.7.219, owner 4 Oct 2026: "green when all assigned targets for this specific day are
+// reached (minimum pics per zone), orange when started but not complete, red if not started"). The colour is the
+// day's coverage (0211: 2 photos a zone for Plant health and for Growth, every trap of a zone read); a section somebody
+// reported as a problem carries ⚠ and its note. Without coverage (an older database, a day with no planned scouting) the
+// pills are the reported result, as before.
+function sectionPills(day, summary) {
+  const cov = (coverage.find(x => String(x.day) === String(day)) || {}).sections, so = summary?.section_outcomes || {};
+  const out = [];
+  [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
+    const c = cov?.[k], v = so[k];
+    if (!c && !v) return;
+    let pill;
+    if (c) {
+      const txt = c.state === 'ok' ? `✓ ${label}` : `${label} ${c.done}/${c.zones}`;
+      pill = el('span', 'pill pd-secpill ' + (c.state === 'ok' ? 'ok' : c.state === 'warn' ? 'warn' : 'bad'), txt + (v?.outcome === 'nok' ? ' ⚠' : ''));
+      const what = k === 'trap' ? 'every trap read' : '2 photos';
+      pill.title = [`${c.done} of ${c.zones} zone${c.zones === 1 ? '' : 's'} reached the minimum (${what})` + (c.started > c.done ? `, ${c.started - c.done} started` : ''),
+                    v?.outcome === 'nok' ? 'Problem reported' + (v.note ? ': ' + v.note : '') : (v?.note || null)].filter(Boolean).join(NLINE);
+    } else {
+      pill = el('span', 'pill pd-secpill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
+      if (v.note) pill.title = v.note;
+    }
+    out.push(pill);
+  });
+  return out;
+}
+const NLINE = String.fromCharCode(10);
 function extraPill(day) {
   // 0.7.216 (owner 4 Oct 2026): "Responsible · Francesco · 30 min" in the usual grey, "Extra · Oliver · 20 min" in orange —
   // the name under a picture carries the same colour, so it says who took it as what
@@ -582,13 +626,8 @@ function dayRow(d, openFirst, latest = false) {
     facts.append(pill);
   }
   // each section's result on the line itself (0174, owner: "more compact: the OK is not needed") — the unit's, so not in a zone's report
-  const so = !zoneFilter && d.summary?.section_outcomes;
-  if (so) [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
-    const v = so[k]; if (!v) return;
-    const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
-    if (v.note) pill.title = v.note;
-    facts.append(pill);
-  });
+  det._summary = zoneFilter ? null : d.summary;
+  if (!zoneFilter) sectionPills(d.day, d.summary).forEach(p => facts.append(p));
   const rbDay = robotDay(d.day);
   if (rbDay.length) { const p = el('span', 'pill' + (rbDay.some(r => r.status === 'new') ? ' warn' : ''), `robot ${rbDay.length}`); p.title = 'Observations the robot sent that day'; facts.append(p); }
   const xp = extraPill(d.day);

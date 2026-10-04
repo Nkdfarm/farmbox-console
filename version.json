@@ -1,5 +1,5 @@
 {
-  "version": "0.7.218",
+  "version": "0.7.219",
   "released": "2026-10-04",
-  "note": "Old scouting reports open; the pre-load waits its turn"
+  "note": "Scouting report: did the day reach its targets"
 }

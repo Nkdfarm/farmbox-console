@@ -1,5 +1,5 @@
 {
-  "version": "0.7.217",
+  "version": "0.7.218",
   "released": "2026-10-04",
-  "note": "A read that timed out is asked again"
+  "note": "Old scouting reports open; the pre-load waits its turn"
 }

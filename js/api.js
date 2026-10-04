@@ -257,7 +257,14 @@ export const OFFLINE_WRITE = 'Offline — the console is read only. This needs a
 // Every call goes through here.
 // the last change this tab made: a copy kept before it is out of date (0.7.112)
 let lastWrite = 0;
+// how many requests are on their way (0.7.218): the background pre-load waits while a page is asking for its own data
+let inFlight = 0;
+export const apiBusy = () => inFlight;
 export async function api(path, opts = {}) {
+  inFlight++;
+  try { return await api0(path, opts); } finally { inFlight--; }
+}
+async function api0(path, opts = {}) {
   if (!session) throw new ApiError('sign in first', 401);
   const read = isRead(path, opts);
   // the key and the person are fixed when the request leaves: an answer landing after a sign-out (or after the

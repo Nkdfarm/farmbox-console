@@ -18,7 +18,7 @@ import { renderIssues } from './issues.js';
 import { renderFeedback } from './feedback.js';
 import { renderScouting } from './scouting.js';
 import { renderIpmPrograms, renderIpmProducts } from './treatments.js';
-import { rpc as rpcCall } from './api.js';
+import { rpc as rpcCall, apiBusy } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
 import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
 import { timelineRange } from './timeline.js';
@@ -471,7 +471,7 @@ async function warm() {
   // a site: each unit's copies, the home unit first (0.7.158)
   const ids = unitsOf(farm).map(u => u.id).filter(i => !warmed.has(i));
   if (!ids.length) { finishUpdate(); return; }
-  await new Promise(r => setTimeout(r, 1200));      // after the page itself
+  await new Promise(r => setTimeout(r, 4000));      // well after the page itself (0.7.218; was 1.2 s)
   for (const id of ids) await warmOne(id);
   finishUpdate();
 }
@@ -492,18 +492,18 @@ async function warmOne(id) {
   if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
   if (mayMoney()) calls.push(['money', { ...p, ...moneyRange() }]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
-  // four at a time (0.7.107): one by one, 25 reads at ~0.2 s each from Cape Town to
-  // Frankfurt took five seconds, and a page opened meanwhile had no copy to open from
-  let done = 0, next = 0, lost = false;
-  const worker = async () => {
-    while (next < calls.length && !lost) {
-      const [name, args] = calls[next++];
-      if (!connection().online) { lost = true; return; }
-      try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
-      updateProgress(++done, calls.length);
-    }
-  };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  // One at a time, and only while the page asks for nothing itself (0.7.218, owner 4 Oct 2026: "too long to open old
+  // reports", statement timeouts). 0.7.107 ran four at a time, for each unit of a site: some thirty heavy reads a
+  // unit (the planner, the baskets, the week) in the same seconds as the page's own — the database server has little
+  // processor, and calls that take half a second alone were cancelled at eight. The pre-load is for offline; it can wait.
+  let done = 0, lost = false;
+  const idle = async () => { let quiet = 0; while (quiet < 2) { await new Promise(r => setTimeout(r, 200)); quiet = apiBusy() ? 0 : quiet + 1; } };
+  for (const [name, args] of calls) {
+    if (!connection().online) { lost = true; break; }
+    await idle();
+    try { await rpc(name, args); } catch { /* the page will say so if it matters */ }
+    updateProgress(++done, calls.length);
+  }
   if (lost) warmed.delete(id);
 }
 

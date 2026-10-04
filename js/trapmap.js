@@ -183,6 +183,8 @@ export function trapKit(K) {
                    el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced after' : '')));
           const chk = trapCheckPill(x.check, x.total);
           if (chk) f.append(chk);
+          // a reading added by an extra scouting (0205)
+          if (x.extra) f.append(el('span', 'pill pd-extra', 'extra' + (x.by ? ' · ' + String(x.by).trim().split(/\s+/)[0] : '')));
           if (excl) f.classList.add('excluded');
           f.onclick = () => view(x, getReadings);
           hist.append(f);

@@ -159,6 +159,12 @@ export function openViewer(ctx) {
   // ── the panel ──
   const head = el('div', 'vw-head');
   head.append(el('h2', null, photoTitle(photo)), el('div', 'hint', `${when(photo.taken_at)}${photo.zone ? ' · ' + photo.zone : ''}`));
+  // added by an extra scouting (0204), beside the zone's planned one
+  if (photo.extra) {
+    const xt = el('span', 'pill pd-extra', 'extra' + (photo.by ? ' · ' + String(photo.by).trim().split(/\s+/)[0] : ''));
+    xt.title = `Added by an extra scouting${photo.by ? ' — ' + photo.by : ''}, beside the zone's planned scouting`;
+    head.append(xt);
+  }
   const x = el('button', 'btn btn-ghost btn-sm', '✕'); x.setAttribute('aria-label', 'Close'); x.onclick = close;
   head.append(x);
   const tools = el('div', 'vw-tools');

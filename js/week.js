@@ -54,10 +54,10 @@ const EMPTY_FILTERS = { q: '', status: 'open', unit: '', family: '', category: '
 let filters = { ...EMPTY_FILTERS };
 // the people column (0.7.81): manual mode = one person, the tasks clicked, Validate
 // 0.7.111: `drop` = the tasks to take a name off — the chosen person's, or everybody's when no face is chosen
-const manual = { on: false, worker: null, tasks: new Set(), drop: new Set() };
+const manual = { on: false, worker: null, tasks: new Set(), drop: new Set(), seen: new Map() };
 const onTask = (t, w) => t.hub ? openIds(t).length > 0 && (t.all || t.members).filter(isOpenTask).every(m => (m.workers || []).some(x => x.id === w))
                             : (t.workers || []).some(x => x.id === w);
-const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); };
+const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); manual.seen.clear(); };
 let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
 let dragging = null;      // the task being dragged, while it is
 try { filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
@@ -101,6 +101,8 @@ export async function renderWeek(container, currentFarm) {
   });
 }
 let refreshTimer = null;
+// FarmBox 0212: a change answers who else touched the same task in the last two minutes — said, never refused
+const alsoBy = names => { const n = (names || []).filter(Boolean); return n.length ? ` · ${[...new Set(n)].join(' and ')} changed ${n.length > 1 ? 'these' : 'this'} a moment ago too` : ''; };
 // read the weeks on screen again, quietly: the board is redrawn only when something moved, and stays where it was scrolled
 let loadGen = 0;          // bumped by load(): a minute's refresh read before a change must not undo it on screen
 async function refresh() {
@@ -142,7 +144,7 @@ const mondaysOnScreen = () => span === 'month' ? monthMondays(month) : [focusWee
 const rangeOnScreen = () => span === 'day' ? [day, day]
   : span === 'month' ? [month, ymd(new Date(parseYmd(month).getFullYear(), parseYmd(month).getMonth() + 1, 0))]
   : [week, shift(week, 6)];
-const mayPlanNow = () => !!(data?.may_plan) && data?.plan?.status !== 'locked';
+const mayPlanNow = () => !!(data?.may_plan);
 
 // last time's copy at once, the server's answer behind it (openFast, 0.7.108)
 async function load() {
@@ -392,7 +394,7 @@ function paintPeople() {
   ba.onclick = () => autoAssign(ba, from, to);
   head.append(bm, ba);
   peopleCol.append(head);
-  if (!may) peopleCol.append(el('div', 'hint', data?.plan?.status === 'locked' ? 'This week is locked — reopen its plan to change who does what.' : 'Only a manager assigns the work.'));
+  if (!may) peopleCol.append(el('div', 'hint', 'Only a manager assigns the work.'));
   if (manual.on) {
     const who = manual.worker ? (list.find(p => p.id === manual.worker)?.name || 'Chosen') : null;
     peopleCol.append(el('div', 'tk-guide', who
@@ -407,16 +409,18 @@ function paintPeople() {
     ok.onclick = async () => {
       busy(ok, true, 'Saving…');
       try {
-        const said = [];
-        if (manual.worker && manual.tasks.size) {
-          const r = await rpc('assign_tasks', { p_tasks: [...manual.tasks], p_worker: manual.worker });
-          said.push(`${r.assigned} given to ${who}`);
-        }
-        if (manual.drop.size) {
-          const r = await rpc('unassign_tasks', { p_tasks: [...manual.drop], p_worker: manual.worker });
-          said.push(`${r.unassigned} taken off ${who || 'everybody'}`);
-        }
-        toast(said.join(' · '), 'ok');
+        // one call (FarmBox 0212): the chosen person added, the names that were on the chip taken off — by name, so
+        // two managers' changes combine instead of one replacing the other
+        const seen = id => manual.seen.get(id) || [];
+        const changes = [];
+        if (manual.worker) for (const id of manual.tasks)
+          changes.push({ task_id: id, add: [manual.worker], drop: seen(id).filter(w => w !== manual.worker) });
+        for (const id of manual.drop) changes.push({ task_id: id, drop: manual.worker ? [manual.worker] : seen(id) });
+        const r = await rpc('change_people', { p_changes: changes });
+        const given = manual.worker ? manual.tasks.size : 0;
+        const said = [given ? `${given} given to ${who}` : null,
+                      manual.drop.size ? `${manual.drop.size} taken off ${who || 'everybody'}` : null].filter(Boolean);
+        toast(said.join(' · ') + alsoBy(r.others), 'ok');
         resetManual(false);
         await load();
       } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); }
@@ -466,7 +470,7 @@ async function autoAssign(btn, from, to) {
     toast(`${r.assigned} of ${r.tasks} tasks assigned`
       + (un.length ? ` · ${un.length} unassigned: ${un[0].reason}` : '')
       + (ci.length ? ` · ${ci.length} call-in${ci.length > 1 ? 's' : ''} (${[...new Set(ci.map(x => x.worker))].join(', ')}) — a decision for you` : '')
-      + ((r.locked_weeks || []).length ? ' · a locked week left alone' : ''), un.length ? 'bad' : 'ok');
+      + (r.left_alone ? ` · ${r.left_alone} already started, left as ${r.left_alone > 1 ? 'they are' : 'it is'}` : ''), un.length ? 'bad' : 'ok');
     await load();
   } catch (e) { busy(btn, false, 'Assign automatically'); toast(e.message, 'bad'); }
 }
@@ -757,6 +761,9 @@ function chip(t, opts = {}) {
       if (t.status === 'done' || t.status === 'skipped') return;
       // a folded scouting card flips every open zone task of it together
       const ids = openIds(t);
+      // who was on each task when it was clicked: only those names are taken off on Validate (FarmBox 0212) —
+      // somebody another manager adds meanwhile stays
+      (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).forEach(m => manual.seen.set(m.id, (m.workers || []).map(x => x.id)));
       const flip = set => { const all = ids.every(id => set.has(id)); ids.forEach(id => all ? set.delete(id) : set.add(id)); };
       if (manual.worker) flip(onTask(t, manual.worker) ? manual.drop : manual.tasks);   // theirs: off; anyone else's: to them
       else if ((t.workers || []).length) flip(manual.drop);                               // no face chosen: names off
@@ -819,8 +826,9 @@ function dropTarget(cell, date, slot) {
     // (0201: that day has the zone already) reloads, so the board shows what really moved
     const ids = (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
     try {
-      for (const id of ids) await rpc('move_task', { p_task: id, p_date: date, p_slot: slot });
-      toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}`, 'ok');
+      const others = [];
+      for (const id of ids) { const r = await rpc('move_task', { p_task: id, p_date: date, p_slot: slot }); if (r?.just_before?.by) others.push(r.just_before.by); }
+      toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}` + alsoBy(others), 'ok');
     } catch (err) { toast(err.message, 'bad'); }
     finally { await load(); }
   };
@@ -920,7 +928,7 @@ function openTask(t) {
     }
   }
 
-  const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
+  const mayPlan = wk?.may_plan;
   if (t.status !== 'done' && t.status !== 'skipped' && mayPlan) {
     // move this one task to the other half of the day (the procedure sets the default)
     const mv = el('div', 'acts');
@@ -1013,7 +1021,7 @@ function openHub(t) {
   });
   d.body.append(list);
   d.body.append(el('div', 'hint', 'The scouting is one task a zone on the phone, the report and the hours; here the day is one card. Change who gives every open zone to one person; open a zone for its own task.'));
-  const mayPlan = wk?.may_plan && wk?.plan?.status !== 'locked';
+  const mayPlan = wk?.may_plan;
   if (openIds(t).length && mayPlan) {
     const ch = el('button', 'btn btn-primary', 'Change who');
     ch.onclick = () => { d.close(); reassign(t, wk); };
@@ -1075,12 +1083,13 @@ function reassign(task, wk) {
     b.onclick = async () => {
       d.close();
       try {
+        let r = null;
         if (task.hub) {
           const ids = openIds(task);
           if (id) await rpc('assign_tasks', { p_tasks: ids, p_worker: id });
           else await rpc('unassign_tasks', { p_tasks: ids, p_worker: null });
-        } else await rpc('assign_task', { p_task: task.id, p_worker: id });
-        toast(id ? 'Given to ' + label : 'Left for the planner', 'ok');
+        } else r = await rpc('assign_task', { p_task: task.id, p_worker: id });
+        toast((id ? 'Given to ' + label : 'Left for the planner') + alsoBy([r?.just_before?.by]), 'ok');
         await load();
       } catch (e) { toast(e.message, 'bad'); }
     };
@@ -1124,12 +1133,17 @@ function planDrawer() {
     d.body.append(rosterCard());
   }
   if (may) {
-    // a validated or locked week refuses a new draft: offer it only while there is none or it is a draft
-    if (!plan || plan.status === 'draft') {
-      const redo = el('button', 'btn', plan ? 'Draft again' : 'Draft the week');
-      redo.onclick = () => draft(redo, d);
-      d.footer.append(redo);
-    }
+    // a validated week is a record, not a lock (FarmBox 0212): it is drafted again after a yes, which reopens it
+    const redo = el('button', 'btn', plan ? 'Draft again' : 'Draft the week');
+    redo.onclick = async () => {
+      if (plan && plan.status !== 'draft') {
+        if (!await confirmDrawer('Draft the validated week again?',
+          'The week goes back to a draft and the planner proposes every name again. Tasks somebody has already started keep their people.', 'Draft again')) return;
+        try { await rpc('reopen_labour_plan', { p_plan: plan.id }); } catch (e) { toast(e.message, 'bad'); return; }
+      }
+      draft(redo, d);
+    };
+    d.footer.append(redo);
     if (plan?.status === 'draft') {
       const ok = el('button', 'btn btn-primary', 'Validate the week');
       ok.onclick = async () => {

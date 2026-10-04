@@ -760,11 +760,18 @@ async function openRemoved() {
   paintList();
 }
 
+// a photo or a count added by an extra scouting (0204), beside the zone's planned one: "extra · Dial"
+function extraTag(p) {
+  const t = el('span', 'pill pd-extra', 'extra' + (p.by ? ' · ' + String(p.by).trim().split(/\s+/)[0] : ''));
+  t.title = `Added by an extra scouting${p.by ? ' — ' + p.by : ''}, beside the zone's planned scouting`;
+  return t;
+}
 function trapCard(p, z, day) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
   head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
+  if (p.extra) head.append(extraTag(p));
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
@@ -813,6 +820,7 @@ function photoFig(p, z, day) {
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
   if (p.section) line.append(el('span', 'pill ' + (p.section === 'growth' ? 'ok' : ''), p.section === 'growth' ? 'Growth' : 'Plant health'));
+  if (p.extra) line.append(extraTag(p));
   if (where) line.append(el('span', 'mono', where));
   if (sizes) line.append(el('b', null, sizes));
   if (line.children.length) cap.append(line);

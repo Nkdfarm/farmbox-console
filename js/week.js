@@ -270,7 +270,8 @@ const isOpenTask = t => !['done', 'skipped', 'cancelled'].includes(t.status);
 // a folded card's actions cover every open zone of its day, not only the zones a filter leaves on screen
 const openIds = t => (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
 const flatTasks = list => list.flatMap(t => t.hub ? t.members : [t]);
-const hubKey = t => HUB_MODULES.has(t.module) ? [t.module, t.farm_id, t.date, t.sop_id].join('|') : null;
+// an extra scouting (0204) is a person's own addition to the day: never folded into the day's planned scouting
+const hubKey = t => HUB_MODULES.has(t.module) && !t.extra ? [t.module, t.farm_id, t.date, t.sop_id].join('|') : null;
 // "Zone 4-1" → "4.1", "Bay 2A" → "2A": the card says "Zones 1 · 2 · 3 · 4.1 · 4.2"
 const zoneShort = a => (a || '').replace(/^(Zone|Bay)s?\s+/i, '').replace(/-/g, '.');
 function zonesWord(ms) {

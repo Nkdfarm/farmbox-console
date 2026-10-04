@@ -74,6 +74,7 @@ let farm = null, mount = null, over = null, cases = null, dates = [], catalog = 
 let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 let tmap = null, kit = null, opinions = [], robot = null;
+let extras = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
 // what the robot sent (0188): that day's rows, and those naming a zone band
 const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
 const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
@@ -219,6 +220,7 @@ async function load(fresh = false) {
       moreDone = dates.length < 21;
       dayData.clear(); panelReads.clear(); pendings.clear(); dayRows.clear(); thumbsLive.clear(); thumbsKept.clear();
       paint();
+      readExtras(here);
     },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the farm…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
@@ -226,6 +228,36 @@ async function load(fresh = false) {
   });
 }
 const reload = () => load(true);   // after a change: the server's answer, not the old copy
+
+// the extra scoutings (0206), read beside the page so a database without the function still shows the report: this
+// device's copy at once, then the database's; each date line gets its pill when the answer lands
+async function readExtras(here) {
+  const a = { p_farm: farm.id, p_days: 90 };
+  const land = x => {
+    if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(extras)) return;
+    extras = x;
+    mount.querySelectorAll('details.pd-day').forEach(det => {
+      det.querySelectorAll('.pd-xpill').forEach(n => n.remove());
+      const p = extraPill(det.dataset.day), upd = det.querySelector('.pd-day-facts .pd-upd');
+      if (p) { const f = det.querySelector('.pd-day-facts'); if (upd) f.insertBefore(p, upd); else f?.append(p); }
+    });
+  };
+  land(await cachedRpc('extra_scoutings', a).catch(() => null));
+  land(await rpc('extra_scoutings', a).catch(() => null));
+}
+const minWord = m => (m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}` : `${Math.round(m)} min`);
+function extraPill(day) {
+  const xs = extras.filter(x => String(x.day) === String(day));
+  if (!xs.length) return null;
+  const first = n => String(n || 'somebody').trim().split(/\s+/)[0];
+  const total = xs.reduce((s, x) => s + (Number(x.minutes) || 0), 0);
+  const pill = el('span', 'pill pd-extra pd-xpill', `extra · ${xs.map(x => first(x.by)).join(', ')}${total >= 1 ? ' · ' + minWord(total) : ''}`);
+  pill.title = 'Extra scoutings that day, beside the planned one:\n' + xs.map(x =>
+    `${x.by || 'somebody'}: ${[Number(x.minutes) >= 1 ? minWord(Number(x.minutes)) + (x.running ? ' (now)' : '') : (x.running ? 'in progress' : null),
+      `${x.visits} visit${x.visits === 1 ? '' : 's'}`, `${x.photos} photo${x.photos === 1 ? '' : 's'}`,
+      `${x.traps} trap reading${x.traps === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}`).join('\n');
+  return pill;
+}
 
 // the days a person opened stay open, and the page keeps its scroll, when it is drawn again after a tag, an AI
 // answer or a case point (review 3 Oct 2026: it went back to "today open" at the top every time)
@@ -536,6 +568,8 @@ function dayRow(d, openFirst, latest = false) {
   });
   const rbDay = robotDay(d.day);
   if (rbDay.length) { const p = el('span', 'pill' + (rbDay.some(r => r.status === 'new') ? ' warn' : ''), `robot ${rbDay.length}`); p.title = 'Observations the robot sent that day'; facts.append(p); }
+  const xp = extraPill(d.day);
+  if (xp) facts.append(xp);
   const upd = updater();
   facts.append(upd.node);
   sum.append(facts);

@@ -848,7 +848,7 @@ function photoFig(p, z, day) {
   fig.append(im);
   const cap = el('figcaption');
   const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
-  cap.append(title, tagChips(p));
+  cap.append(title, tagChips(p, true));
   // the section, where it was, the sizes on the scale card (0141)
   const where = p.pos_code || null;
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
@@ -860,7 +860,8 @@ function photoFig(p, z, day) {
   if (line.children.length) cap.append(line);
   const st = p.ai_status === 'done' ? 'AI read' : p.ai_status === 'queued' ? 'AI asked' : p.ai_status === 'failed' ? 'AI failed' : null;
   cap.append(el('div', 'hint', [hhmm(p.taken_at), p.note, st].filter(Boolean).join(' · ')));
-  if (p.ai?.summary) cap.append(el('div', 'sc-ai-line', '✦ ' + p.ai.summary));
+  // the AI's sentence is in the viewer, a click away (0.7.214); here it is the hover of the card
+  if (p.ai?.summary) fig.title = '✦ ' + p.ai.summary;
   fig.append(cap);
   if (day.may_write !== false && p.id) fig.append(removeX(p));
   fig.onclick = () => openViewer(viewerCtx(p, z, day));

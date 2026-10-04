@@ -41,13 +41,22 @@ export const photoTitle = p => p.kind === 'trap'
   : `${p.crop || 'Plant'} · ${partLabel(p.part)}`;
 
 // the tags on a photo, the person's and the AI's, as one list of chips
-export function tagChips(p) {
+// `short` (the report's cards, 0.7.214, owner 4 Oct 2026: "just the AI summary with 3 colours, the complete AI report
+// only when clicking"): an AI finding is its first words — "Powdery mildew · slight" — in its colour (pest amber,
+// disease red, disorder blue), the whole sentence on hover; the viewer shows everything.
+const shortName = s => { const t = String(s || '').split(/\s*[(,;:]|\s+[—–-]\s+/)[0].trim(); return t.length > 26 ? t.slice(0, 25).trimEnd() + '…' : t; };
+export function tagChips(p, short = false) {
   const box = el('div', 'vw-chips');
   (p.tags || []).forEach(t => box.append(el('span', 'vw-tag ' + (t.kind || ''), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
   if (p.kind === 'observation' && p.ai_status === 'done') {
     const f = p.ai?.findings || [];
     if (!f.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai', 'AI: healthy'));
-    f.forEach(x => box.append(el('span', 'vw-tag ai ' + (x.kind || ''), `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`)));
+    f.forEach(x => {
+      const full = `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`;
+      const c = el('span', 'vw-tag ai ' + (x.kind || ''), short ? `${shortName(x.name || x.code)}${x.severity != null ? ' · ' + SEV[x.severity] : ''}` : full);
+      if (short) c.title = full;
+      box.append(c);
+    });
   }
   if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species)) {
     p.species.slice(0, 3).forEach(x => box.append(el('span', 'vw-tag ai', `AI: ${x.common || x.name} ${x.count ?? ''}`)));

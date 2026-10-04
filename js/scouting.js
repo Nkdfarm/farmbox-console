@@ -51,7 +51,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
-import { openViewer, tagChips, photoTitle } from './viewer.js';
+import { openViewer, tagChips, photoTitle, partLabel } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection } from './robot.js';
@@ -847,21 +847,22 @@ function photoFig(p, z, day) {
   const im = el('img'); im.alt = photoTitle(p); im.loading = 'lazy'; thumb(im, p, day);
   fig.append(im);
   const cap = el('figcaption');
-  const title = el('div', 'pd-fig-title'); title.append(dotEl(p.dot), el('b', null, photoTitle(p)));
+  // one line under the picture (0.7.215, owner 4 Oct 2026: "Fruit - 10:25 - Oliver … remove the unnecessary tags"): what
+  // it shows, when, who. The section, "extra", the AI's state and its sentence are the card's hover and the viewer's.
+  const part = partLabel(p.part) || 'photo', who = p.by ? String(p.by).trim().split(/\s+/)[0] : null;
+  const title = el('div', 'pd-fig-title');
+  title.append(dotEl(p.dot), el('b', null, [part.charAt(0).toUpperCase() + part.slice(1), hhmm(p.taken_at), who].filter(Boolean).join(' · ')));
   cap.append(title, tagChips(p, true));
-  // the section, where it was, the sizes on the scale card (0141)
-  const where = p.pos_code || null;
+  // only what somebody measured or wrote: the position, the sizes on the scale card, the comment
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
-  if (p.section) line.append(el('span', 'pill ' + (p.section === 'growth' ? 'ok' : ''), p.section === 'growth' ? 'Growth' : 'Plant health'));
-  if (p.extra) line.append(extraTag(p));
-  if (where) line.append(el('span', 'mono', where));
+  if (p.pos_code) line.append(el('span', 'mono', p.pos_code));
   if (sizes) line.append(el('b', null, sizes));
+  if (p.note) line.append(el('span', null, p.note));
   if (line.children.length) cap.append(line);
   const st = p.ai_status === 'done' ? 'AI read' : p.ai_status === 'queued' ? 'AI asked' : p.ai_status === 'failed' ? 'AI failed' : null;
-  cap.append(el('div', 'hint', [hhmm(p.taken_at), p.note, st].filter(Boolean).join(' · ')));
-  // the AI's sentence is in the viewer, a click away (0.7.214); here it is the hover of the card
-  if (p.ai?.summary) fig.title = '✦ ' + p.ai.summary;
+  fig.title = [[p.crop, p.section === 'growth' ? 'Growth' : 'Plant health', p.extra ? 'extra scouting' : null, st].filter(Boolean).join(' · '),
+               p.ai?.summary ? '✦ ' + p.ai.summary : null].filter(Boolean).join('\n');
   fig.append(cap);
   if (day.may_write !== false && p.id) fig.append(removeX(p));
   fig.onclick = () => openViewer(viewerCtx(p, z, day));

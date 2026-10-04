@@ -1,5 +1,5 @@
 {
-  "version": "0.7.216",
+  "version": "0.7.217",
   "released": "2026-10-04",
-  "note": "Scouting report: who contributed, responsible or extra"
+  "note": "A read that timed out is asked again"
 }

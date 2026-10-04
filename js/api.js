@@ -286,8 +286,18 @@ export async function api(path, opts = {}) {
   }
 }
 
-export const rpc = (name, args) =>
-  api('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) });
+// A read the database cancelled for taking too long is asked again, twice (0.7.217, owner's screenshot 4 Oct 2026:
+// "the fresh read failed: canceling statement due to statement timeout"). Each read of the scouting report takes
+// 0.05–2 s once the database is warm; after it sat idle, a dozen of them at once read cold from disk and one can pass
+// the API's 8 s. The first try warms it, so the second answers. Writes are never repeated.
+const timedOut = e => /statement timeout|57014/i.test(String(e?.message || ''));
+const pause = ms => new Promise(r => setTimeout(r, ms));
+export const rpc = (name, args) => {
+  const go = () => api('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) });
+  if (!READ_RPCS.has(name)) return go();
+  return go().catch(e => (timedOut(e) ? pause(1200).then(go) : Promise.reject(e)))
+             .catch(e => (timedOut(e) ? pause(2500).then(go) : Promise.reject(e)));
+};
 
 // The copy of a read kept from last time, without asking the server (0.7.106): a page
 // may draw it at once and replace it when the fresh answer comes. null when none.

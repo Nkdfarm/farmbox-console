@@ -161,7 +161,7 @@ function tiles() {
   }
 
   // the cameras last, two tiles wide, in the gap the second row leaves (cameras.js)
-  wrap.append(...cameraTiles());
+  wrap.append(...cameraTiles(data.farm));
 
   return wrap;
 }

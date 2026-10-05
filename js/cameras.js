@@ -11,13 +11,14 @@
 import { el } from './ui.js';
 
 const CAM = 'https://cam.nkd.farm';
-const CAMERAS = [{ src: 'duo3', name: 'Duo 3' }];
+// unit: the FarmBox the camera looks at (its code, the pill on the overview); only that unit's overview shows it
+const CAMERAS = [{ src: 'duo3', name: 'Duo 3', unit: 'FL' }];   // FarmLab (owner, 5 Oct 2026)
 
 const player = c => `${CAM}/stream.html?src=${encodeURIComponent(c.src)}&mode=mse,hls`;
 const playing = () => document.querySelector('.cam-tile iframe');
 
-export function cameraTiles() {
-  return CAMERAS.map(tile);
+export function cameraTiles(farm) {
+  return CAMERAS.filter(c => c.unit === farm?.code).map(tile);
 }
 
 function tile(c) {

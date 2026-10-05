@@ -12,7 +12,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
-import { cameraTiles } from './cameras.js';
 import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -159,9 +158,6 @@ function tiles() {
       go: '#/office/buy',
     }));
   }
-
-  // the cameras last, two tiles wide, in the gap the second row leaves (cameras.js)
-  wrap.append(...cameraTiles(data.farm));
 
   return wrap;
 }

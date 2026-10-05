@@ -475,12 +475,12 @@ function paintPeople() {
   }
   if (!manual.on) peopleCol.append(el('div', 'hint', spotlight
     ? 'Their tasks stand out; the rest of the plan stays in view. Click the face again to clear.'
-    : may ? 'Drag a face onto a task to add that person; drag a task onto a face to give it to them, onto Nobody to take its names off, or to another day. Drag a face up or down to order the column. Click a face to see their tasks.'
+    : may ? 'Drag a face onto a task, or a task onto a face, to give it to that person (one person a task; hold Ctrl while dropping a face to add a second). Drag a task onto Nobody to take its names off, or to another day. Drag a face up or down to order the column. Click a face to see their tasks.'
           : 'Click a face to see their tasks in the plan.'));
 }
 
 // ── drag and drop between the people and the board (0.7.225) ───────────────
-// A face is dragged onto a task (that person is added) or onto another face (the column's order, kept for the site);
+// A face is dragged onto a task (it becomes theirs; with Ctrl they are added) or onto another face (the column's order, kept for the site);
 // a task is dragged onto a face (it becomes theirs) or onto Nobody. Each drop is saved at once, by name
 // (change_people, FarmBox 0212), so what another manager did meanwhile stays.
 function personDrag(card, p, list) {
@@ -529,8 +529,10 @@ async function saveOrder(ids) {
 const openOnes = t => (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask);
 const has = (m, id) => (m.workers || []).some(w => w.id === id);
 
-// a face dropped on a task: that person is added, whoever is on it stays
-async function personToTask(p, t) {
+// a face dropped on a task: the task is theirs — one person on a task by default (0.7.229, owner 5 Oct 2026); with Ctrl
+// (or Shift) held at the drop the person is added and whoever is on it stays
+async function personToTask(p, t, add) {
+  if (!add) return taskToPerson(t, p);
   const open = openOnes(t), ones = open.filter(m => !has(m, p.id));
   if (!open.length) { toast('A task that is done or cancelled keeps its people'); return; }
   if (!ones.length) { toast(`${p.name} is already on ${t.title}`); return; }
@@ -563,14 +565,14 @@ function takesPerson(node, t) {
   if (!mayPlanNow() || !openOnes(t).length) return;
   node.addEventListener('dragover', e => {
     if (!dragPerson) return;
-    e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; node.classList.add('tk-take');
+    e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = (e.ctrlKey || e.shiftKey || e.metaKey) ? 'copy' : 'move'; node.classList.add('tk-take');
   });
   node.addEventListener('dragleave', () => node.classList.remove('tk-take'));
   node.addEventListener('drop', e => {
     if (!dragPerson) return;
     e.preventDefault(); e.stopPropagation(); node.classList.remove('tk-take');
     const p = dragPerson; dragPerson = null;
-    personToTask(p, t);
+    personToTask(p, t, e.ctrlKey || e.shiftKey || e.metaKey);
   });
 }
 

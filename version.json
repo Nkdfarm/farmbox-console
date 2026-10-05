@@ -1,5 +1,5 @@
 {
-  "version": "0.7.228",
+  "version": "0.7.229",
   "released": "2026-10-05",
-  "note": "Tasks: the people on a task in the order of the people column"
+  "note": "Tasks: one person a task when dragging; no weekly crop walk"
 }

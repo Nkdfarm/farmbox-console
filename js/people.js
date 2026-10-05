@@ -199,9 +199,13 @@ function personRow(p) {
   const chips = el('div', 'chips');
   const rs = p.responsibilities || [];
   if (!rs.length) chips.append(el('span', 'chip', '—'));
-  rs.slice(0, 4).forEach(r => chips.append(r.category
-    ? subFamilyTag(r.category, 'chip')
-    : el('span', 'chip fam-' + r.family, 'All ' + r.family)));
+  rs.slice(0, 4).forEach(r => {
+    const c = r.category ? subFamilyTag(r.category, 'chip') : el('span', 'chip fam-' + r.family, 'All ' + r.family);
+    // 0215: the order among the people responsible for the same work
+    if (r.priority) { c.append(el('b', 'resp-prio', ' ' + r.priority)); c.title = `Priority ${r.priority} for this work`; }
+    if (r.level === 'backup') c.title = (c.title ? c.title + ' · ' : '') + 'backup';
+    chips.append(c);
+  });
   if (rs.length > 4) chips.append(el('span', 'chip', `+${rs.length - 4}`));
   tr.append(td(chips));
 
@@ -306,7 +310,7 @@ function openPerson(p) {
       : 'Fill in an e-mail and a password to give this person a login.'));
 
   // responsibilities
-  const resp = respPicker(p?.responsibilities ?? []);
+  const resp = respPicker(p?.responsibilities ?? [], p?.worker_id ?? null);
 
   d.body.append(
     el('div', 'sec-title', 'The person'),
@@ -517,7 +521,7 @@ async function shrink(blob) {
 // which covers every one). What is chosen, across all families, shows above as
 // coloured labels — click one to take it off. The list is Settings › Task
 // families; family_tree adds how many procedures each has on this farm.
-function respPicker(current) {
+function respPicker(current, selfId = null) {
   const node = el('div', 'resp');
   const state = new Map(); // family -> { all: bool, cats: Set }
   const fams = families();
@@ -527,6 +531,16 @@ function respPicker(current) {
       cats: new Set(current.filter(r => r.family === f.name && r.category).map(r => r.category)),
     });
   });
+  // 0215: each responsibility keeps its level (primary / backup — the form never sent it, so saving a person made every
+  // backup a primary) and may carry a priority: when several people are responsible for the same work, 1 is given it
+  // first, until that person's day is full, then 2…
+  const keyOf = (family, category) => family + '|' + (category || '');
+  const extra = new Map(current.map(r => [keyOf(r.family, r.category), { level: r.level || 'primary', priority: r.priority || null }]));
+  const extraOf = (family, category) => { const k = keyOf(family, category); if (!extra.has(k)) extra.set(k, { level: 'primary', priority: null }); return extra.get(k); };
+  // who else holds the same responsibility, with their priority — so the order can be set knowingly
+  const others = (family, category) => people.filter(q => q.active && q.worker_id !== selfId)
+    .map(q => { const r = (q.responsibilities || []).find(x => x.family === family && (x.category || null) === (category || null)); return r ? `${q.name}${r.priority ? ' ' + r.priority : ''}` : null; })
+    .filter(Boolean);
 
   if (!fams.length) {
     node.append(el('div', 'note',
@@ -543,13 +557,27 @@ function respPicker(current) {
       const tags = s.all ? [el('span', 'chip fam-' + family, 'All ' + family)]
                          : [...s.cats].map(c => subFamilyTag(c, 'chip'));
       tags.forEach((t, i) => {
+        const category = s.all ? null : [...s.cats][i];
         t.style.cursor = 'pointer';
         t.title = 'Click to take it off';
         t.onclick = () => {
-          if (s.all) s.all = false; else s.cats.delete([...s.cats][i]);
+          if (s.all) s.all = false; else s.cats.delete(category);
           paintChosen(); paintFamily();
         };
-        chosen.append(t);
+        // the priority, beside its label
+        const x = extraOf(family, category);
+        const sel = el('select', 'resp-prio-sel');
+        [['', '–'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; sel.append(o); });
+        sel.value = x.priority ? String(x.priority) : '';
+        const also = others(family, category);
+        sel.title = 'Priority when several people are responsible for this work: 1 is given it first, until their day is full, then 2. – = no order.'
+          + (also.length ? ' Also responsible: ' + also.join(', ') + '.' : '');
+        sel.setAttribute('aria-label', 'Priority');
+        sel.onchange = () => { x.priority = sel.value ? Number(sel.value) : null; };
+        const wrap = el('span', 'resp-pick');
+        wrap.append(t, sel);
+        if (also.length) wrap.append(el('span', 'hint', 'with ' + also.join(', ')));
+        chosen.append(wrap);
       });
     }
     if (!chosen.children.length) chosen.append(el('span', 'hint', 'Nothing yet — pick a family below.'));
@@ -605,8 +633,8 @@ function respPicker(current) {
     value: () => {
       const out = [];
       for (const [family, s] of state) {
-        if (s.all) out.push({ family, category: null });
-        else for (const category of s.cats) out.push({ family, category });
+        if (s.all) out.push({ family, category: null, ...extraOf(family, null) });
+        else for (const category of s.cats) out.push({ family, category, ...extraOf(family, category) });
       }
       return out;
     },

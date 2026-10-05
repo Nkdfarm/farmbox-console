@@ -905,10 +905,17 @@ const secondReports = t => 'Also sent by ' + (t.also_sent || []).map(a => `${fir
 // who worked on it, one by one: "Naison 12 min (now) · Dial 5 min"
 const workedBy = t => ((timeOf(t) || {}).by || []).map(b => `${firstName(b.name) || 'somebody'} ${fmtWork(b.minutes)}${b.running ? ' (now)' : ''}`).join(' · ');
 
+// a task's people in the order of the people column (0.7.228): the first face on a chip is the one highest in it
+function inOrder(ws) {
+  const placed = new Map((data?.board_order || []).map((id, i) => [id, i]));
+  const at = w => placed.has(w.id) ? placed.get(w.id) : 1e9;
+  return [...(ws || [])].sort((a, b) => at(a) - at(b) || String(a.name).localeCompare(String(b.name)));
+}
+
 // the chip's left end: the first person's face (+n for more), the status on it; nobody = the dashed ?
 function leadOf(t) {
   const lead = el('span', 'tk-lead');
-  const ws = t.workers || [], [k] = stateOf(t);
+  const ws = inOrder(t.workers), [k] = stateOf(t);
   if (ws.length) {
     lead.append(avatar({ worker_id: ws[0].id, name: ws[0].name }, 'sm'));
     if (ws.length > 1) lead.append(el('span', 'tk-lead-more', '+' + (ws.length - 1)));
@@ -988,9 +995,10 @@ function taskRow(task) {
   else if (!task.workers.length) who.append(el('span', 'pill bad', 'nobody'));
   else {
     const stack = el('div', 'avatars');
-    task.workers.slice(0, 3).forEach(w => { const a = avatar({ worker_id: w.id, name: w.name }, 'sm'); a.title = w.name; stack.append(a); });
+    const ws = inOrder(task.workers);
+    ws.slice(0, 3).forEach(w => { const a = avatar({ worker_id: w.id, name: w.name }, 'sm'); a.title = w.name; stack.append(a); });
     if (task.workers.length > 3) stack.append(el('div', 'avatar sm more', '+' + (task.workers.length - 3)));
-    who.append(stack, el('small', null, task.workers.map(w => w.name).join(', ')));
+    who.append(stack, el('small', null, ws.map(w => w.name).join(', ')));
   }
   tr.append(cell(who));
   const act = el('div', 'acts');

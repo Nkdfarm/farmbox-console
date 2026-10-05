@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
-import { camerasCard } from './cameras.js';
+import { cameraTiles } from './cameras.js';
 import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
@@ -58,7 +58,6 @@ function paint() {
   mount.append(tiles());
   mount.append(calendarCard());
   mount.append(bays());
-  mount.append(camerasCard());
 }
 
 // One honest sentence about the state of the farm, in place of a greeting.
@@ -160,6 +159,9 @@ function tiles() {
       go: '#/office/buy',
     }));
   }
+
+  // the cameras last, two tiles wide, in the gap the second row leaves (cameras.js)
+  wrap.append(...cameraTiles());
 
   return wrap;
 }

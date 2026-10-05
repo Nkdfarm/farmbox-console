@@ -375,20 +375,25 @@ export function setPhotos(rows) {
   for (const r of rows || []) {
     const id = r.worker_id ?? r.id;
     if (!id) continue;
-    placeOf(id);                                     // their place in the list = their colour when they have no picture
-    if (r.photo_url) PHOTOS.set(id, r.photo_url); else PHOTOS.delete(id);
+    if (r.colour_place != null) PLACE.set(String(id), Number(r.colour_place)); else placeOf(id);   // their colour without a picture
+    if (r.photo_url) PHOTOS.set(id, r.photo_url); else if ('photo_url' in r) PHOTOS.delete(id);
   }
   document.querySelectorAll('.avatar[data-wid]').forEach(paintPhoto);
   document.querySelectorAll('.avatar.no-photo').forEach(paintColour);
 }
 
-// A person's own colour: their place in the list of everybody (oldest first, read at sign-in — setPhotos) picks it,
-// so no two people ever have the same. The first sixteen places are colours chosen to be told apart at a glance
+// A person's own colour: their place at their site picks it (worker.colour_place, FarmBox 0220 — given once when the
+// person is created, read at sign-in by setPhotos; Naked Brain reads the same number), so no two people of a site
+// ever have the same and both apps agree. The first sixteen places are colours chosen to be told apart at a glance
 // (blue, red, green, orange…); past those the hue turns by the golden angle (never a whole number, so never one of
 // the sixteen nor twice the same) in three tones. Somebody new takes the next place: nobody else's colour moves.
-// A key never listed (no worker row) takes the next free place for this visit.
+// A key with no place (no worker row, a database before 0220) takes the next free one for this visit.
 const PLACE = new Map();
-const placeOf = key => { const k = String(key || ''); if (!PLACE.has(k)) PLACE.set(k, PLACE.size); return PLACE.get(k); };
+const placeOf = key => {
+  const k = String(key || '');
+  if (!PLACE.has(k)) PLACE.set(k, Math.max(-1, ...PLACE.values()) + 1);
+  return PLACE.get(k);
+};
 const PERSON_COLOURS = [[210, 70, 50], [0, 70, 55], [135, 55, 40], [30, 90, 52], [275, 60, 58], [175, 70, 38], [325, 75, 62], [50, 85, 45],
                         [20, 45, 35], [235, 55, 35], [85, 60, 45], [300, 45, 38], [190, 80, 55], [350, 55, 35], [0, 0, 55], [155, 50, 60]];
 const TONES = [[62, 48], [70, 62], [50, 36]];   // saturation %, lightness %

@@ -10,9 +10,10 @@
 // agronomist files one into a zone, a section and a day — it then sits in that
 // day's report — or discards it (the file itself stays in storage).
 // Trap photos are only looked at and discarded: a reading needs a count.
+// Since 0.7.224 (0218) a file can also be deleted for good — from storage, after a confirmation.
 // ═════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer } from './ui.js';
 
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
@@ -47,6 +48,13 @@ async function smallCopy(url) {
   cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
   bmp.close?.();
   return cv.toDataURL('image/jpeg', 0.8);
+}
+
+// the file itself, out of storage (0218: the policy lets a manager delete a scouting file no record names)
+async function deleteFile(farm, path) {
+  const res = await api('/storage/v1/object/evidence', { method: 'DELETE', body: JSON.stringify({ prefixes: [path] }) });
+  if (!Array.isArray(res) || !res.length) throw new Error('The file could not be deleted (not allowed, or already gone)');
+  await rpc('mark_photo_file_deleted', { p_farm: farm.id, p_path: path }).catch(() => {});
 }
 
 const select = (options, value) => {
@@ -84,13 +92,24 @@ function openUnfiled(farm, onChange) {
 
     d.body.append(el('div', 'hint',
       'A photo is uploaded when it is taken; its place in a report comes with the report. When the report never came, the photo waits here. ' +
-      'Filing puts it in the report of the day and zone you choose. Discarding only takes it off this list.'));
+      'Filing puts it in the report of the day and zone you choose. Discarding only takes it off this list; Delete removes the file for good.'));
     if (!r.may_file) d.body.append(el('div', 'hint', 'A manager or the agronomist files or discards a photo.'));
 
     const live = files.filter(f => !f.discarded), plant = live.filter(f => f.kind === 'scout');
     // ── for all: one zone and section, then every plant photo of the list ──
-    if (r.may_file && plant.length > 1) {
+    if (r.may_file && live.length > 1) {
       const bar = el('div', 'uf-all');
+      bar.append(el('b', null, 'All at once'));
+      const delAll = el('button', 'btn btn-sm btn-danger', `Delete all ${live.length}…`);
+      delAll.onclick = async () => {
+        if (!await confirmDrawer('Delete these photos?', `${live.length} photos that are in no report will be deleted from storage for good. This cannot be undone.`, `Delete ${live.length} photos`, true)) return;
+        busy(delAll, true, 'Deleting…');
+        let ok = 0, bad = 0;
+        for (const f of live) { try { await deleteFile(farm, f.path); ok++; } catch { bad++; } }
+        toast(`${ok} photo${ok === 1 ? '' : 's'} deleted${bad ? ` · ${bad} could not be` : ''}`, bad ? 'bad' : undefined);
+        done(); await paintList();
+      };
+      if (plant.length > 1) {
       const z = select([['', 'Zone…'], ...units], ''), s = select([['health', 'Plant health'], ['growth', 'Growth']], 'health');
       const go = el('button', 'btn btn-sm', `File all ${plant.length} plant photos`);
       go.onclick = async () => {
@@ -107,7 +126,9 @@ function openUnfiled(farm, onChange) {
         toast(`${ok} photo${ok === 1 ? '' : 's'} filed${bad ? ` · ${bad} could not be` : ''}`, bad ? 'bad' : undefined);
         done(); await paintList();
       };
-      bar.append(el('b', null, 'All at once'), z, s, go);
+      bar.append(z, s, go);
+      }
+      bar.append(delAll);
       d.body.append(bar);
     }
 
@@ -162,6 +183,17 @@ function openUnfiled(farm, onChange) {
           catch (e) { busy(back, false, 'Bring back'); toast(errText(e), 'bad'); }
         };
         acts.append(back);
+      }
+      if (r.may_file) {
+        const del = el('button', 'btn btn-sm btn-danger', 'Delete…');
+        del.title = 'Deletes the file from storage for good';
+        del.onclick = async () => {
+          if (!await confirmDrawer('Delete this photo?', 'The file will be deleted from storage for good. This cannot be undone.', 'Delete', true)) return;
+          busy(del, true, '…');
+          try { await deleteFile(farm, f.path); toast('Photo deleted'); done(); await paintList(); }
+          catch (e) { busy(del, false, 'Delete…'); toast(errText(e), 'bad'); }
+        };
+        acts.append(del);
       }
       row.append(im, txt, acts);
       list.append(row);

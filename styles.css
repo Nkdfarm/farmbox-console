@@ -2137,6 +2137,16 @@ table.table tr.off td { opacity: .5; }
 .pd-removed-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center;
   padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .pd-removed-row img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; background: #000; display: block; }
+/* unfiled photos (0.7.223, 0217) — a development-phase window */
+.drawer.uf-drawer { width: min(860px, 100vw); }
+.uf-h { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-md, 1rem); }
+.uf-all { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-md); }
+.uf-row { grid-template-columns: 96px minmax(0, 1fr); }
+.uf-row img { width: 96px; height: 96px; }
+.uf-row.uf-off { opacity: 0.55; }
+.uf-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.uf-acts select, .uf-acts input[type=date], .uf-all select { min-height: 30px; }
+.uf-wait { color: var(--warning, #c98a1a); }
 
 /* what the AI costs (0.7.192, 0191) */
 .ac-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }

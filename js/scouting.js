@@ -57,6 +57,7 @@ import { trapKit } from './trapmap.js';
 import { robotSection } from './robot.js';
 import { sumpBlock } from './sump.js';
 import { treatBlock } from './treatments.js';
+import { unfiledButton } from './unfiled.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
@@ -350,7 +351,7 @@ function paint() {
   mount.append(pageHead('Pest & diseases',
     'The daily scouting by date, zone by zone: plant health first, with the trap curves and the zone\'s trap map, then the traps and the growth photos. ' +
     'A dot says the worst thing inside: red severe or over the threshold, orange open or on watch, green improving or resolved.',
-    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, openBtn));
+    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(farm, reload), openBtn));
 
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());

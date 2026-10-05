@@ -375,9 +375,32 @@ export function setPhotos(rows) {
   for (const r of rows || []) {
     const id = r.worker_id ?? r.id;
     if (!id) continue;
+    placeOf(id);                                     // their place in the list = their colour when they have no picture
     if (r.photo_url) PHOTOS.set(id, r.photo_url); else PHOTOS.delete(id);
   }
   document.querySelectorAll('.avatar[data-wid]').forEach(paintPhoto);
+  document.querySelectorAll('.avatar.no-photo').forEach(paintColour);
+}
+
+// A person's own colour: their place in the list of everybody (oldest first, read at sign-in — setPhotos) picks it,
+// so no two people ever have the same. The first sixteen places are colours chosen to be told apart at a glance
+// (blue, red, green, orange…); past those the hue turns by the golden angle (never a whole number, so never one of
+// the sixteen nor twice the same) in three tones. Somebody new takes the next place: nobody else's colour moves.
+// A key never listed (no worker row) takes the next free place for this visit.
+const PLACE = new Map();
+const placeOf = key => { const k = String(key || ''); if (!PLACE.has(k)) PLACE.set(k, PLACE.size); return PLACE.get(k); };
+const PERSON_COLOURS = [[210, 70, 50], [0, 70, 55], [135, 55, 40], [30, 90, 52], [275, 60, 58], [175, 70, 38], [325, 75, 62], [50, 85, 45],
+                        [20, 45, 35], [235, 55, 35], [85, 60, 45], [300, 45, 38], [190, 80, 55], [350, 55, 35], [0, 0, 55], [155, 50, 60]];
+const TONES = [[62, 48], [70, 62], [50, 36]];   // saturation %, lightness %
+export function personColour(key) {
+  const i = placeOf(key);
+  if (i < PERSON_COLOURS.length) { const [hue, s, l] = PERSON_COLOURS[i]; return { hue, s, l }; }
+  const [s, l] = TONES[i % 3];
+  return { hue: Math.round(((i * 137.508) % 360) * 1000) / 1000, s, l };
+}
+function paintColour(box) {
+  const c = personColour(box.dataset.key);
+  box.style.setProperty('--ph', c.hue); box.style.setProperty('--ps', c.s + '%'); box.style.setProperty('--pl', c.l + '%');
 }
 
 function paintPhoto(box) {
@@ -386,8 +409,11 @@ function paintPhoto(box) {
   box.dataset.src = src;
   if (!src) {                                        // no picture in the database: the drawn face
     box.textContent = ''; box.append(faceIcon()); box.classList.remove('has-photo');
+    // each person their own colour (0.7.226), so two people without a picture are told apart; the same on every page
+    box.classList.add('no-photo'); paintColour(box);
     return;
   }
+  box.classList.remove('no-photo');
   const img = new Image();
   img.alt = '';
   img.decoding = 'async';

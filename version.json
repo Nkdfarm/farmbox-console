@@ -1,5 +1,5 @@
 {
-  "version": "0.7.225",
+  "version": "0.7.226",
   "released": "2026-10-05",
-  "note": "Tasks: drag people onto tasks, tasks onto people, and the people into order"
+  "note": "People without a picture each have their own colour"
 }

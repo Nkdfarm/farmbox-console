@@ -227,6 +227,10 @@ th.right, td.right { text-align: right; }
 .avatar.has-photo.r-farm_manager { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
 .avatar.has-photo.r-farm_assistant { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--success); }
 .avatars { display: flex; align-items: center; }
+/* nobody's picture: the silhouette in the person's own colour (0.7.226), whatever the role */
+.avatar.no-photo { background: color-mix(in srgb, hsl(var(--ph, 220) var(--ps, 60%) var(--pl, 48%)) 24%, var(--surface));
+  color: hsl(var(--ph, 220) var(--ps, 60%) var(--pl, 48%)); }
+.avatar.no-photo .face { opacity: 1; }
 .avatars .avatar + .avatar { margin-left: -8px; }
 .avatars .avatar.more { background: var(--surface-offset); color: var(--text-muted); font-size: 10px; }
 .assignees { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }

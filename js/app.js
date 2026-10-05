@@ -645,7 +645,7 @@ async function startOnce() {
       myWorkerId = mine[0]?.id ?? null;
     } catch { myWorkerId = null; }
     // everyone's own picture, for every avatar on every page (ui.js setPhotos)
-    try { setPhotos(await select('worker', 'select=id,photo_url&photo_url=not.is.null')); } catch { /* demo faces */ }
+    try { setPhotos(await select('worker', 'select=id,photo_url&order=created_at.asc,id.asc')); } catch { /* demo faces */ }
     // Available systems and media, before any page draws a system or a medium
     bootBar.set(40, 'Reading the systems and task families…');
     await Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);

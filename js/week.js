@@ -60,6 +60,7 @@ const onTask = (t, w) => t.hub ? openIds(t).length > 0 && (t.all || t.members).f
 const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); manual.seen.clear(); };
 let spotlight = null;     // a face clicked: their tasks stand out, the rest of the plan stays in view
 let dragging = null;      // the task being dragged, while it is
+let dragPerson = null;    // the face being dragged (0.7.225): onto a task = add them, onto another face = the column's order
 try { filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
 
 // This page works in ISO strings; the date arithmetic is ui.js's, in local parts.
@@ -91,12 +92,12 @@ export async function renderWeek(container, currentFarm) {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
     if (!mount || !mount.isConnected) { clearInterval(refreshTimer); return; }
-    if (document.hidden || manual.on || dragging || document.querySelector('.drawer')) return;
+    if (document.hidden || manual.on || dragging || dragPerson || document.querySelector('.drawer')) return;
     refresh();
   }, 60000);
   // live (0.7.208): a phone or another console changed something — read again at once, under the same conditions
   liveWatch(farm.id, () => {
-    if (!mount || !mount.isConnected || document.hidden || manual.on || dragging || document.querySelector('.drawer')) return;
+    if (!mount || !mount.isConnected || document.hidden || manual.on || dragging || dragPerson || document.querySelector('.drawer')) return;
     refresh();
   });
 }
@@ -111,7 +112,7 @@ async function refresh() {
     const got = await Promise.all(mondays.map(m => rpc('labour_week', { p_farm: farm.id, p_week: m })));
     if (gen !== loadGen) return;
     if (!here.isConnected || mount !== here || mondaysOnScreen().join() !== mondays.join()) return;
-    if (manual.on || dragging || document.querySelector('.drawer')) return;
+    if (manual.on || dragging || dragPerson || document.querySelector('.drawer')) return;
     if (!got.some((g, i) => JSON.stringify(g) !== JSON.stringify(weeks.get(mondays[i])))) return;
     mondays.forEach((m, i) => weeks.set(m, got[i]));
     data = weeks.get(focusWeek());
@@ -381,7 +382,11 @@ function paintPeople() {
       people.set(r.worker_id, p);
     });
   }
-  const list = [...people.values()].sort((a, b) => (a.employment === 'casual') - (b.employment === 'casual') || a.name.localeCompare(b.name));
+  // the order a manager dragged them into (FarmBox 0219), kept for the site; anybody never placed comes after, as before
+  const placed = new Map((data?.board_order || []).map((id, i) => [id, i]));
+  const place = p => placed.has(p.id) ? placed.get(p.id) : Infinity;
+  const list = [...people.values()].sort((a, b) => (place(a) === place(b) ? 0 : place(a) - place(b))
+    || (a.employment === 'casual') - (b.employment === 'casual') || a.name.localeCompare(b.name));
   list.forEach(p => { p.assigned = onScreen.filter(t => (t.workers || []).some(w => w.id === p.id)).reduce((a, t) => a + Number(t.minutes || 0), 0); });
 
   const may = mayPlanNow();
@@ -455,11 +460,118 @@ function paintPeople() {
       manual.worker = manual.worker === p.id ? null : p.id; manual.tasks.clear(); manual.drop.clear();
       paintPeople(); paintBody();
     };
+    if (may && !manual.on) personDrag(card, p, list);
     peopleCol.append(card);
   });
+  // a task dropped here loses its names
+  if (may && !manual.on && list.length) {
+    const none = el('div', 'tk-person tk-person-none');
+    none.append(el('span', 'tk-nobody', '?'), el('div', 'tk-person-name', 'Nobody'));
+    none.title = 'Drop a task here to take its names off';
+    none.ondragover = e => { if (!dragging) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; none.classList.add('over'); };
+    none.ondragleave = () => none.classList.remove('over');
+    none.ondrop = e => { e.preventDefault(); none.classList.remove('over'); const t = dragging; dragging = null; if (t) taskToPerson(t, null); };
+    peopleCol.append(none);
+  }
   if (!manual.on) peopleCol.append(el('div', 'hint', spotlight
     ? 'Their tasks stand out; the rest of the plan stays in view. Click the face again to clear.'
-    : 'Click a face to see their tasks in the plan. Drag a task to another day or across the line.'));
+    : may ? 'Drag a face onto a task to add that person; drag a task onto a face to give it to them, onto Nobody to take its names off, or to another day. Drag a face up or down to order the column. Click a face to see their tasks.'
+          : 'Click a face to see their tasks in the plan.'));
+}
+
+// ── drag and drop between the people and the board (0.7.225) ───────────────
+// A face is dragged onto a task (that person is added) or onto another face (the column's order, kept for the site);
+// a task is dragged onto a face (it becomes theirs) or onto Nobody. Each drop is saved at once, by name
+// (change_people, FarmBox 0212), so what another manager did meanwhile stays.
+function personDrag(card, p, list) {
+  card.draggable = true;
+  card.ondragstart = e => {
+    dragPerson = p; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'copyMove';
+    try { e.dataTransfer.setData('text/plain', p.name); } catch { /* fine */ }
+  };
+  card.ondragend = () => { dragPerson = null; card.classList.remove('dragging'); clearMarks(); };
+  const half = e => { const r = card.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+  card.ondragover = e => {
+    if (dragging) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; card.classList.add('over'); return; }
+    if (!dragPerson || dragPerson.id === p.id) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const after = half(e);
+    card.classList.toggle('drop-after', after); card.classList.toggle('drop-before', !after);
+  };
+  card.ondragleave = () => card.classList.remove('over', 'drop-before', 'drop-after');
+  card.ondrop = e => {
+    e.preventDefault();
+    const after = half(e);
+    card.classList.remove('over', 'drop-before', 'drop-after');
+    if (dragging) { const t = dragging; dragging = null; taskToPerson(t, p); return; }
+    const who = dragPerson; dragPerson = null;
+    if (!who || who.id === p.id) return;
+    const ids = list.map(x => x.id).filter(id => id !== who.id);
+    ids.splice(ids.indexOf(p.id) + (after ? 1 : 0), 0, who.id);
+    if (ids.join() !== list.map(x => x.id).join()) saveOrder(ids);
+  };
+}
+const clearMarks = () => mount?.querySelectorAll('.drop-before, .drop-after, .over, .tk-take')
+  .forEach(n => n.classList.remove('drop-before', 'drop-after', 'over', 'tk-take'));
+
+// the column in its new order at once, then kept; the people not on screen this week stay after, in their own order
+async function saveOrder(ids) {
+  const rest = (data?.board_order || []).filter(id => !ids.includes(id));
+  for (const w of weeks.values()) if (w) w.board_order = [...ids, ...rest];
+  paintPeople();
+  try {
+    const r = await rpc('set_board_order', { p_farm: farm.id, p_workers: ids });
+    if (r?.board_order) for (const w of weeks.values()) if (w) w.board_order = r.board_order;
+  } catch (e) { toast(e.message, 'bad'); await load(); }
+}
+
+// a task, or every open zone of a folded card
+const openOnes = t => (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask);
+const has = (m, id) => (m.workers || []).some(w => w.id === id);
+
+// a face dropped on a task: that person is added, whoever is on it stays
+async function personToTask(p, t) {
+  const open = openOnes(t), ones = open.filter(m => !has(m, p.id));
+  if (!open.length) { toast('A task that is done or cancelled keeps its people'); return; }
+  if (!ones.length) { toast(`${p.name} is already on ${t.title}`); return; }
+  try {
+    const r = await rpc('change_people', { p_changes: ones.map(m => ({ task_id: m.id, add: [p.id] })) });
+    toast(`${p.name} added to ${t.title}` + alsoBy(r.others), 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { await load(); }
+}
+
+// a task dropped on a face: it is theirs, the names that were on it come off; on Nobody (p null) the names come off
+async function taskToPerson(t, p) {
+  const changes = [];
+  for (const m of openOnes(t)) {
+    const was = (m.workers || []).map(w => w.id);
+    if (!p) { if (was.length) changes.push({ task_id: m.id, drop: was }); continue; }
+    const drop = was.filter(id => id !== p.id);
+    if (drop.length || !has(m, p.id)) changes.push({ task_id: m.id, add: [p.id], drop });
+  }
+  if (!changes.length) { toast(p ? `${t.title} is already ${p.name}'s` : 'Nobody is on this task'); return; }
+  try {
+    const r = await rpc('change_people', { p_changes: changes });
+    toast((p ? `${t.title} → ${p.name}` : `${t.title}: names taken off`) + alsoBy(r.others), 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+  finally { await load(); }
+}
+
+// a task on the board takes a face dropped on it; a task dragged over it goes on to the day underneath
+function takesPerson(node, t) {
+  if (!mayPlanNow() || !openOnes(t).length) return;
+  node.addEventListener('dragover', e => {
+    if (!dragPerson) return;
+    e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; node.classList.add('tk-take');
+  });
+  node.addEventListener('dragleave', () => node.classList.remove('tk-take'));
+  node.addEventListener('drop', e => {
+    if (!dragPerson) return;
+    e.preventDefault(); e.stopPropagation(); node.classList.remove('tk-take');
+    const p = dragPerson; dragPerson = null;
+    personToTask(p, t);
+  });
 }
 
 async function autoAssign(btn, from, to) {
@@ -781,8 +893,9 @@ function chip(t, opts = {}) {
   if (mayPlanNow() && t.status !== 'done' && t.status !== 'skipped' && !manual.on) {
     c.draggable = true;
     c.ondragstart = e => { dragging = t; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', t.id); } catch { /* fine */ } };
-    c.ondragend = () => { dragging = null; c.classList.remove('dragging'); };
+    c.ondragend = () => { dragging = null; c.classList.remove('dragging'); clearMarks(); };
   }
+  if (!manual.on) takesPerson(c, t);
   return c;
 }
 
@@ -885,6 +998,7 @@ function taskRow(task) {
   b.onclick = () => openTask(task);
   act.append(b);
   tr.append(cell(act));
+  if (!manual.on) takesPerson(tr, task);
   return tr;
 }
 

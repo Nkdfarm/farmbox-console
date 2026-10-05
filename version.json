@@ -1,5 +1,5 @@
 {
-  "version": "0.7.224",
+  "version": "0.7.225",
   "released": "2026-10-05",
-  "note": "Unfiled photos can be deleted for good"
+  "note": "Tasks: drag people onto tasks, tasks onto people, and the people into order"
 }

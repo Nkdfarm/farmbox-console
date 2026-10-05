@@ -2,7 +2,8 @@
 import { getSession, signIn, signOut, me, select, rpc,
          connection, onConnection, newPage, reconnect, pruneData } from './api.js';
 import { el, toast, icon, avatar, pref, setPhotos, loading, setFarmTz, setMyRoles } from './ui.js';
-import { renderPeople, roleLabel } from './people.js';
+import { roleLabel } from './people.js';
+import { renderTeam } from './team.js';
 import { renderWeek, defaultWeek, nextWeek } from './week.js';
 import { renderFarm, holidayRange } from './farm.js';
 import { renderCrops } from './crops.js';
@@ -25,7 +26,7 @@ import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
 import { renderCustomers } from './customers.js';
 import { renderYield, yieldRange } from './yield.js';
-import { renderHours, hoursRange } from './hours.js';
+import { hoursRange } from './hours.js';
 import { renderMoney, moneyRange } from './money.js';
 import { renderForecast } from './forecast.js';
 import { renderValidation } from './validation.js';
@@ -139,7 +140,7 @@ const lib = key => (c, f, ctx) => renderProcedures(c, f, LIB[key]);
 const SECTIONS = {
   dashboard: { title: 'Dashboard', tabs: [
     ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['feedback', 'Feedback', renderFeedback], ['reports', 'Reports', renderReports]] },   // Feedback (0.7.186, migration 0189): drawn once for a site, its rows say the unit
-  week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek], ['hours', 'Hours', renderHours]] },
+  week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek], ['team', 'Team', renderTeam]] },
   grow: { title: 'Grow', tabs: [
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
     ['forecast', 'Forecast review', renderForecast], ['harvest', 'Harvest', renderHarvest], ['validation', 'Field validation', renderValidation]] },
@@ -156,7 +157,7 @@ const SECTIONS = {
   connect: { title: 'Connections', tabs: [
     ['farmnet', 'FarmNet & sensors', renderFarmnet], ['heatmap', 'Heat map', renderHeatmap], ['growth', 'Crop growth', renderGrowth],
     ['counting', 'Counting', renderCounting], ['devices', 'Devices & API', renderDevices]] },
-  farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm], ['people', 'People', renderPeople]] },
+  farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
 };
 // Tabs only some people may open (0092): People is for the unit's Admin and Farm manager,
@@ -169,7 +170,7 @@ function mayManagePeople() {
     || (r.farm_id === farm.id && (r.role === 'farm_admin' || r.role === 'farm_manager')));
 }
 const mayMoney = () => !!farm && (mayManagePeople() || myRoles.some(r => r.farm_id === farm.id && r.role === 'office'));
-const TAB_GATE = { 'farm/people': mayManagePeople, 'office/money': mayMoney };
+const TAB_GATE = { 'office/money': mayMoney };
 const tabsOf = sec => SECTIONS[sec].tabs.filter(([key]) => !TAB_GATE[`${sec}/${key}`] || TAB_GATE[`${sec}/${key}`]());
 
 // ── one site, two units (0.7.158) ───────────────────────────────────────────
@@ -234,7 +235,7 @@ async function renderUnits(page, site, key, tab, kind) {
 const MOVED = {
   crops: 'grow/planner', cropdb: 'grow/library', procedures: 'grow/procedures',
   prices: 'office/market', purchasing: 'office/buy', issues: 'dashboard/issues', reports: 'dashboard/reports',
-  people: 'farm/people', harvest: 'grow/harvest',
+  people: 'week/team', harvest: 'grow/harvest',
 };
 
 // ── sign in ────────────────────────────────────────────────────────────────
@@ -489,7 +490,7 @@ async function warmOne(id) {
     ['harvest_overview', { ...p, ...harvestRange() }],
     ['farm_market', p], ['farm_holidays', { ...p, ...holidayRange() }],
   ];
-  if (mayManagePeople()) calls.push(['people', p], ['family_tree', p]);
+  calls.push(['team_setup', p], ['people', p], ['family_tree', p]);   // Tasks › Team (its hours are read above)
   if (mayMoney()) calls.push(['money', { ...p, ...moneyRange() }]);
   if (myRoles.some(r => r.role === 'franchisor_admin')) calls.push(['farm_network', {}]);
   // One at a time, and only while the page asks for nothing itself (0.7.218, owner 4 Oct 2026: "too long to open old
@@ -515,6 +516,9 @@ function currentRoute() {
   let sec = parts[0] || 'dashboard', tab = parts[1] || '';
   if (MOVED[sec]) { [sec, tab] = MOVED[sec].split('/'); }
   if (sec === 'grow' && tab === 'routines') tab = 'procedures';   // Routines became Procedures (0.7.109)
+  // People and Hours are one page, Tasks › Team (0.7.222)
+  if (sec === 'farm' && tab === 'people') { sec = 'week'; tab = 'team'; }
+  if (sec === 'week' && tab === 'hours') tab = 'team';
   if (!SECTIONS[sec]) { sec = 'dashboard'; tab = ''; }
   const tabs = tabsOf(sec);
   const t = tabs.find(x => x[0] === tab) || tabs[0];

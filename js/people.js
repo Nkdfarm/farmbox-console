@@ -1,14 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Labour › People — the people of one FarmBox (spec §7.x)
+// A person's profile window and its actions (spec §7.x) — opened from Tasks › Team
 //
-// One page for what used to be three trips through the Supabase dashboard: the
-// account they sign in with, the access it carries, and the work they are
-// responsible for. Adding someone is one form; the weekly plan reads the
-// responsibilities set at the bottom of it.
+// One form for what used to be three trips through the Supabase dashboard: the
+// account they sign in with, the access it carries, the job and the week. What
+// they are responsible for, and in which order, is the Team page (team.js).
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, select, openFast } from './api.js';
-import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer,
-         avatar, suggestPassword, busy, setPhotos, subFamilyTag, faceIcon } from './ui.js';
+import { rpc, fn, select } from './api.js';
+import { el, field, input, selectBox, toast, drawer, confirmDrawer, suggestPassword, busy, faceIcon } from './ui.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -35,197 +33,14 @@ const WORKER_SLOTS = Array.from({ length: 10 }, (_, i) => `Worker ${i + 1}`);
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
 
 let farm = null;      // { id, name, code }
-let people = [];
-let tree = [];        // [{ family, category, procedures }]
-let mount = null;
+let people = [];      // the site's people, as people() answers them
+let afterSave = async () => {};
 
-export async function renderPeople(container, currentFarm) {
-  farm = currentFarm;
-  mount = container;
-  await load();
-}
-
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
-  const here = mount;
-  await openFast([['people', { p_farm: farm.id }], ['family_tree', { p_farm: farm.id }]], {
-    show: ([p, t]) => {
-      people = p; tree = t;
-      setPhotos(people);   // a picture saved here shows on every page at once
-      paint();
-    },
-    waiting: () => { mount.textContent = ''; mount.append(loading('Reading the people of ' + farm.name + '…')); },
-    failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
-  });
-}
-
-// ── the families offered by the picker ─────────────────────────────────────
-// family_tree returns one row per family/category pair that this farm has
-// procedures for. Group it, and keep families with no categories usable.
-function families() {
-  const out = new Map();
-  for (const r of tree) {
-    if (!out.has(r.family)) out.set(r.family, { name: r.family, cats: [], procedures: 0 });
-    const f = out.get(r.family);
-    f.procedures += r.procedures;
-    if (r.category) f.cats.push({ name: r.category, procedures: r.procedures });
-  }
-  return [...out.values()];
-}
-
-function paint() {
-  mount.textContent = '';
-
-  const head = el('div', 'page-head');
-  const titles = el('div');
-  titles.append(el('h1', null, 'People'));
-  titles.append(el('p', null,
-    `Who works at ${farm.name}, what they may do, and which part of the work is theirs. ` +
-    `The Friday labour plan gives each task to whoever is responsible for its family.`));
-  const add = el('button', 'btn btn-primary', '＋ Add person');
-  add.onclick = () => openPerson(null);
-  head.append(titles, el('div', 'spacer'), add);
-  mount.append(head);
-
-  mount.append(summary());
-
-  const gaps = coverageGaps();
-  if (gaps.size) {
-    const total = [...gaps.values()].reduce((a, l) => a + l.length, 0);
-    const n = el('div', 'note warn');
-    n.append(document.createTextNode(
-      `Nobody is responsible for ${total} area${total === 1 ? '' : 's'} — `));
-    [...gaps.entries()].forEach(([family, list], i) => {
-      if (i) n.append(document.createTextNode('; '));
-      n.append(el('b', null, family));
-      n.append(document.createTextNode(': ' + list.join(', ')));
-    });
-    n.append(document.createTextNode('. Those tasks fall to whoever has room in the week.'));
-    n.style.marginBottom = 'var(--space-4)';
-    mount.append(n);
-  }
-
-  const card = el('div', 'card');
-  const wrap = el('div', 'table-wrap');
-  wrap.append(table());
-  card.append(wrap);
-  mount.append(card);
-}
-
-function summary() {
-  const active = people.filter(p => p.active);
-  const withLogin = active.filter(p => p.has_login);
-  const admins = active.filter(p => p.role === 'farm_admin' || p.role === 'farm_manager');
-  const row = el('div', 'row');
-  row.style.margin = '0 0 var(--space-4)';
-  const pill = (text, kind) => row.append(el('span', 'pill ' + (kind || ''), text));
-  pill(`${active.length} active`);
-  pill(`${withLogin.length} can sign in`, withLogin.length ? 'ok' : 'warn');
-  pill(admins.length ? `${admins.length} can plan the week` : 'nobody can plan the week',
-       admins.length ? '' : 'bad');
-  if (people.length !== active.length) pill(`${people.length - active.length} inactive`);
-  return row;
-}
-
-// Every family/category the farm has procedures for, that nobody owns.
-function coverageGaps() {
-  const owned = new Set();
-  for (const p of people) {
-    if (!p.active) continue;
-    for (const r of p.responsibilities || []) {
-      owned.add(r.category ? `${r.family} ${r.category}` : `${r.family} *`);
-    }
-  }
-  const gaps = new Map();   // family -> the categories nobody owns
-  for (const f of families()) {
-    if (owned.has(`${f.name} *`)) continue;
-    if (!f.cats.length) { gaps.set(f.name, ['everything']); continue; }
-    const missing = f.cats.filter(c => !owned.has(`${f.name} ${c.name}`)).map(c => c.name);
-    if (missing.length) gaps.set(f.name, missing);
-  }
-  return gaps;
-}
-
-function table() {
-  const t = el('table', 'people');
-  const thead = el('thead');
-  const hr = el('tr');
-  ['Person', 'Role', 'Employment', 'Account', 'Responsible for', 'Week', ''].forEach(h => {
-    const th = el('th', null, h);
-    if (h === '') th.style.width = '1%';
-    hr.append(th);
-  });
-  thead.append(hr);
-  t.append(thead);
-
-  const tb = el('tbody');
-  if (!people.length) {
-    const tr = el('tr');
-    const td = el('td');
-    td.colSpan = 7;
-    const e = el('div', 'empty');
-    e.append(el('h3', null, 'Nobody here yet'));
-    e.append(el('p', null, 'Add the manager first, then the workers who run the week.'));
-    td.append(e);
-    tr.append(td);
-    tb.append(tr);
-  }
-  people.forEach(p => tb.append(personRow(p)));
-  t.append(tb);
-  return t;
-}
-
-function personRow(p) {
-  const tr = el('tr');
-  if (!p.active) tr.className = 'off';
-
-  const who = el('div', 'who');
-  who.append(avatar(p));
-  const names = el('div');
-  names.append(el('b', null, fullName(p)));
-  names.append(el('small', null, p.email || 'no e-mail'));
-  who.append(names);
-  tr.append(td(who));
-
-  tr.append(td(el('span', null, roleLabel(p.role))));
-  tr.append(td(el('span', p.employment === 'casual' ? 'pill warn' : 'pill', employmentLabel(p.employment))));
-
-  const acct = p.has_login
-    ? el('span', 'pill ok', 'Can sign in')
-    : el('span', 'pill warn', 'No login');
-  tr.append(td(acct));
-
-  const chips = el('div', 'chips');
-  const rs = p.responsibilities || [];
-  if (!rs.length) chips.append(el('span', 'chip', '—'));
-  rs.slice(0, 4).forEach(r => {
-    const c = r.category ? subFamilyTag(r.category, 'chip') : el('span', 'chip fam-' + r.family, 'All ' + r.family);
-    // 0215: the order among the people responsible for the same work
-    if (r.priority) { c.append(el('b', 'resp-prio', ' ' + r.priority)); c.title = `Priority ${r.priority} for this work`; }
-    if (r.level === 'backup') c.title = (c.title ? c.title + ' · ' : '') + 'backup';
-    chips.append(c);
-  });
-  if (rs.length > 4) chips.append(el('span', 'chip', `+${rs.length - 4}`));
-  tr.append(td(chips));
-
-  const days = (p.working_days || []).map(d => DAYS.find(x => x[0] === d)?.[1][0] ?? '').join('');
-  tr.append(td(el('span', 'mono', `${days} · ${Number(p.hours_per_day)}h`)));
-
-  const acts = el('div', 'acts');
-  const edit = el('button', 'btn btn-sm', 'Edit');
-  edit.onclick = () => openPerson(p);
-  const more = el('button', 'btn btn-sm btn-ghost', '⋯');
-  more.setAttribute('aria-label', 'More actions for ' + p.name);
-  more.onclick = () => openActions(p);
-  acts.append(edit, more);
-  tr.append(td(acts));
-  return tr;
-}
-
-const td = child => { const c = el('td'); c.append(child); return c; };
-// The surname shows here and in the form only; every other page shows the name alone.
-const fullName = p => [p.name, p.surname].filter(Boolean).join(' ');
+// The Team page (Tasks › Team, 0.7.222) is where the people are listed; it opens these windows and hands over
+// the farm, the people and what to do after a change. What somebody is responsible for is set there, not here.
+const take = ctx => { farm = ctx.farm; people = ctx.people || []; afterSave = ctx.done || (async () => {}); };
+export function editPerson(ctx, p) { take(ctx); openPerson(p); }
+export function personActions(ctx, p) { take(ctx); openActions(p); }
 
 // ── add / edit ─────────────────────────────────────────────────────────────
 function openPerson(p) {
@@ -309,9 +124,6 @@ function openPerson(p) {
       ? 'Type a new password only if you are resetting it.'
       : 'Fill in an e-mail and a password to give this person a login.'));
 
-  // responsibilities
-  const resp = respPicker(p?.responsibilities ?? [], p?.worker_id ?? null);
-
   d.body.append(
     el('div', 'sec-title', 'The person'),
     field('Name', name),
@@ -333,10 +145,9 @@ function openPerson(p) {
     el('div', 'sec-title', 'Sign-in'),
     acct,
     el('div', 'sec-title', 'Responsible for'),
-    el('div', 'hint',
-       'Pick a family, then tick its sub-families — or All of it. Leave it empty and ' +
-       'the planner will treat them as available for anything.'),
-    resp.node,
+    el('div', 'hint', isNew
+      ? 'What their job covers is theirs as soon as they are saved (Team › Jobs…). Add or take off a label, and set their numbers, on the Team page.'
+      : 'Set on the Team page: click a label to change its number, ＋ to add one. A change of job brings the new job’s labels.'),
   );
   setRoleHint();
   paintSlots();
@@ -359,7 +170,6 @@ function openPerson(p) {
       working_days: [...chosen].sort((a, b) => a - b),
       hours_per_day: Number(hours.value) || 8,
       employment: employment.value,
-      responsibilities: resp.value(),
     };
     if (!body.name) { toast('A name is needed', 'bad'); name.focus(); return; }
     if (!body.working_days.length) { toast('Pick at least one working day', 'bad'); return; }
@@ -390,7 +200,7 @@ function openPerson(p) {
       }
       d.close();
       toast(isNew ? `${body.name} added` : 'Saved', 'ok');
-      await load();
+      await afterSave();
     } catch (e) {
       busy(save, false, isNew ? 'Add person' : 'Save changes');
       toast(e.message, 'bad');
@@ -516,131 +326,6 @@ async function shrink(blob) {
   return c.toDataURL('image/jpeg', 0.85);
 }
 
-// ── the responsibility picker ──────────────────────────────────────────────
-// Pick a family from the menu, then its sub-families (or "All of <family>",
-// which covers every one). What is chosen, across all families, shows above as
-// coloured labels — click one to take it off. The list is Settings › Task
-// families; family_tree adds how many procedures each has on this farm.
-function respPicker(current, selfId = null) {
-  const node = el('div', 'resp');
-  const state = new Map(); // family -> { all: bool, cats: Set }
-  const fams = families();
-  fams.forEach(f => {
-    state.set(f.name, {
-      all: current.some(r => r.family === f.name && !r.category),
-      cats: new Set(current.filter(r => r.family === f.name && r.category).map(r => r.category)),
-    });
-  });
-  // 0215: each responsibility keeps its level (primary / backup — the form never sent it, so saving a person made every
-  // backup a primary) and may carry a priority: when several people are responsible for the same work, 1 is given it
-  // first, until that person's day is full, then 2…
-  const keyOf = (family, category) => family + '|' + (category || '');
-  const extra = new Map(current.map(r => [keyOf(r.family, r.category), { level: r.level || 'primary', priority: r.priority || null }]));
-  const extraOf = (family, category) => { const k = keyOf(family, category); if (!extra.has(k)) extra.set(k, { level: 'primary', priority: null }); return extra.get(k); };
-  // who else holds the same responsibility, with their priority — so the order can be set knowingly
-  const others = (family, category) => people.filter(q => q.active && q.worker_id !== selfId)
-    .map(q => { const r = (q.responsibilities || []).find(x => x.family === family && (x.category || null) === (category || null)); return r ? `${q.name}${r.priority ? ' ' + r.priority : ''}` : null; })
-    .filter(Boolean);
-
-  if (!fams.length) {
-    node.append(el('div', 'note',
-      'No task families yet. Add them in Settings › Task families and come back.'));
-    return { node, value: () => [] };
-  }
-
-  // what is chosen, all families together
-  const chosen = el('div', 'chips');
-  chosen.style.marginBottom = 'var(--space-3)';
-  const paintChosen = () => {
-    chosen.textContent = '';
-    for (const [family, s] of state) {
-      const tags = s.all ? [el('span', 'chip fam-' + family, 'All ' + family)]
-                         : [...s.cats].map(c => subFamilyTag(c, 'chip'));
-      tags.forEach((t, i) => {
-        const category = s.all ? null : [...s.cats][i];
-        t.style.cursor = 'pointer';
-        t.title = 'Click to take it off';
-        t.onclick = () => {
-          if (s.all) s.all = false; else s.cats.delete(category);
-          paintChosen(); paintFamily();
-        };
-        // the priority, beside its label
-        const x = extraOf(family, category);
-        const sel = el('select', 'resp-prio-sel');
-        [['', '–'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; sel.append(o); });
-        sel.value = x.priority ? String(x.priority) : '';
-        const also = others(family, category);
-        sel.title = 'Priority when several people are responsible for this work: 1 is given it first, until their day is full, then 2. – = no order.'
-          + (also.length ? ' Also responsible: ' + also.join(', ') + '.' : '');
-        sel.setAttribute('aria-label', 'Priority');
-        sel.onchange = () => { x.priority = sel.value ? Number(sel.value) : null; };
-        const wrap = el('span', 'resp-pick');
-        wrap.append(t, sel);
-        if (also.length) wrap.append(el('span', 'hint', 'with ' + also.join(', ')));
-        chosen.append(wrap);
-      });
-    }
-    if (!chosen.children.length) chosen.append(el('span', 'hint', 'Nothing yet — pick a family below.'));
-  };
-
-  // the family menu, then that family's sub-families
-  const pick = el('select');
-  fams.forEach(f => {
-    const o = el('option', null, `${f.name} · ${f.procedures} procedure${f.procedures === 1 ? '' : 's'}`);
-    o.value = f.name;
-    pick.append(o);
-  });
-  const firstUsed = fams.find(f => state.get(f.name).all || state.get(f.name).cats.size);
-  pick.value = (firstUsed || fams[0]).name;
-  const subs = el('div', 'resp-cats');
-  const paintFamily = () => {
-    subs.textContent = '';
-    const f = fams.find(x => x.name === pick.value);
-    const s = state.get(f.name);
-    const all = el('button', 'toggle all', 'All of ' + f.name);
-    all.type = 'button';
-    all.setAttribute('aria-pressed', String(s.all));
-    all.onclick = () => { s.all = !s.all; if (s.all) s.cats.clear(); paintFamily(); paintChosen(); };
-    subs.append(all);
-    f.cats.forEach(c => {
-      const b = el('button', 'toggle', c.procedures ? `${c.name} · ${c.procedures}` : c.name);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(s.cats.has(c.name)));
-      b.onclick = () => {
-        if (s.cats.has(c.name)) s.cats.delete(c.name); else s.cats.add(c.name);
-        if (s.cats.size) s.all = false;
-        paintFamily(); paintChosen();
-      };
-      subs.append(b);
-    });
-    if (!f.cats.length) subs.append(el('span', 'hint', 'No sub-families yet — the family covers it.'));
-  };
-  pick.onchange = paintFamily;
-
-  const menu = el('div', 'row');
-  menu.style.marginBottom = 'var(--space-2)';
-  const lbl = el('span', 'hint', 'Family');
-  const wrap = el('div', 'field');
-  wrap.style.margin = '0';
-  wrap.append(pick);
-  menu.append(lbl, wrap);
-  node.append(chosen, menu, subs);
-  paintChosen();
-  paintFamily();
-
-  return {
-    node,
-    value: () => {
-      const out = [];
-      for (const [family, s] of state) {
-        if (s.all) out.push({ family, category: null, ...extraOf(family, null) });
-        else for (const category of s.cats) out.push({ family, category, ...extraOf(family, category) });
-      }
-      return out;
-    },
-  };
-}
-
 // ── the row menu ───────────────────────────────────────────────────────────
 function openActions(p) {
   const d = drawer(p.name, roleLabel(p.role) + (p.active ? '' : ' · inactive'));
@@ -737,7 +422,7 @@ async function act(body, okMessage) {
   try {
     await fn('admin-user', { farm_id: farm.id, ...body });
     toast(okMessage, 'ok');
-    await load();
+    await afterSave();
   } catch (e) { toast(e.message, 'bad'); }
 }
 

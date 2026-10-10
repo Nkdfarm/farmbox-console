@@ -1,5 +1,5 @@
 {
-  "version": "0.7.234",
+  "version": "0.7.235",
   "released": "2026-10-10",
-  "note": "The camera opens with your Naked Heart sign-in"
+  "note": "Opening the dashboard no longer makes the other screens read again"
 }

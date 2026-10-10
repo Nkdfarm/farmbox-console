@@ -31,7 +31,7 @@ let passUntil = 0, asking = null;
 function door() {
   if (Date.now() < passUntil) return Promise.resolve();
   asking ||= (async () => {
-    const p = await fn('camera-pass');
+    const p = await fn('camera-pass', null, { quiet: true });   // asks, changes nothing: not a write (api.js)
     const r = await fetch(CAM + '/pass', { method: 'POST', credentials: 'include', headers: { Authorization: 'Bearer ' + p.pass } });
     if (r.ok) passUntil = Date.now() + (p.expires_in || 0) * 500;
   })().catch(() => { /* offline, no camera for this account, the gate not answering: the player says so */ })

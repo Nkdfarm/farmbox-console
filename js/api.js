@@ -274,7 +274,9 @@ async function api0(path, opts = {}) {
     const body = await live(path, opts);
     setOnline(true);
     if (read) { if (session === s0) remember(key, body); }
-    else { lastWrite = Date.now(); try { dispatchEvent(new Event('fbc:wrote')); } catch { /* no window */ } }   // live.js tells the others
+    // quiet (0.7.235): a call that changes nothing on the farm — the camera's pass — is not a change to tell the others
+    // about, and must not make this tab distrust the copies it kept
+    else if (!opts.quiet) { lastWrite = Date.now(); try { dispatchEvent(new Event('fbc:wrote')); } catch { /* no window */ } }   // live.js tells the others
     return body;
   } catch (e) {
     // The server answered: that is a real answer, online or not.
@@ -372,8 +374,8 @@ export async function openFast(reads, { show, waiting, failed, stillHere, fresh 
   show(now, true);
 }
 
-export const fn = (name, body) =>
-  api('/functions/v1/' + name, { method: 'POST', body: JSON.stringify(body ?? {}) });
+export const fn = (name, body, more) =>
+  api('/functions/v1/' + name, { method: 'POST', body: JSON.stringify(body ?? {}), ...more });
 
 export const select = (table, query) => api(`/rest/v1/${table}?${query}`);
 

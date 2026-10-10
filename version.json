@@ -1,5 +1,5 @@
 {
-  "version": "0.7.233",
+  "version": "0.7.234",
   "released": "2026-10-10",
-  "note": "Camera tile: buttons by the name, clear of the player label"
+  "note": "The camera opens with your Naked Heart sign-in"
 }

@@ -7,7 +7,7 @@
 // already open, at the top" — the gap the second row of tiles leaves). The farm is on 5G, so the stream is dropped
 // whenever the tab is hidden and picked up again when it is seen; leaving the overview drops it too. With both
 // units on screen only the first tile plays, the other waits for Watch. ⤢ opens the player in its own tab:
-// Safari will not show the Access login inside the console while it lives on github.io and the cameras on nkd.farm.
+// (left, by the name: the player's own MSE/HLS label sits top right.) Safari will not show the Access login inside the console while it lives on github.io and the cameras on nkd.farm.
 import { el } from './ui.js';
 
 const CAM = 'https://cam.nkd.farm';

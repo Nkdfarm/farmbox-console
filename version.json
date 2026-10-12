@@ -1,5 +1,5 @@
 {
-  "version": "0.7.240",
+  "version": "0.7.241",
   "released": "2026-10-12",
-  "note": "Whole greenhouse: a picture, references that open, the team's notes as one text"
+  "note": "Whole greenhouse: the AI's own opinion on the team's notes, with what it would add or do instead"
 }

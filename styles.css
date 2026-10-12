@@ -2371,3 +2371,21 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
   border-radius: var(--radius-full); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .pd-ghp-sum { display: grid; gap: 8px; font-size: var(--text-sm); line-height: 1.55; }
 .pd-ghp-sum p { margin: 0; }
+/* 0.7.241: the three lists and, under them, the AI's opinion on the team's notes; the picture beside both */
+.pd-ghp-main { display: grid; gap: var(--space-3) var(--space-5); align-items: start; }
+.pd-ghp-main.has-pic { grid-template-columns: minmax(0, 1fr) minmax(200px, 23%); }
+@media (max-width: 1000px) { .pd-ghp-main.has-pic { grid-template-columns: minmax(0, 1fr); } }
+.pd-ghp-left { display: grid; gap: var(--space-3); min-width: 0; }
+.pd-ghp-crit { display: grid; gap: 6px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); border-left: 4px solid var(--text-faint);
+  background: var(--surface-2); font-size: var(--text-sm); }
+.pd-ghp-crit.ok { background: var(--success-bg); border-color: transparent; border-left-color: var(--success); }
+.pd-ghp-crit.warn { background: var(--warning-bg); border-color: transparent; border-left-color: var(--warning); }
+.pd-ghp-crit.bad { background: var(--error-bg); border-color: transparent; border-left-color: var(--error); }
+.pd-ghp-crit-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pd-ghp-crit-head .pd-hlabel { margin: 0; }
+.pd-ghp-verdict { font-weight: 700; }
+.pd-ghp-crit-text { line-height: 1.5; font-size: var(--text-base); }
+.pd-ghp-props { list-style: none; margin: 2px 0 0; padding-left: 1.25rem; display: grid; gap: 6px; }
+.pd-ghp-kind { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: var(--radius-full); font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; line-height: 1.7; vertical-align: 1px; background: var(--text); color: var(--surface); }
+.pd-ghp-crit .pd-ghp-ref { background: var(--surface); }

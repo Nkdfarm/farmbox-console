@@ -8,8 +8,10 @@
 //   · the day it shows — the last fourteen days as coloured squares, ‹ › between the days that hold something, and a
 //     month calendar for older ones. It opens on today when today has a report or a note, on the last report otherwise
 //   · the AI's report first (greenhouse_opinion, edge function greenhouse-opinion): its word (OK, Watch, Act now), where
-//     the greenhouse is going and why, then three columns — What matters · Next · Still open from before — a fourth
-//     with the photo that shows the worst of it, and What was missing, which opens on a press only. Every line has a
+//     the greenhouse is going and why, then three columns — What matters · Next · Still open from before — under
+//     them a coloured box with the AI's own opinion on the team's notes (agrees, partly, disagrees; what it would add
+//     or do instead — 0.7.241), beside both the photo that shows the worst of it, and What was missing, which opens
+//     on a press only. Every line has a
 //     dot in its colour and the worst comes first; a place (Zone 2, Sump 1) is in bold; what a point rests on is a
 //     button a record — a photo, a trap, a case, a note, a sump — that opens it beside the page (0.7.240). Written
 //     from that day and the days before it, never from what came after, and short (0.7.238)
@@ -446,9 +448,15 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     } else if (op.trend) {
       col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));
     }
-    // the fourth column: the photo that shows the worst of the report, always one while the unit has a photo
-    if (op.picture?.id) cols.append(pictureCol(op.picture, k));
-    if (cols.childNodes.length) box.append(cols);
+    // under the three columns, the AI's own opinion on the team's notes; beside both, the photo that shows the worst of
+    // the report — always one while the unit has a photo (0.7.241: the picture stood as a fourth column of the lists)
+    const left = el('div', 'pd-ghp-left');
+    if (cols.childNodes.length) left.append(cols);
+    if (op.critique?.text) left.append(critBox(op.critique, k));
+    const main = el('div', 'pd-ghp-main' + (op.picture?.id ? ' has-pic' : ''));
+    main.append(left);
+    if (op.picture?.id) main.append(pictureCol(op.picture, k));
+    if (left.childNodes.length || op.picture?.id) box.append(main);
     // what was missing: closed until it is pressed, and closed again whenever the panel is drawn
     if ((op.missing || []).length) {
       const m = el('details', 'pd-ai-missing');
@@ -483,6 +491,33 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     const b = el('button', 'pd-ghp-ref k-' + x.kind, x.label || x.kind);
     b.type = 'button'; b.title = OPEN[x.kind] || 'Open';
     b.onclick = e => { e.stopPropagation(); open(x, k); };
+    return b;
+  }
+  // the AI's own opinion on what the team wrote (0227): agrees, partly, disagrees — in that colour — two or three
+  // sentences, what it rests on, and what it would add or do instead. An opinion: the person's instruction stays in Next.
+  const VERDICT = { agree: ['ok', 'Agrees with'], partly: ['warn', 'Partly agrees with'], disagree: ['bad', 'Disagrees with'], no_notes: ['none', 'No team note to compare'] };
+  function critBox(c, k) {
+    const [cls, word] = VERDICT[c.verdict] || ['none', ''];
+    const b = el('div', 'pd-ghp-crit ' + cls);
+    const head = el('div', 'pd-ghp-crit-head');
+    head.append(el('span', 'pd-hlabel', "The AI's opinion"), el('span', 'pill pd-ghp-verdict ' + (cls === 'none' ? '' : cls), c.verdict === 'no_notes' ? word : `${word} ${c.about || 'the team notes'}`));
+    b.append(head);
+    const t = el('div', 'pd-ghp-crit-text'); t.append(rich(c.text, false)); b.append(t);
+    const refs = Array.isArray(c.refs) ? c.refs : [], props = Array.isArray(c.proposals) ? c.proposals : [];
+    if (refs.length) { const r = el('div', 'pd-ghp-refs'); refs.forEach(x => r.append(refChip(x, k))); b.append(r); }
+    if (props.length) {
+      const ul = el('ul', 'pd-ghp-props');
+      props.forEach(p => {
+        const w = WHEN[p.when], li = el('li', 'lv lv-' + ((w && w[0]) || 'none'));
+        li.append(el('span', 'pd-ghp-kind', p.kind === 'instead' ? 'instead' : 'add'));
+        if (w) li.append(el('span', 'pd-ghp-when ' + w[0], w[1]));
+        li.append(rich(p.text));
+        if (p.kind === 'instead' && p.instead_of) li.append(el('div', 'hint', 'instead of: ' + p.instead_of));
+        ul.append(li);
+      });
+      b.append(ul);
+    }
+    b.append(el('div', 'hint', "The AI's proposal, beside what the team asked: nothing is changed by it. You decide."));
     return b;
   }
   function pictureCol(pic, k) {

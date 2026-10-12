@@ -1,5 +1,5 @@
 {
-  "version": "0.7.244",
+  "version": "0.7.245",
   "released": "2026-10-12",
-  "note": "Team: a tick takes a person off the task pages"
+  "note": "Tasks: a more compact people column, the name alone"
 }

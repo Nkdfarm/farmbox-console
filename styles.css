@@ -961,23 +961,25 @@ html { zoom: var(--zoom, 1); }
 
 /* Tasks — the board (0.7.67) */
 /* the people column (0.7.81): always on the left of the board */
-.tk-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-.tk-people { position: sticky; top: var(--space-3); display: flex; flex-direction: column; gap: 8px;
-  background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-lg); padding: var(--space-3); }
-.tk-people-head { display: flex; flex-direction: column; gap: 6px; }
+.tk-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.tk-people { position: sticky; top: var(--space-3); display: flex; flex-direction: column; gap: 3px;
+  background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-lg); padding: var(--space-2); }
+.tk-people-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
 .tk-people-sub { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin-top: 4px; }
 .tk-guide { font-size: var(--text-sm); color: var(--accent); }
-.tk-person { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 6px; border-radius: 10px;
+.tk-person { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 3px 5px; border-radius: 8px;
   border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; }
 .tk-person:hover { background: var(--surface-2, rgba(255,255,255,.04)); }
 .tk-person.pickable { border-color: var(--divider); }
 .tk-person.chosen { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .tk-person-txt { min-width: 0; flex: 1; }
 .tk-person-name { font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tk-person-hours { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tk-person-line { display: flex; align-items: baseline; gap: 6px; }
+.tk-person-line .tk-person-name { flex: 1 1 auto; min-width: 0; }
+.tk-person-hours { flex: none; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .tk-person-hours.over { color: var(--danger, #e5484d); font-weight: 700; }
 .tk-person-hours.off { color: var(--text-faint); }
-.tk-person-bar { height: 4px; border-radius: 2px; background: var(--divider); margin-top: 4px; overflow: hidden; }
+.tk-person-bar { height: 3px; border-radius: 2px; background: var(--divider); margin-top: 2px; overflow: hidden; }
 .tk-person-fill { height: 100%; background: var(--accent); }
 .tk-person-fill.over { background: var(--danger, #e5484d); }
 .tk.picked { outline: 2px solid var(--accent); outline-offset: 1px; }

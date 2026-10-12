@@ -440,19 +440,26 @@ function paintPeople() {
   if (!list.length) peopleCol.append(el('div', 'empty', 'Nobody is rostered in this period.'));
   list.forEach(p => {
     const card = el('button', 'tk-person' + (manual.on && manual.worker === p.id ? ' chosen' : '') + (manual.on ? ' pickable' : ''));
-    card.append(avatar({ worker_id: p.id, name: p.name }, 'md'));
+    // a compact line (0.7.245, owner 12 Oct 2026: "a more compact user column with just the name w/o the job type"): a small
+    // face, the name alone, the hours beside it and the bar under both. How they are employed is in the hint, with the hours.
+    card.append(avatar({ worker_id: p.id, name: p.name }, 'sm'));
     const txt = el('div', 'tk-person-txt');
-    txt.append(el('div', 'tk-person-name', p.name + (p.employment === 'casual' ? ' · on demand' : p.employment === 'part_time' ? ' · part time' : '')));
+    const line = el('div', 'tk-person-line');
+    line.append(el('div', 'tk-person-name', p.name));
     const over = p.max > 0 && p.assigned > p.max;
     const h = el('div', 'tk-person-hours' + (over ? ' over' : '') + (!p.max ? ' off' : ''));
-    h.textContent = p.max ? `${hrs(p.assigned)} / ${hrs(p.max)} h` : (p.assigned ? `${hrs(p.assigned)} h · not rostered` : 'not rostered');
-    txt.append(h);
+    h.textContent = p.max ? `${hrs(p.assigned)}/${hrs(p.max)}` : (p.assigned ? `${hrs(p.assigned)}` : '—');
+    line.append(h);
+    txt.append(line);
     const bar = el('div', 'tk-person-bar');
     const fill = el('div', 'tk-person-fill' + (over ? ' over' : ''));
     fill.style.width = (p.max ? Math.min(100, Math.round((p.assigned / p.max) * 100)) : 0) + '%';
     bar.append(fill); txt.append(bar);
     card.append(txt);
-    card.title = manual.on ? 'Choose this person' : `${p.name}: ${hrs(p.assigned)} h assigned of ${hrs(p.max)} h possible ${unit}`;
+    const emp = p.employment === 'casual' ? ' (on demand)' : p.employment === 'part_time' ? ' (part time)' : '';
+    card.title = manual.on ? `Choose ${p.name}${emp}`
+      : p.max ? `${p.name}${emp}: ${hrs(p.assigned)} h assigned of ${hrs(p.max)} h possible ${unit}`
+              : `${p.name}${emp}: not rostered ${unit}` + (p.assigned ? `, ${hrs(p.assigned)} h assigned` : '');
     if (!manual.on && spotlight === p.id) card.classList.add('chosen');
     card.onclick = () => {
       // outside manual mode a face puts its tasks in the spotlight — the whole plan stays in view

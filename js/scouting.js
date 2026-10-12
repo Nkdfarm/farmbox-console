@@ -76,7 +76,7 @@ let farm = null, mount = null, over = null, cases = null, dates = [], catalog = 
 let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
 let tmap = null, kit = null, opinions = [], robot = null;
-let gh = null, ghFarm = null;                                                        // the whole greenhouse (0224, greenhouse.js): a kit per unit
+let gh = null, ghFarm = null;                                                        // the whole greenhouse (0224–0225, greenhouse.js): a kit per unit, its panel on top of the page
 let extras = [], people = [], coverage = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
 // what the robot sent (0188): that day's rows, and those naming a zone band
 const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String(day));
@@ -222,14 +222,15 @@ async function load(fresh = false) {
       useFarm(farm, catalog);
       moreDone = dates.length < 21;
       dayData.clear(); panelReads.clear(); pendings.clear(); dayRows.clear(); thumbsLive.clear(); thumbsKept.clear();
-      // the whole greenhouse: its notes and the AI's report, read beside the page (0.7.236)
+      // the whole greenhouse: the AI's report and the notes, read beside the page; its panel is the top of it (0.7.237)
       if (!gh || ghFarm !== farm.id) {
         ghFarm = farm.id;
-        gh = greenhouseKit({ farm, redraw: day => dayRows.get(String(day))?.repaint(), relist: () => { if (mount && mount.isConnected) paint(); } });
+        gh = greenhouseKit({ farm, today: () => over?.today, scouted: () => (dates || []).map(d => d.day),
+                             relist: () => { if (mount && mount.isConnected) paint(); } });
       }
       paint();
       readExtras(here);
-      gh.readDays();
+      gh.refresh();
     },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the farm…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
@@ -364,7 +365,12 @@ function paint() {
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());
   if (zoneFilter) mount.append(opinionCard(), zoneReport());
-  else mount.append(dashboard());
+  else {
+    // the whole greenhouse first, always open: the AI's report with its trend, the notes under it, any day by the
+    // calendar (0.7.237, owner 12 Oct 2026) — not in one zone's report, which has its own AI opinion just above
+    if (gh) mount.append(gh.panel());
+    mount.append(dashboard());
+  }
   mount.append(caseStrip());
   mount.append(cropBar());
 
@@ -374,9 +380,9 @@ function paint() {
   // … and today always has one while a robot is registered, so its line is there before it has sent anything (0.7.185)
   const robotOnly = [...new Set((robot?.rows || []).map(r => String(r.day)).concat(robotNames() && over?.today ? [String(over.today)] : []))]
     .filter(day => !dates.some(d => String(d.day) === day) && (moreDone || !oldest || day > String(oldest))).map(day => ({ day }));
-  // a day that holds only a note or the AI's report on the whole greenhouse is a day of the report too (0.7.236)
-  const ghOnly = gh && !cropFilter && !zoneFilter ? gh.onlyDays(dates.concat(robotOnly), oldest, moreDone) : [];
-  const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps).concat(cropFilter ? [] : robotOnly).concat(ghOnly)
+  // (a day that holds only a note or the AI's report on the whole greenhouse had a line here in 0.7.236; the panel
+  // on top shows it now, and its calendar marks it)
+  const shown = dates.filter(d => !cropFilter || (d.photo_crops || {})[cropFilter] || d.traps).concat(cropFilter ? [] : robotOnly)
     .sort((x, y) => String(y.day).localeCompare(String(x.day)));
   if (zoneFilter) list.append(el('div', 'pd-zone-head', `${zoneName(zoneFilter)} — the scouting report by date`));
   if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
@@ -643,7 +649,7 @@ function dayRow(d, openFirst, latest = false) {
   if (rbDay.length) { const p = el('span', 'pill' + (rbDay.some(r => r.status === 'new') ? ' warn' : ''), `robot ${rbDay.length}`); p.title = 'Observations the robot sent that day'; facts.append(p); }
   const xp = extraPill(d.day);
   if (xp) facts.append(xp);
-  if (gh && !zoneFilter) gh.pills(d.day).forEach(p => facts.append(p));   // who wrote about the whole greenhouse, and the AI's word
+  if (gh && !zoneFilter) gh.pills(d.day).forEach(p => facts.append(p));   // who wrote about the whole greenhouse, and the AI's word: a press shows that day on top
   const upd = updater();
   facts.append(upd.node);
   sum.append(facts);
@@ -658,7 +664,6 @@ function dayRow(d, openFirst, latest = false) {
     let day = dayData.get(d.day), shown = null;
     dayRows.set(String(d.day), { upd, repaint: () => { const x = dayData.get(d.day); if (x && body.isConnected) paintDay(x); } });
     readThumbs(String(d.day));               // the pictures, beside the report: they fill in as they land
-    if (gh && !zoneFilter && !cropFilter) gh.readDay(String(d.day)).catch(() => {});   // the whole greenhouse's notes, the same way
     if (!day) {
       upd.begin();
       try {
@@ -695,8 +700,6 @@ function dayRow(d, openFirst, latest = false) {
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
     if (zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(zoneFilter)} that day.`));
     else if (!full.length && !rbDay.length && !(robotNames() && String(d.day) === String(over.today))) body.append(el('div', 'hint', cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
-    // the whole greenhouse above its zones (0.7.236): not when the page shows one zone or one crop
-    if (gh && gh.ready() && !zoneFilter && !cropFilter) { const g = gh.band(d.day); if (was.has('whole')) g.open = was.get('whole'); body.append(g); }
     full.forEach(z => { const b = zoneBand(z, day, latest && !zoneFilter); if (zoneFilter) b.open = true;
       b.dataset.unit = z.unit_id || z.zone_id || z.name;
       if (was.has(b.dataset.unit) && was.get(b.dataset.unit) !== b.open) b.open = was.get(b.dataset.unit);

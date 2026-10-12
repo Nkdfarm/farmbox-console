@@ -2263,11 +2263,6 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 /* a photo or a count added by an extra scouting (0204) */
 .pill.pd-extra { background: transparent; border: 1px dashed currentColor; color: var(--text-muted, #9a9aa3); }
 /* The whole greenhouse on a scouting day (0.7.236, greenhouse.js): the notes on the left, the AI's report on the right */
-.pd-zone-band.pd-gh { border-style: dashed; background: var(--surface); }
-.pd-gh-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-@container (max-width: 760px) { .pd-gh-body { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 900px) { .pd-gh-body { grid-template-columns: minmax(0, 1fr); } }
-.pd-gh-notes { display: grid; gap: var(--space-2); min-width: 0; }
 .pd-gh-note { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); font-size: var(--text-sm); display: grid; gap: 4px; }
 .pd-gh-who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .pd-gh-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
@@ -2275,10 +2270,58 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-gh-audio { height: 32px; max-width: 100%; }
 .pd-gh-add { display: flex; gap: 6px; align-items: flex-end; }
 .pd-gh-box { flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: var(--text-sm); padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--field-bg); color: var(--text); }
-.pd-gh-ai { margin: 0; padding: var(--space-3); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md); background: var(--surface-2); }
 .pd-gh-headline { font-size: var(--text-base); line-height: 1.4; }
-.pd-gh-line { max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--text-muted); }
 .pd-gh-stale { padding: 6px 10px; font-size: var(--text-xs); }
 .pd-gh-heard { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
 .pd-gh-heard summary { cursor: pointer; }
 .pd-gh-pill { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }
+/* the whole greenhouse, on top of the scouting page (0.7.237): the day on show, the AI's report, the notes under it */
+.pd-ghp { position: relative; padding: var(--space-4); margin-bottom: var(--space-4); display: grid; gap: var(--space-3); border-left: 3px solid var(--accent); }
+.pd-ghp-head { display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
+.pd-ghp-title { font-size: var(--text-lg); letter-spacing: -0.01em; }
+.pd-ghp-nav { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.pd-ghp-step { width: 28px; height: 28px; display: inline-grid; place-items: center; padding: 0; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.pd-ghp-step:disabled { opacity: .35; cursor: default; }
+.pd-ghp-step:not(:disabled):hover, .pd-ghp-date:hover { border-color: var(--border-strong); }
+.pd-ghp-date { height: 28px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pd-ghp-caret { color: var(--text-muted); font-size: 11px; }
+.pd-ghp-strip { display: inline-flex; gap: 3px; margin-left: auto; }
+.pd-ghp-cell { position: relative; width: 26px; height: 28px; display: inline-grid; place-items: center; padding: 0; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-faint); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1; cursor: pointer; }
+.pd-ghp-cell.ok { background: var(--success-bg); color: var(--success); border-color: transparent; font-weight: 700; }
+.pd-ghp-cell.warn { background: var(--warning-bg); color: var(--warning); border-color: transparent; font-weight: 700; }
+.pd-ghp-cell.bad { background: var(--error-bg); color: var(--error); border-color: transparent; font-weight: 700; }
+.pd-ghp-cell.scouted:not(.ok):not(.warn):not(.bad) { color: var(--text); border-color: var(--border-strong); }
+.pd-ghp-cell.noted::after { content: ''; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.pd-ghp-cell.today { box-shadow: inset 0 -2px 0 var(--accent); }
+.pd-ghp-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pd-ghp-cell:disabled { opacity: .3; cursor: default; }
+.pd-ghp-cell:not(:disabled):hover { border-color: var(--border-strong); }
+.pd-ghp-cal { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 260px; padding: 10px; display: grid; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.pd-ghp-cal-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--text-sm); }
+.pd-ghp-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.pd-ghp-cal-grid .wd { font-size: 10px; text-align: center; color: var(--text-faint); }
+.pd-ghp-cal-grid .pd-ghp-cell { width: auto; height: 30px; font-size: 12px; }
+.pd-ghp-key { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 10px; color: var(--text-muted); }
+.pd-ghp-key span { display: inline-flex; align-items: center; gap: 4px; }
+.pd-ghp-key i.pd-ghp-cell { width: 12px; height: 12px; border-radius: 3px; cursor: default; }
+.pd-ghp-ai { display: grid; gap: var(--space-2); min-width: 0; }
+.pd-ghp-line { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.pd-ghp-ailabel { font-size: var(--text-sm); color: var(--text-muted); }
+.pd-ghp-status, .pd-ghp-trend { font-size: var(--text-sm); font-weight: 700; padding: 4px 12px; }
+.pd-ghp-trend:not(.ok):not(.bad) { background: var(--surface-offset); color: var(--text-muted); }
+.pd-ghp-why { flex: 1 1 280px; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); line-height: 1.4; }
+.pd-ghp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-3) var(--space-5); align-items: start; }
+.pd-ghp-col { min-width: 0; }
+.pd-ghp-open { list-style: square; }
+.pd-ghp-notes { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); min-width: 0; }
+.pd-ghp-notes .pd-hlabel { margin: 0; }
+.pd-ghp-notegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-2); align-items: start; }
+.pd-ghp-notegrid .pd-gh-add { align-self: stretch; }
+.pd-gh-text.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.pd-gh-press { cursor: pointer; }
+.pd-gh-press:hover { filter: brightness(1.15); }
+@media (max-width: 900px) { .pd-ghp-strip { margin-left: 0; width: 100%; overflow-x: auto; } }

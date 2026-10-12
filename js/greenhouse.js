@@ -1,92 +1,140 @@
-// The whole greenhouse on a scouting day (0.7.236, migration 0224; owner 12 Oct 2026: "a small section for all
-// greenhouse with human and AI short report. the human report will be filled just a voice note or text (not
-// mandatory)"). The scouting report is one band a zone; this is the band above them: what people said or wrote about
-// the greenhouse as a whole that day (scout_note: from the phone's "All" card, in a planned or an extra scouting, or
-// typed here), and the AI's short report on the unit (greenhouse_opinion, edge function greenhouse-opinion).
+// The whole greenhouse, on top of the scouting page (0.7.237, migrations 0224 and 0225).
 //
-// Not a task and not a zone: nothing here counts in "5/5 scouted", and the band says so by asking for nothing.
-// A voice note is written down by the server with the farm's own words; the text can still be wrong, so its author,
-// the agronomist or a manager corrects it here — the recording stays, to listen again. The AI's report is written by
-// itself once the day's scouting is complete (on a farm whose automatic AI scan is on) and on a press; it reads the
-// notes, and says when one came after it. It proposes; a person decides.
+// First built as a band inside each day, people's notes on the left and the AI on the right (0.7.236). The owner,
+// 12 Oct 2026: "the whole greenhouse report has to be in horizontal with AI in the top, because the human reports are
+// not always consistent. put this block in the top of daily scouting always opened to have a quick view of general
+// situation with an easy way to change to old report (as a calendar)"; then "go with the trend (very important) and
+// still open". So it is one panel, always open, the width of the page:
+//   · the day it shows — the last fourteen days as coloured squares, ‹ › between the days that hold something, and a
+//     month calendar for older ones. It opens on today when today has a report or a note, on the last report otherwise
+//   · the AI's report first (greenhouse_opinion, edge function greenhouse-opinion): its word (OK, Watch, Act now), where
+//     the greenhouse is going and why, the points, what to do next, and what earlier reports asked for that is still
+//     open. Written from that day and the days before it, never from what came after
+//   · under it, what people said or wrote about the greenhouse that day (scout_note: the phone's "All" card in a
+//     planned or an extra scouting, or typed here) — when somebody did
 //
-// scouting.js owns the page. It asks this kit for the days that hold a note or a report (to list a day that has
-// nothing else), for the pills of a day's line, and for the band of a day; the kit tells it when a day should be
-// drawn again. Everything is read beside the page, so a database without 0224 still shows the report.
+// Not a task and not a zone: nothing here counts in "5/5 scouted". A voice note is written down by the server with the
+// farm's own words; its author, the agronomist or a manager corrects it here, and the recording stays to listen again.
+// The AI's report is written by itself once the day's scouting is complete (on a farm whose automatic AI scan is on)
+// and on a press. It proposes; a person decides.
+//
+// scouting.js owns the page: it asks this kit for the panel and for the pills of a day's line (a press on one shows
+// that day up here). Everything is read beside the page, so a database without 0224 still shows the report.
 import { rpc, fn, api, cachedRpc, URL_BASE } from './api.js';
 import { el, toast, busy, drawer, field, confirmDrawer } from './ui.js';
 
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
+// the zones' own words for a trend (scouting.js, TREND_AI): down is fewer pests
+const TREND = { better: ['ok', '▼ getting better', '▼'], stable: ['', '– stable', '–'], worse: ['bad', '▲ getting worse', '▲'], unclear: ['', '? trend unclear', '?'] };
 const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
 const dayMon = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const first = n => String(n || 'somebody').trim().split(/\s+/)[0];
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const clean = e => String(e?.message || e).replace(/^\d+ /, '').slice(0, 200);
+// a day is a 'YYYY-MM-DD' string everywhere here; noon keeps it the same day in every time zone
+const at = day => new Date(String(day) + 'T12:00:00');
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const shift = (day, n) => { const d = at(day); d.setDate(d.getDate() + n); return iso(d); };
+const longDay = day => at(day).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const shortDay = day => at(day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const LONG = 320;   // a note longer than this is shown by its first lines
 
-export function greenhouseKit({ farm, redraw, relist }) {
-  let days = new Map();            // day → { notes, by[], opinion } (greenhouse_days)
+export function greenhouseKit({ farm, today, scouted, relist }) {
+  let days = new Map();            // day → { notes, by[], opinion: { status, trend, trend_note, headline } } (greenhouse_days)
   let known = false;               // the database has 0224
   const data = new Map();          // day → greenhouse_day
-  const typing = new Map();        // day → what is being typed in "add a note" (a day is drawn again under the writer)
+  const tried = new Map();         // day → when it was last asked for, so a read that fails is not asked in a loop
+  const typing = new Map();        // day → what is being typed in "add a note" (the panel is drawn again under the writer)
+  const wide = new Set();          // the long notes a person opened
   let focusDay = null;
+  let sel = null;                  // the day a person chose; none: the kit chooses (auto)
+  let calMonth = null;             // 'YYYY-MM' while the calendar is open
+  const node = el('section', 'card pd-ghp');
+  node.setAttribute('aria-label', 'The whole greenhouse');
 
+  const now = () => String(today() || iso(new Date()));
   const a = () => ({ p_farm: farm.id, p_days: 120 });
   const take = rows => { days = new Map((rows || []).map(r => [String(r.day), r])); known = true; };
+
+  // the day shown when nobody chose: today once it holds a report or a note, the last report before that, today when
+  // there is nothing at all
+  function auto() {
+    const t = now(), x = days.get(t);
+    if (x && (x.opinion || x.notes)) return t;
+    const past = [...days.keys()].filter(d => d <= t).sort().reverse();
+    return past.find(d => days.get(d).opinion) || past[0] || t;
+  }
+  const current = () => sel || auto();
 
   // the list: beside the page, the kept copy first
   async function readDays() {
     const before = JSON.stringify([...days]);
     try { const copy = await cachedRpc('greenhouse_days', a()); if (copy) take(copy); } catch { /* no copy */ }
-    if (JSON.stringify([...days]) !== before) relist();
+    if (JSON.stringify([...days]) !== before) { relist(); draw(); }
     try {
       const fresh = await rpc('greenhouse_days', a());
       const was = JSON.stringify([...days]);
       take(fresh);
-      if (JSON.stringify([...days]) !== was) relist();
-    } catch { /* a database without the function, or no connection: the report goes on without the band's figures */ }
+      if (JSON.stringify([...days]) !== was) { relist(); draw(); }
+    } catch { /* a database without the function, or no connection: the page goes on without the panel's figures */ }
   }
+  // the page read again (a change made here or on another device): the list, and the day on show
+  const refresh = () => { tried.delete(current()); return Promise.all([readDays(), readDay(current()).catch(() => {})]); };
 
   async function readDay(day, { fresh = false } = {}) {
     const k = String(day), args = { p_farm: farm.id, p_day: k };
     const was = JSON.stringify(data.get(k) || null);
+    tried.set(k, Date.now());
     if (!fresh && !data.has(k)) {
-      try { const copy = await cachedRpc('greenhouse_day', args); if (copy) { data.set(k, copy); redraw(k); } } catch { /* no copy */ }
+      try { const copy = await cachedRpc('greenhouse_day', args); if (copy) { data.set(k, copy); if (k === current()) draw(); } } catch { /* no copy */ }
     }
     try {
       const d = await rpc('greenhouse_day', args);
       known = true;
       data.set(k, d);
-      if (JSON.stringify(d) !== was) redraw(k);
+      if (JSON.stringify(d) !== was && k === current()) draw();
     } catch (e) { if (fresh) throw e; }
   }
 
-  // the days that hold a note or a report and are not in the page's own list (inside the window it has read)
-  const onlyDays = (listed, oldest, all) => [...days.keys()]
-    .filter(day => !listed.some(d => String(d.day) === day) && (all || !oldest || day > String(oldest)))
-    .map(day => ({ day }));
+  // after a change made here: the day and the list again, and the panel drawn anew even when the answer is the same
+  // (a report asked twice in ten minutes comes back as it was, and its button must not stay busy)
+  const after = async day => { await Promise.all([readDay(day, { fresh: true }), readDays()]); draw(); };
 
-  // on the day's line: who wrote, and the AI's word
+  function select(day, { show = false } = {}) {
+    const k = String(day);
+    if (k > now()) return;
+    sel = k === auto() ? null : k;
+    calMonth = null;
+    draw();
+    if (show && node.isConnected) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // on a day's line in the list below: who wrote, and the AI's word with its trend. A press shows that day up here.
   function pills(day) {
-    const x = days.get(String(day));
+    const k = String(day), x = days.get(k);
     if (!x) return [];
     const out = [];
+    const press = p => {
+      p.classList.add('pd-gh-press'); p.setAttribute('role', 'button'); p.tabIndex = 0;
+      const go = e => { e.preventDefault(); e.stopPropagation(); select(k, { show: true }); };
+      p.onclick = go;
+      p.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') go(e); };
+      return p;
+    };
     if (x.notes) {
       const p = el('span', 'pill pd-gh-pill', `${x.notes > 1 ? x.notes + ' notes' : 'note'} · ${(x.by || []).map(first).join(', ')}`);
-      p.title = 'About the whole greenhouse';
-      out.push(p);
+      p.title = 'About the whole greenhouse — show it at the top of the page';
+      out.push(press(p));
     }
     if (x.opinion) {
       const [c, w] = STATUS[x.opinion.status] || ['', x.opinion.status];
-      const p = el('span', 'pill ' + c, '✦ ' + w);
-      p.title = 'The AI on the whole greenhouse: ' + (x.opinion.headline || '');
-      out.push(p);
+      const t = TREND[x.opinion.trend];
+      const p = el('span', 'pill ' + c, '✦ ' + w + (t ? ' ' + t[2] : ''));
+      p.title = 'The AI on the whole greenhouse: ' + (x.opinion.headline || '') + (t ? ` (${t[1].slice(2)})` : '') + ' — show it at the top of the page';
+      out.push(press(p));
     }
     return out;
   }
-
-  // after a change made here: the day and the list again, and the band drawn anew even when the answer is the same
-  // (a report asked twice in ten minutes comes back as it was, and its button must not stay busy)
-  const after = async day => { await Promise.all([readDay(day, { fresh: true }), readDays()]); redraw(String(day)); };
 
   async function audioUrl(path) {
     const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
@@ -124,12 +172,24 @@ export function greenhouseKit({ farm, redraw, relist }) {
     if (n.source === 'import') who.append(el('span', 'hint', 'brought in from Notion'));
     if (n.edited_at) who.append(el('span', 'hint', `corrected${n.edited_by ? ' by ' + first(n.edited_by) : ''}`));
     row.append(who);
-    if (n.text) row.append(el('div', 'pd-gh-text', n.text));
+    const tools = el('div', 'pd-gh-tools');
+    if (n.text) {
+      const long = n.text.length > LONG, t = el('div', 'pd-gh-text' + (long && !wide.has(n.id) ? ' clamp' : ''), n.text);
+      row.append(t);
+      if (long) {
+        const more = el('button', 'linkish', wide.has(n.id) ? 'Show less' : 'Show all');
+        more.onclick = () => {
+          if (wide.has(n.id)) wide.delete(n.id); else wide.add(n.id);
+          t.classList.toggle('clamp', !wide.has(n.id));
+          more.textContent = wide.has(n.id) ? 'Show less' : 'Show all';
+        };
+        tools.append(more);
+      }
+    }
     else if (n.ai_status === 'queued') row.append(el('div', 'hint', 'A voice note — being written down…'));
     else if (n.ai_status === 'no_key') row.append(el('div', 'hint', 'A voice note — not written down: no Groq key in Settings › Integrations.'));
     else if (n.audio?.length) row.append(el('div', 'hint', 'A voice note — not written down' + (n.ai_error ? ': ' + n.ai_error : '.')));
 
-    const tools = el('div', 'pd-gh-tools');
     (n.audio || []).forEach((m, i) => {
       const b = el('button', 'linkish', `▶ Listen${n.audio.length > 1 ? ' ' + (i + 1) : ''}${m.seconds ? ' · ' + Math.round(m.seconds) + ' s' : ''}`);
       b.onclick = async () => {
@@ -170,7 +230,7 @@ export function greenhouseKit({ farm, redraw, relist }) {
     const k = String(day);
     const wrap = el('div', 'pd-gh-add');
     const box = el('textarea', 'pd-gh-box'); box.rows = 2; box.maxLength = 8000;
-    box.placeholder = 'Add a note about the whole greenhouse that day…';
+    box.placeholder = `Add a note about the whole greenhouse on ${shortDay(k)}…`;
     box.setAttribute('aria-label', 'A note about the whole greenhouse');
     box.value = typing.get(k) || '';
     const send = el('button', 'btn btn-primary btn-sm', 'Add the note');
@@ -190,19 +250,104 @@ export function greenhouseKit({ farm, redraw, relist }) {
       } catch (e) { busy(send, false, 'Add the note'); toast(clean(e), 'bad'); }
     };
     wrap.append(box, send);
-    // the day was drawn again while somebody was writing: the cursor goes back where it was
-    if (focusDay === k) requestAnimationFrame(() => { if (box.isConnected) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); } });
     return wrap;
   }
+  // the panel was drawn again, or put back on the page, while somebody was writing: the cursor goes back where it was
+  const refocus = () => {
+    if (!focusDay) return;
+    requestAnimationFrame(() => {
+      const box = node.querySelector('.pd-gh-box');
+      if (box && box.isConnected && focusDay === current() && document.activeElement !== box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+    });
+  };
 
-  function reportCard(day, d) {
-    const k = String(day), op = d?.opinion || null;
-    const card = el('div', 'pd-ai pd-gh-ai');
-    const label = () => (op ? '✦ Ask again' : '✦ Ask the AI');
-    const ask = el('button', 'btn btn-sm' + (op ? '' : ' btn-primary'), label());
-    ask.title = 'Sends the last days of every zone — the counts, the cases, the notes people made, the AI notes on the photos, no picture — for a short report on the whole greenhouse that day';
-    ask.onclick = async e => {
-      e.preventDefault(); e.stopPropagation();
+  // ── the day on show: squares for the last fourteen days, ‹ ›, and the calendar ──
+  const mark = day => {                       // what a square says about a day
+    const x = days.get(day), [c, w] = x?.opinion ? (STATUS[x.opinion.status] || ['', '']) : ['', ''];
+    const t = x?.opinion ? TREND[x.opinion.trend] : null;
+    const said = [w ? 'AI: ' + w + (t ? ', ' + t[1].slice(2) : '') : null, x?.notes ? plural(x.notes, 'note') : null].filter(Boolean).join(' · ');
+    return { cls: c, noted: !!x?.notes, title: longDay(day) + (said ? ' — ' + said : '') + (x?.opinion?.headline ? '\n' + x.opinion.headline : '') };
+  };
+  function cell(day, k, label) {
+    const m = mark(day), t = now();
+    const b = el('button', 'pd-ghp-cell' + (m.cls ? ' ' + m.cls : '') + (m.noted ? ' noted' : '') + (day === k ? ' sel' : '') + (day === t ? ' today' : ''), label);
+    b.type = 'button'; b.title = m.title;
+    b.setAttribute('aria-label', m.title.replace('\n', '. '));
+    if (day === k) b.setAttribute('aria-current', 'date');
+    if (day > t) b.disabled = true; else b.onclick = e => { e.stopPropagation(); select(day); };
+    return b;
+  }
+  // the days worth stopping at: a report, a note or a scouting, and today
+  const stops = () => [...new Set([...days.keys(), ...(scouted() || []).map(String), now()])].filter(d => d <= now()).sort();
+
+  function calendar(k) {
+    const t = now(), box = el('div', 'pd-ghp-cal');
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Choose a day');
+    const [y, m] = calMonth.split('-').map(Number);
+    const head = el('div', 'pd-ghp-cal-head');
+    const move = n => { const d = new Date(y, m - 1 + n, 1, 12); calMonth = iso(d).slice(0, 7); draw(); };
+    const prev = el('button', 'pd-ghp-step', '‹'); prev.type = 'button'; prev.title = 'The month before'; prev.onclick = e => { e.stopPropagation(); move(-1); };
+    const next = el('button', 'pd-ghp-step', '›'); next.type = 'button'; next.title = 'The month after'; next.onclick = e => { e.stopPropagation(); move(1); };
+    next.disabled = calMonth >= t.slice(0, 7);
+    head.append(prev, el('b', null, new Date(y, m - 1, 1, 12).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })), next);
+    const grid = el('div', 'pd-ghp-cal-grid');
+    ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(w => grid.append(el('span', 'wd', w)));
+    const lead = (new Date(y, m - 1, 1, 12).getDay() + 6) % 7, n = new Date(y, m, 0, 12).getDate();
+    for (let i = 0; i < lead; i++) grid.append(el('span'));
+    const walked = new Set((scouted() || []).map(String));
+    for (let i = 1; i <= n; i++) {
+      const day = `${calMonth}-${String(i).padStart(2, '0')}`, c = cell(day, k, String(i));
+      if (walked.has(day)) c.classList.add('scouted');
+      grid.append(c);
+    }
+    const key = el('div', 'pd-ghp-key');
+    [['ok', 'OK'], ['warn', 'Watch'], ['bad', 'Act now']].forEach(([c, w]) => { const s = el('span'); s.append(el('i', 'pd-ghp-cell ' + c), w); key.append(s); });
+    const s = el('span'); s.append(el('i', 'pd-ghp-cell noted'), 'a note'); key.append(s);
+    box.append(head, grid, key);
+    box.onclick = e => e.stopPropagation();
+    return box;
+  }
+
+  function headRow(k) {
+    const t = now(), all = stops();
+    const head = el('div', 'pd-ghp-head');
+    head.append(el('b', 'pd-ghp-title', 'Whole greenhouse'));
+    const nav = el('div', 'pd-ghp-nav');
+    const before = all.filter(d => d < k).pop(), afterDay = all.find(d => d > k);
+    const back = el('button', 'pd-ghp-step', '‹'); back.type = 'button';
+    back.title = before ? 'The report before: ' + longDay(before) : 'Nothing earlier';
+    back.disabled = !before; back.onclick = () => select(before);
+    const fwd = el('button', 'pd-ghp-step', '›'); fwd.type = 'button';
+    fwd.title = afterDay ? 'The report after: ' + longDay(afterDay) : 'Nothing later';
+    fwd.disabled = !afterDay; fwd.onclick = () => select(afterDay);
+    const date = el('button', 'pd-ghp-date', longDay(k) + (k === t ? ' · today' : ''));
+    date.type = 'button'; date.title = 'Choose another day'; date.setAttribute('aria-haspopup', 'dialog'); date.setAttribute('aria-expanded', String(!!calMonth));
+    date.append(el('span', 'pd-ghp-caret', '▾'));
+    date.onclick = e => { e.stopPropagation(); calMonth = calMonth ? null : k.slice(0, 7); draw(); };
+    nav.append(back, date, fwd);
+    if (calMonth) nav.append(calendar(k));
+    head.append(nav);
+    if (k !== t) {
+      const go = el('button', 'linkish', 'Today'); go.type = 'button'; go.onclick = () => { sel = t === auto() ? null : t; calMonth = null; draw(); };
+      head.append(go);
+      if (!sel) head.append(el('span', 'hint', 'no report today yet: this is the last one'));
+    }
+    const strip = el('div', 'pd-ghp-strip');
+    strip.setAttribute('aria-label', 'The last fourteen days');
+    for (let i = 13; i >= 0; i--) { const day = shift(t, -i); strip.append(cell(day, k, String(at(day).getDate()))); }
+    head.append(strip);
+    return head;
+  }
+
+  // ── the AI's report, first ──
+  function report(k, d) {
+    const x = days.get(k) || null;
+    const op = d?.opinion || null, lite = op || x?.opinion || null;      // the list's line while the day is being read
+    const box = el('div', 'pd-ghp-ai');
+    const label = () => (lite ? '✦ Ask again' : '✦ Ask the AI');
+    const ask = el('button', 'btn btn-sm' + (lite ? '' : ' btn-primary'), label());
+    ask.title = 'Sends that day and the thirty before it of every zone — the counts, the cases, the notes people made, the AI notes on the photos, no picture — and the earlier reports, for a short report on the whole greenhouse that day. Nothing from after that day is sent.';
+    ask.onclick = async () => {
       busy(ask, true, 'The AI is reading the greenhouse…');
       try {
         const r = await fn('greenhouse-opinion', { farm_id: farm.id, day: k, force: true });
@@ -210,77 +355,97 @@ export function greenhouseKit({ farm, redraw, relist }) {
         await after(k);
       } catch (err) { busy(ask, false, label()); toast('AI report: ' + clean(err), 'bad'); }
     };
-    const head = el('div', 'pd-ai-head');
-    head.append(el('b', null, '✦ AI report'));
-    if (op) { const [c, w] = STATUS[op.status] || ['', op.status]; head.append(el('span', 'pill ' + c, w)); }
-    head.append(el('span', 'spacer'));
-    if (d?.ai_ready !== false) head.append(ask);
-    card.append(head);
-    if (!op) {
-      card.append(el('div', 'hint', d?.ai_ready === false
+    const line = el('div', 'pd-ghp-line');
+    line.append(el('b', 'pd-ghp-ailabel', '✦ AI report'));
+    if (lite) {
+      const [c, w] = STATUS[lite.status] || ['', lite.status];
+      line.append(el('span', 'pill pd-ghp-status ' + c, w));
+      const t = TREND[lite.trend];
+      if (t) { const p = el('span', 'pill pd-ghp-trend ' + t[0], t[1]); p.title = 'Against the days before'; line.append(p); }
+      line.append(el('span', 'pd-ghp-why', lite.trend_note || (t ? '' : 'Written before the report gave a trend — ask again for it.')));
+    } else line.append(el('span', 'pd-ghp-why'));
+    if (d ? d.ai_ready !== false : !!lite) line.append(ask);
+    box.append(line);
+
+    if (!lite) {
+      box.append(el('div', 'hint', !d ? (known ? 'Reading…' : 'Reading the report…') : d.ai_ready === false
         ? 'No report: paste an Anthropic API key in Settings › Integrations first.'
-        : 'Not written yet. It is written by itself once the day\'s scouting is complete, where the automatic AI scan is on — or on a press. It reads every zone and the notes beside it. It proposes; you decide.'));
-      return card;
+        : `No report for ${k === now() ? 'today' : shortDay(k)} yet. It is written by itself once the day's scouting is complete, where the automatic AI scan is on — or on a press. It reads every zone, the notes and the days before. It proposes; you decide.`));
+      return box;
     }
-    const body = el('div', 'pd-ai-body');
-    body.append(el('b', 'pd-gh-headline', op.headline));
+    box.append(el('b', 'pd-gh-headline', lite.headline || ''));
+    if (!op) { box.append(el('div', 'hint', 'Reading the rest…')); return box; }
+
+    const cols = el('div', 'pd-ghp-cols');
+    const col = (title, list) => { const c = el('div', 'pd-ghp-col'); c.append(el('div', 'pd-hlabel', title), list); cols.append(c); };
     if ((op.points || []).length) {
       const ul = el('ul', 'pd-ai-points');
       op.points.forEach(p => { const li = el('li'); li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li); });
-      body.append(ul);
+      col('What matters', ul);
     }
     if ((op.next_actions || []).length) {
-      body.append(el('div', 'pd-hlabel', 'Next'));
       const ol = el('ol', 'pd-ai-next');
       op.next_actions.forEach(t => ol.append(el('li', null, t)));
-      body.append(ol);
+      col('Next', ol);
     }
+    if ((op.carried || []).length) {
+      const ul = el('ul', 'pd-ai-next pd-ghp-open');
+      op.carried.forEach(c => { const li = el('li'); li.append(el('span', null, c.text || String(c))); if (c.since) li.append(el('div', 'hint', 'since ' + shortDay(c.since))); ul.append(li); });
+      col('Still open from before', ul);
+    } else if (op.trend) {
+      col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));
+    }
+    if (cols.childNodes.length) box.append(cols);
+
     if ((op.missing || []).length) {
       const m = el('details', 'pd-ai-missing');
       const ul = el('ul');
       op.missing.forEach(t => ul.append(el('li', null, t)));
       m.append(el('summary', null, `What was missing (${op.missing.length})`), ul);
-      body.append(m);
+      box.append(m);
     }
     const st = op.stats || {};
-    const read = [st.notes ? plural(st.notes, 'note') : null, st.trap_readings ? plural(st.trap_readings, 'trap reading') : null,
+    const read = [st.days ? plural(st.days, 'day') + ' of records' : null, st.reports_before ? plural(st.reports_before, 'earlier report') : null,
+                  st.notes ? plural(st.notes, 'note') : null, st.trap_readings ? plural(st.trap_readings, 'trap reading') : null,
                   st.plant_health ? plural(st.plant_health, 'health photo') : null, st.cases ? plural(st.cases, 'case') : null].filter(Boolean).join(', ');
-    body.append(el('div', 'hint pd-ai-foot', [`Written ${dayMon(op.created_at)} ${hhmm(op.created_at)}`, op.auto ? 'by itself' : (op.by ? 'asked by ' + first(op.by) : null),
-      op.confidence != null ? `confidence ${Math.round(op.confidence * 100)} %` : null, read ? 'read ' + read : null].filter(Boolean).join(' · ') + ' · The AI proposes; you decide.'));
-    if (op.notes_since > 0) body.append(el('div', 'note warn pd-gh-stale', `${op.notes_since > 1 ? op.notes_since + ' notes were' : 'A note was'} added or corrected after this report — ask again.`));
-    card.append(body);
-    return card;
+    box.append(el('div', 'hint pd-ai-foot', [`Written ${dayMon(op.created_at)} ${hhmm(op.created_at)}`, op.auto ? 'by itself' : (op.by ? 'asked by ' + first(op.by) : null),
+      op.confidence != null ? `confidence ${Math.round(op.confidence * 100)} %` : null, read ? 'read ' + read : null,
+      'nothing from after ' + shortDay(k)].filter(Boolean).join(' · ') + ' · The AI proposes; you decide.'));
+    if (op.notes_since > 0) box.append(el('div', 'note warn pd-gh-stale', `${op.notes_since > 1 ? op.notes_since + ' notes were' : 'A note was'} added or corrected after this report — ask again.`));
+    return box;
   }
 
-  // the band of a day, above its zones. scouting.js keeps its open state like a zone's (dataset.unit 'whole').
-  function band(day) {
-    const k = String(day), d = data.get(k) || null, x = days.get(k) || null;
-    const notes = d?.notes || [], op = d?.opinion || x?.opinion || null;
-    const det = el('details', 'pd-zone-band pd-gh');
-    det.dataset.unit = 'whole';
-    det.open = notes.length > 0 || !!op || (x?.notes || 0) > 0;
-    const sum = el('summary');
-    const left = el('span', 'pd-zone-title');
-    left.append(el('b', null, 'Whole greenhouse'));
-    sum.append(left);
-    const right = el('span', 'pd-day-facts');
-    const n = d ? notes.length : (x?.notes || 0);
-    if (n) right.append(el('span', 'pill', n > 1 ? `${n} notes` : 'note'));
-    if (op) { const [c, w] = STATUS[op.status] || ['', op.status]; right.append(el('span', 'pill ' + c, '✦ ' + w), el('span', 'pd-gh-line', op.headline || '')); }
-    if (!n && !op) right.append(el('span', 'hint', 'no note, no AI report'));
-    sum.append(right);
-    det.append(sum);
-
-    const body = el('div', 'pd-zone-body pd-gh-body');
-    if (!d) { body.append(el('div', 'hint', known ? 'Reading…' : 'Reading the notes…')); det.append(body); return det; }
-    const col = el('div', 'pd-gh-notes');
-    col.append(el('div', 'pd-hlabel', notes.length ? 'What people said' : 'No note that day'));
-    notes.forEach(nt => col.append(noteRow(k, nt)));
-    if (d.may_write) col.append(addBox(k));
-    body.append(col, reportCard(k, d));
-    det.append(body);
-    return det;
+  // ── what people said, under it ──
+  function said(k, d) {
+    const x = days.get(k) || null;
+    const box = el('div', 'pd-ghp-notes');
+    if (!d) {
+      box.append(el('div', 'pd-hlabel', x?.notes ? `What people said · ${plural(x.notes, 'note')}` : 'What people said'), el('div', 'hint', 'Reading…'));
+      return box;
+    }
+    const notes = d.notes || [];
+    box.append(el('div', 'pd-hlabel', notes.length ? `What people said · ${plural(notes.length, 'note')}` : `What people said · nobody wrote on ${k === now() ? 'this day yet' : shortDay(k)}`));
+    const grid = el('div', 'pd-ghp-notegrid');
+    notes.forEach(nt => grid.append(noteRow(k, nt)));
+    if (d.may_write) grid.append(addBox(k));
+    if (grid.childNodes.length) box.append(grid);
+    return box;
   }
 
-  return { readDays, readDay, onlyDays, pills, band, has: day => days.has(String(day)), ready: () => known };
+  function draw() {
+    const k = current(), d = data.get(k) || null;
+    node.textContent = '';
+    node.append(headRow(k), report(k, d), said(k, d));
+    if (!d && Date.now() - (tried.get(k) || 0) > 30000) readDay(k).catch(() => {});
+    refocus();
+  }
+  // a click anywhere else, or Escape, closes the calendar
+  const shut = e => { if (calMonth && node.isConnected && !(e.type === 'keydown' && e.key !== 'Escape')) { calMonth = null; draw(); } };
+  document.addEventListener('click', shut);
+  document.addEventListener('keydown', shut);
+
+  // the panel, for the page to place: the same node every time, so what is being typed and played stays
+  function panel() { draw(); return node; }
+
+  return { readDays, refresh, pills, panel, select, ready: () => known };
 }

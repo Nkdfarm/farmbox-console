@@ -62,7 +62,7 @@ function paint() {
         if (where) b.append(el('div', 'hint', where));
         // a pest case is followed in Pest & diseases › Cases (0097)
         if (r.kind === 'pest_case') {
-          const a = el('a', 'linkish', 'pest case — open it in Pest & diseases');
+          const a = el('a', 'linkish', 'pest case — open it in Scouting');
           a.href = '#/ipm/scouting';
           const h = el('div', 'hint'); h.append(a); b.append(h);   // append() returns nothing: the old chain threw
         }

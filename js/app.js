@@ -147,7 +147,8 @@ const SECTIONS = {
   // Pest & diseases (0096): the daily scouting report first, then the traps and the programs; the address stays #/ipm
   // Pest & diseases (0.7.101): one page — the dashboard, the open cases, the reports by date → zone → photo —
   // and the procedures; the trap setup is behind the page's "Traps…" button
-  ipm: { title: 'Pest & diseases', tabs: [['scouting', 'Scouting', renderScouting], ['library', 'IPM programs', renderIpmPrograms], ['products', 'Products', renderIpmProducts], ['programs', 'Procedures', lib('ipm')]] },   // the IPM library (0197, 0.7.199)   // the Traps tab is in the report (0.7.174), the robot too (0.7.184)
+  // The page is called Scouting since 12 Oct 2026 (was Pest & diseases); the procedure category keeps its name
+  ipm: { title: 'Scouting', tabs: [['scouting', 'Scouting', renderScouting], ['library', 'IPM programs', renderIpmPrograms], ['products', 'Products', renderIpmProducts], ['programs', 'Procedures', lib('ipm')]] },   // the IPM library (0197, 0.7.199)   // the Traps tab is in the report (0.7.174), the robot too (0.7.184)
   office: { title: 'Office', tabs: [
     // Sell is the basket planner since 0.7.141; the market prices are Market
     ['market', 'Market', renderPrices], ['sell', 'Sell', renderBaskets], ['orders', 'Orders', renderOrders], ['customers', 'Customers', renderCustomers], ['buy', 'Buy', renderPurchasing], ['stock', 'Stock', renderStock], ['money', 'Money', renderMoney], ['management', 'Farm management', lib('office')]] },

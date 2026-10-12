@@ -380,7 +380,7 @@ function paint() {
   const removedBtn = el('button', 'btn', 'Removed photos…');
   removedBtn.title = 'The photos taken off the reports in the last 30 days; a manager can put one back';
   removedBtn.onclick = openRemoved;
-  mount.append(pageHead('Pest & diseases',
+  mount.append(pageHead('Scouting',
     'The daily scouting by date, zone by zone: plant health first, with the trap curves and the zone\'s trap map, then the traps and the growth photos. ' +
     'A dot says the worst thing inside: red severe or over the threshold, orange open or on watch, green improving or resolved.',
     scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(farm, reload), openBtn));

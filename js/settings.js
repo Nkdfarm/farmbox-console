@@ -175,7 +175,7 @@ const INTEGRATIONS = [
     setText: 'A photo goes to Claude when somebody presses Ask the AI on it — or by itself where the automatic AI scan is on.',
     unsetText: 'Not set — photos are counted and tagged by people only; the AI cannot be asked.',
     savedToast: 'Anthropic key saved — Ask the AI works on any photo now',
-    help: 'Pest & diseases needs it: a trap or plant photo goes to Claude (Anthropic) when somebody asks, photo by ' +
+    help: 'Scouting needs it: a trap or plant photo goes to Claude (Anthropic) when somebody asks, photo by ' +
           'photo, or by itself where a manager switched the automatic AI scan on; it names the insects or the disease against the catalogue. Create a key in the Anthropic Console (a photo costs a few cents). ',
     link: ['Anthropic Console', 'https://console.anthropic.com/settings/keys'] },
   { name: 'groq', label: 'Groq API key', placeholder: 'gsk_…',
@@ -351,7 +351,7 @@ function layout(ctx, touched) {
 
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
-  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'Pest & diseases'], ['office', 'Office'],
+  [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'Scouting'], ['office', 'Office'],
    ['maintenance', 'Maintenance'], ['farm', 'Farm setup']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;

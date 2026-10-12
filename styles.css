@@ -2389,3 +2389,8 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-ghp-kind { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: var(--radius-full); font-size: 10px; font-weight: 800; text-transform: uppercase;
   letter-spacing: .04em; line-height: 1.7; vertical-align: 1px; background: var(--text); color: var(--surface); }
 .pd-ghp-crit .pd-ghp-ref { background: var(--surface); }
+/* 0.7.244: Team — a person off the task pages */
+.team-off { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: var(--text-xs); color: var(--text-muted); cursor: pointer; width: fit-content; }
+.team-off input { margin: 0; accent-color: var(--accent); }
+.team-off:has(input:checked) { color: var(--text); font-weight: 600; }
+.team-off-word { display: block; color: var(--warning); }

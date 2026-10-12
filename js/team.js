@@ -212,6 +212,26 @@ function personRow(p, inJob, may, h) {
   names.append(el('b', null, [p.name, p.surname].filter(Boolean).join(' ')));
   const days = (p.working_days || []).map(d => DAY[d] || '').join('');
   names.append(el('small', null, `${employmentLabel(p.employment)} · ${days || 'no days'} · ${Number(p.hours_per_day)} h` + (p.has_login ? '' : ' · no login')));
+  // off the task pages (0229, owner 12 Oct 2026): in the team, able to do any task on the phone, but not on the Tasks
+  // board, not planned and never the owner of a task. A tick for whoever manages the people; a word for the others.
+  if (p.active && may) {
+    const lab = el('label', 'team-off');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!p.off_tasks;
+    lab.title = 'Ticked: not on the Tasks board, not offered when work is assigned, not counted in the plan and never given a task as its owner. '
+      + 'They still see every task on the phone and can do any of them; their name then shows on that task.';
+    cb.onchange = async () => {
+      cb.disabled = true;
+      try {
+        const r = await rpc('set_off_tasks', { p_worker: p.worker_id, p_on: cb.checked });
+        const n = Number(r?.taken_off || 0);
+        toast(cb.checked ? `${p.name} is off the task pages` + (n ? ` — ${n} planned task${n === 1 ? '' : 's'} went back to the plan` : '')
+                         : `${p.name} is back on the task pages`, 'ok');
+        await reload();
+      } catch (e) { cb.checked = !cb.checked; cb.disabled = false; toast(String(e.message || e).replace(/^\d+ /, ''), 'bad'); }
+    };
+    lab.append(cb, 'Off the task pages');
+    names.append(lab);
+  } else if (p.off_tasks) names.append(el('small', 'team-off-word', 'off the task pages'));
   who.append(names);
   tr.append(tdOf(who));
 

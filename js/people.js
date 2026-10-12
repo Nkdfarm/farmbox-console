@@ -15,6 +15,9 @@ export const ROLES = [
   ['farm_assistant', 'Farm assistant', 'Runs tasks and can plan a day. Cannot sign off the week.'],
   ['agronomist', 'Agronomist', 'Owns the crops: plans and validates the crop plan, edits this farm’s own crops, runs IPM. Cannot sign off the week.'],
   ['worker', 'Worker', 'Does the work: My Week, checklists, evidence.'],
+  // the database's `trainee` (0020): called Student since 0.7.243, when four students joined FarmLab (owner 12 Oct 2026).
+  // The job has no bundle of task families (Team › jobs), so nothing is given to a student unless somebody adds it.
+  ['trainee', 'Student', 'Learns on the job: no work of their own unless you give some. Mainly extra scouting.'],
   ['technician', 'Technician', 'Maintenance and repairs.'],
   ['office', 'Office', 'Purchasing, records, reporting.'],
 ];

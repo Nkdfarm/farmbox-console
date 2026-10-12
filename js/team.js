@@ -20,7 +20,7 @@ import { renderHours } from './hours.js';
 
 const hrs = m => { m = Math.round(Number(m || 0)); const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`; };
 const DAY = ['', 'M', 'T', 'W', 'T', 'F', 'S', 'S'];
-// a job the profile form does not offer (a trainee comes from Notion) still has a name here
+// a job the profile form does not offer (an installer comes from Notion) still has a name here
 const roleLabel = r => { const l = knownRole(r); return l === r ? String(r || 'No job').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()) : l; };
 const keyLabel = r => r.category || 'All ' + r.family;
 const sameKey = (a, b) => a.family === b.family && (a.category || null) === (b.category || null);

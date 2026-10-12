@@ -385,6 +385,32 @@ function openActions(p) {
       `Making them inactive leaves those tasks for the next plan to reassign.`));
   }
 
+  // Out of the team for good (0.7.246, FarmBox 0230; owner 12 Oct 2026: "add the possibility to remove a user from the
+  // team"). What it does depends on what the person has on record, so that is asked first and said before anything
+  // happens: somebody who never worked is erased; somebody who did is switched off, and what they did keeps their name.
+  item('Remove from the team', 'For somebody who has left, or was added by mistake.', 'btn-danger', async () => {
+    d.close();
+    let h;
+    try { h = await rpc('person_history', { p_worker: p.worker_id }); }
+    catch (e) { toast(e.message, 'bad'); return; }
+    const n = Number(h?.total || 0), login = p.has_login ? ' and their login is deleted' : '';
+    const ok = n
+      ? await confirmDrawer(`Remove ${p.name} from the team?`,
+          `${p.name} has work on record: ${historyWords(h.what)}. Erasing them would lose who did it, so they are switched off instead — ` +
+          `out of the team and the plan, listed under "Switched off"${login}. Everything they did stays under their name.`,
+          p.active ? 'Switch off' : 'Keep switched off', true)
+      : await confirmDrawer(`Remove ${p.name} for good?`,
+          `Nothing ${p.name} did is on record, so they can be erased: their place in the team, what they are responsible for` +
+          (p.open_tasks ? `, their name on ${p.open_tasks} open task${p.open_tasks === 1 ? '' : 's'}` : '') +
+          `${login}. This cannot be undone.`, 'Remove for good', true);
+    if (!ok) return;
+    try {
+      const r = await fn('admin-user', { farm_id: farm.id, action: 'remove', worker_id: p.worker_id });
+      toast(r?.removed ? `${p.name} is removed from the team` : `${p.name} is switched off; what they did stays on record`, 'ok');
+      await afterSave();
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+
   d.body.append(list);
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
@@ -419,6 +445,16 @@ async function resetPassword(p) {
     } catch (e) { busy(ok, false, 'Set password'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, ok);
+}
+
+// what a person has on record, in a few words: "12 checklists, 3 notes, 40 photos"
+const HISTORY = { checklist_run: ['checklist', 'checklists'], task_time: ['timed task', 'timed tasks'], time_entry: ['time entry', 'time entries'],
+                  scout_note: ['note', 'notes'], task_feedback: ['feedback', 'feedbacks'], scout_observation: ['photo', 'photos'],
+                  trap_reading: ['trap count', 'trap counts'], tasks: ['task', 'tasks'], task_item: ['task line', 'task lines'], issue: ['case', 'cases'] };
+function historyWords(what) {
+  const rows = Object.entries(what || {}).sort((x, y) => y[1] - x[1]);
+  const said = rows.slice(0, 4).map(([k, v]) => { const w = HISTORY[k]; return w ? `${v} ${Number(v) === 1 ? w[0] : w[1]}` : `${v} in ${k.replace(/_/g, ' ')}`; });
+  return said.join(', ') + (rows.length > 4 ? ', and more' : '');
 }
 
 async function act(body, okMessage) {

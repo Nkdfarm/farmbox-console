@@ -1,5 +1,5 @@
 {
-  "version": "0.7.245",
+  "version": "0.7.246",
   "released": "2026-10-12",
-  "note": "Tasks: a more compact people column, the name alone"
+  "note": "Team: a person can be removed from the team"
 }

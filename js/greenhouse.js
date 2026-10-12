@@ -104,8 +104,15 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
       if (JSON.stringify([...days]) !== was) { relist(); draw(); }
     } catch { /* a database without the function, or no connection: the page goes on without the panel's figures */ }
   }
-  // the page read again (a change made here or on another device): the list, and the day on show
-  const refresh = () => { tried.delete(current()); return Promise.all([readDays(), readDay(current()).catch(() => {})]); };
+  // the page read again (a change made here or on another device): the list, and the day on show. What was read of
+  // the other days is let go, so each is read again when it is next shown (0.7.242: a report written again elsewhere
+  // stayed on screen as it had first been read — "the report of 9 is in the old format")
+  const refresh = () => {
+    const k = current();
+    [...data.keys()].forEach(d => { if (d !== k) data.delete(d); });
+    tried.clear();
+    return Promise.all([readDays(), readDay(k).catch(() => {})]);
+  };
 
   async function readDay(day, { fresh = false } = {}) {
     const k = String(day), args = { p_farm: farm.id, p_day: k };
@@ -132,6 +139,8 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     sel = k === auto() ? null : k;
     calMonth = null;
     draw();
+    // what is kept of that day is shown at once, and asked again: it is drawn anew only when the answer differs
+    if (data.has(k)) readDay(k).catch(() => {});
     if (show && node.isConnected) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 

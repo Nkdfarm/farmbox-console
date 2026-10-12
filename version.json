@@ -1,5 +1,5 @@
 {
-  "version": "0.7.246",
+  "version": "0.7.247",
   "released": "2026-10-12",
-  "note": "Team: a person can be removed from the team"
+  "note": "Team: removing somebody who has worked keeps their name on what they did"
 }

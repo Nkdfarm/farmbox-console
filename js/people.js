@@ -393,16 +393,18 @@ function openActions(p) {
     let h;
     try { h = await rpc('person_history', { p_worker: p.worker_id }); }
     catch (e) { toast(e.message, 'bad'); return; }
-    const n = Number(h?.total || 0), login = p.has_login ? ' and their login is deleted' : '';
+    const n = Number(h?.total || 0);
+    // (with work on record the login is shut, not deleted: the name beside what they made is read through it — 0.7.247)
     const ok = n
       ? await confirmDrawer(`Remove ${p.name} from the team?`,
           `${p.name} has work on record: ${historyWords(h.what)}. Erasing them would lose who did it, so they are switched off instead — ` +
-          `out of the team and the plan, listed under "Switched off"${login}. Everything they did stays under their name.`,
+          `out of the team and the plan, listed under "Switched off"${p.has_login ? ', and they can no longer sign in' : ''}. ` +
+          `Everything they did stays under their name.`,
           p.active ? 'Switch off' : 'Keep switched off', true)
       : await confirmDrawer(`Remove ${p.name} for good?`,
           `Nothing ${p.name} did is on record, so they can be erased: their place in the team, what they are responsible for` +
           (p.open_tasks ? `, their name on ${p.open_tasks} open task${p.open_tasks === 1 ? '' : 's'}` : '') +
-          `${login}. This cannot be undone.`, 'Remove for good', true);
+          `${p.has_login ? ' and their login' : ''}. This cannot be undone.`, 'Remove for good', true);
     if (!ok) return;
     try {
       const r = await fn('admin-user', { farm_id: farm.id, action: 'remove', worker_id: p.worker_id });
@@ -450,7 +452,11 @@ async function resetPassword(p) {
 // what a person has on record, in a few words: "12 checklists, 3 notes, 40 photos"
 const HISTORY = { checklist_run: ['checklist', 'checklists'], task_time: ['timed task', 'timed tasks'], time_entry: ['time entry', 'time entries'],
                   scout_note: ['note', 'notes'], task_feedback: ['feedback', 'feedbacks'], scout_observation: ['photo', 'photos'],
-                  trap_reading: ['trap count', 'trap counts'], tasks: ['task', 'tasks'], task_item: ['task line', 'task lines'], issue: ['case', 'cases'] };
+                  trap_reading: ['trap count', 'trap counts'], tasks: ['task worked on', 'tasks worked on'], task: ['task closed', 'tasks closed'],
+                  task_item: ['task line', 'task lines'], issue: ['case', 'cases'], harvest: ['harvest', 'harvests'],
+                  sump_reading: ['sump reading', 'sump readings'], greenhouse_opinion: ['AI report asked', 'AI reports asked'],
+                  zone_opinion: ['AI opinion asked', 'AI opinions asked'], labour_plan: ['plan validated', 'plans validated'],
+                  crop_plan: ['crop plan validated', 'crop plans validated'], purchase_order: ['order', 'orders'] };
 function historyWords(what) {
   const rows = Object.entries(what || {}).sort((x, y) => y[1] - x[1]);
   const said = rows.slice(0, 4).map(([k, v]) => { const w = HISTORY[k]; return w ? `${v} ${Number(v) === 1 ? w[0] : w[1]}` : `${v} in ${k.replace(/_/g, ' ')}`; });

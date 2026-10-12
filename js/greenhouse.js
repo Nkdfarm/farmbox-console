@@ -24,7 +24,7 @@
 // scouting.js owns the page: it asks this kit for the panel and for the pills of a day's line (a press on one shows
 // that day up here). Everything is read beside the page, so a database without 0224 still shows the report.
 import { rpc, fn, api, cachedRpc, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, field, confirmDrawer, avatar } from './ui.js';
+import { el, toast, busy, drawer, field, confirmDrawer, avatar, g1Face } from './ui.js';
 
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
 // the zones' own words for a trend (scouting.js, TREND_AI): down is fewer pests
@@ -41,6 +41,11 @@ const shift = (day, n) => { const d = at(day); d.setDate(d.getDate() + n); retur
 const longDay = day => at(day).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDay = day => at(day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const LONG = 700;   // a note longer than this is shown by its first lines
+// the report's colours (0.7.239, owner: "use some color code in the ai report according with the severity and urgency"):
+// a point by how bad it is, an action by how soon, a thing still open by how long it has waited
+const LEVEL = { act: ['bad', 'Needs action now'], watch: ['warn', 'Building, or not sure yet: look closer'], good: ['ok', 'Improving, or under control'] };
+const WHEN = { today: ['bad', 'today'], this_week: ['warn', 'this week'], later: ['', 'later'] };
+const daysBetween = (a, b) => Math.round((at(b) - at(a)) / 86400000);
 
 export function greenhouseKit({ farm, today, scouted, relist }) {
   let days = new Map();            // day → { notes, by[], opinion: { status, trend, trend_note, headline } } (greenhouse_days)
@@ -363,7 +368,7 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       } catch (err) { busy(ask, false, label()); toast('AI report: ' + clean(err), 'bad'); }
     };
     const line = el('div', 'pd-ghp-line');
-    line.append(el('b', 'pd-ghp-ailabel', '✦ AI report'));
+    line.append(g1Face('', 'Written by the AI'), el('b', 'pd-ghp-ailabel', 'AI report'));
     if (lite) {
       const [c, w] = STATUS[lite.status] || ['', lite.status];
       line.append(el('span', 'pill pd-ghp-status ' + c, w));
@@ -387,17 +392,33 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
     const col = (title, list) => { const c = el('div', 'pd-ghp-col'); c.append(el('div', 'pd-hlabel', title), list); cols.append(c); };
     if ((op.points || []).length) {
       const ul = el('ul', 'pd-ai-points');
-      op.points.forEach(p => { const li = el('li'); li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li); });
+      op.points.forEach(p => {
+        const lv = LEVEL[p.level], li = el('li', lv ? 'lv lv-' + lv[0] : null);
+        if (lv) li.title = lv[1];
+        li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li);
+      });
       col('What matters', ul);
     }
     if ((op.next_actions || []).length) {
       const ol = el('ol', 'pd-ai-next');
-      op.next_actions.forEach(t => ol.append(el('li', null, t)));
+      // an action is a line of text in the reports written before 0.7.239, { text, when } since
+      op.next_actions.forEach(t => {
+        const w = WHEN[t?.when], li = el('li', w ? 'lv lv-' + (w[0] || 'none') : null);
+        if (w) li.append(el('span', 'pd-ghp-when ' + w[0], w[1]));
+        li.append(el('span', null, t?.text || String(t))); ol.append(li);
+      });
       col('Next', ol);
     }
     if ((op.carried || []).length) {
       const ul = el('ul', 'pd-ai-next pd-ghp-open');
-      op.carried.forEach(c => { const li = el('li'); li.append(el('span', null, c.text || String(c))); if (c.since) li.append(el('div', 'hint', 'since ' + shortDay(c.since))); ul.append(li); });
+      // the longer it has waited, the hotter: a week red, three days orange
+      op.carried.forEach(c => {
+        const n = c.since ? daysBetween(c.since, k) : null, cls = n == null ? '' : n >= 7 ? 'bad' : n >= 3 ? 'warn' : 'none';
+        const li = el('li', cls ? 'lv lv-' + cls : null);
+        li.append(el('span', null, c.text || String(c)));
+        if (c.since) li.append(el('div', 'hint', `since ${shortDay(c.since)}${n > 0 ? ' · ' + plural(n, 'day') : ''}`));
+        ul.append(li);
+      });
       col('Still open from before', ul);
     } else if (op.trend) {
       col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));

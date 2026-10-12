@@ -11,7 +11,7 @@
 // Excel and CSV files can be attached; the function reads them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, toast, pref } from './ui.js';
+import { el, toast, pref, g1Face } from './ui.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -92,7 +92,8 @@ function item(v, i) {
     return b;
   }
   if (v.role === 'error') return el('div', 'ai-msg error', v.text);
-  if (v.role === 'assistant') { const b = el('div', 'ai-msg bot'); b.append(md(v.text)); return b; }
+  // the assistant's own words carry its face, as a person's note carries theirs (0.7.239)
+  if (v.role === 'assistant') { const r = el('div', 'ai-row'), b = el('div', 'ai-msg bot'); b.append(md(v.text)); r.append(g1Face('sm', 'The assistant'), b); return r; }
   if (v.role === 'action') return card(v, i);
   return el('div');
 }
@@ -215,7 +216,7 @@ export function initAssistant(context) {
   const x = el('button', 'btn btn-sm btn-ghost', '⟩');
   x.title = 'Fold the assistant away'; x.setAttribute('aria-label', 'Close the assistant');
   x.onclick = () => setOpen(false);
-  head.append(el('b', null, '✦ Assistant'), el('div', 'spacer'), fresh, x);
+  head.append(g1Face('', 'The assistant'), el('b', null, 'Assistant'), el('div', 'spacer'), fresh, x);
   list = el('div', 'ai-list');
   chips = el('div', 'ai-chips');
   SUGGEST.forEach(s => { const c = el('button', 'chip', s); c.onclick = () => send(s); chips.append(c); });
@@ -244,7 +245,7 @@ export function initAssistant(context) {
   document.body.append(panel);
 
   const btn = document.getElementById('aiBtn');
-  if (btn) btn.onclick = () => setOpen(panel.hidden);
+  if (btn) { btn.textContent = ''; btn.append(g1Face('xs', ''), 'Assistant'); btn.onclick = () => setOpen(panel.hidden); }
   if (pref.get(OPEN_KEY) === '1') setOpen(true);
 }
 

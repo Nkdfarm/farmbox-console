@@ -215,6 +215,10 @@ th.right, td.right { text-align: right; }
 .avatar .face { width: 100%; height: 100%; display: block; opacity: .85; }
 .avatar .face svg { width: 100%; height: 100%; display: block; }
 .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
+.avatar.xs { width: 18px; height: 18px; box-shadow: none; }
+/* the G1's face: where the AI speaks (0.7.239) */
+.avatar.g1 { background: #3b4656; display: inline-grid; vertical-align: middle; }
+.avatar.g1 svg { width: 100%; height: 100%; display: block; }
 .avatar.crop { border-radius: 10px; overflow: hidden; }
 .avatar.crop img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar.crop.lg { width: 72px; height: 72px; font-size: 22px; border-radius: 14px; }
@@ -1526,6 +1530,9 @@ body.ai-open .main { margin-right: min(420px, 90vw); }
 .ai-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: var(--text-sm); line-height: 1.45; word-wrap: break-word; }
 .ai-msg.user { align-self: flex-end; background: color-mix(in srgb, var(--accent) 22%, var(--surface)); white-space: pre-wrap; }
 .ai-msg.bot { align-self: flex-start; background: var(--chip); }
+.ai-row { display: flex; align-items: flex-start; gap: 8px; align-self: stretch; }
+.ai-row .ai-msg.bot { max-width: calc(92% - 34px); }
+.topbar-ai { display: inline-flex; align-items: center; gap: 6px; }
 .ai-msg.error { align-self: stretch; background: rgba(229,72,77,.14); color: var(--text); }
 .ai-md p { margin: 0 0 6px; } .ai-md p:last-child { margin-bottom: 0; }
 .ai-md ul, .ai-md ol { margin: 4px 0 6px 18px; padding: 0; }
@@ -2327,3 +2334,14 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-gh-press { cursor: pointer; }
 .pd-gh-press:hover { filter: brightness(1.15); }
 @media (max-width: 900px) { .pd-ghp-strip { margin-left: 0; width: 100%; overflow-x: auto; } }
+/* the report's colours (0.7.239): a point by how bad, an action by how soon, a thing still open by how long */
+.pd-ghp-cols li.lv { list-style: none; position: relative; }
+.pd-ghp-cols li.lv::before { content: ''; position: absolute; left: -1.05rem; top: .42em; width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); }
+.pd-ghp-cols li.lv-bad::before { background: var(--error); box-shadow: 0 0 0 2px var(--error-bg); }
+.pd-ghp-cols li.lv-warn::before { background: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
+.pd-ghp-cols li.lv-ok::before { background: var(--success); box-shadow: 0 0 0 2px var(--success-bg); }
+.pd-ghp-when { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: var(--radius-full); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  line-height: 1.7; vertical-align: 1px; background: var(--surface-offset); color: var(--text-muted); }
+.pd-ghp-when.bad { background: var(--error-bg); color: var(--error); }
+.pd-ghp-when.warn { background: var(--warning-bg); color: var(--warning); }
+.pd-ghp-ailabel { font-size: var(--text-base); color: var(--text); }

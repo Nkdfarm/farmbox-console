@@ -365,6 +365,30 @@ export function faceIcon() {
   return s;
 }
 
+// The G1's face: where the AI speaks in the console — the whole-greenhouse report, the assistant (0.7.239, owner
+// 12 Oct 2026: "add in the ai report on top left the avatar face of a G1, the same for the AI assistant"). Drawn from
+// the photograph of the robot he sent ("try to capture from this pic"): the black head, the face plate ringed with
+// cyan light, the light bar across it, the three sensors above and the camera under it, on the silver shoulders.
+// A drawing and not a cut of the photograph: it stays sharp at 18 px, and the picture is the maker's, not ours to
+// publish. Flat colours and no ids, so it can stand many times on a page. size: 'xs', 'sm', '' or 'lg'.
+const G1_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+  '<rect width="64" height="64" fill="#3b4656"/>' +
+  '<path d="M4 66C6 54 18 50.5 32 50.5S58 54 60 66z" fill="#d5dbe2"/>' +                       // the shoulders
+  '<path d="M24 46h16v9H24z" fill="#0b0e13"/>' +                                                // the neck
+  '<path d="M32 5.5c12.5 0 20.5 8.5 20.5 21 0 13-7.5 26-20.5 28.500C19 53.5 11.500 40.500 11.500 26.500 11.500 14 19.500 5.500 32 5.500z" fill="#0b0e13"/>' +
+  '<path d="M19 15.500Q32 9.500 45 15.500C54 26 44 48 32 49.500 20 48 10 26 19 15.500z" fill="none" stroke="#3fe0ff" stroke-opacity=".28" stroke-width="5" stroke-linejoin="round"/>' +
+  '<path d="M19 15.500Q32 9.500 45 15.500C54 26 44 48 32 49.500 20 48 10 26 19 15.500z" fill="#05070a" stroke="#4fe6ff" stroke-width="2" stroke-linejoin="round"/>' +
+  '<circle cx="26" cy="19" r="1.1" fill="#1f7f99"/><circle cx="32" cy="18.300" r="1.1" fill="#1f7f99"/><circle cx="38" cy="19" r="1.1" fill="#1f7f99"/>' +
+  '<path d="M22.500 25.500h19" fill="none" stroke="#9ff3ff" stroke-width="2.600" stroke-linecap="round"/>' +
+  '<circle cx="32" cy="32.500" r="3.200" fill="#1a232f" stroke="#536478" stroke-width=".8"/><circle cx="32" cy="32.500" r="1.300" fill="#05070a"/>' +
+  '<circle cx="33" cy="31.500" r=".5" fill="#cfe9ff"/></svg>';
+export function g1Face(size = 'sm', title = 'The AI') {
+  const b = el('span', ['avatar', 'g1', size].filter(Boolean).join(' '));
+  b.innerHTML = G1_SVG;
+  b.title = title;
+  return b;
+}
+
 // One list of everyone's own pictures, keyed by worker id. Every avatar on
 // every page reads it, and setPhotos() — called at sign-in and whenever People
 // loads or saves — repaints the avatars already on screen, so a picture

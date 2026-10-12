@@ -440,17 +440,17 @@ function paintPeople() {
   if (!list.length) peopleCol.append(el('div', 'empty', 'Nobody is rostered in this period.'));
   list.forEach(p => {
     const card = el('button', 'tk-person' + (manual.on && manual.worker === p.id ? ' chosen' : '') + (manual.on ? ' pickable' : ''));
-    // a compact line (0.7.245, owner 12 Oct 2026: "a more compact user column with just the name w/o the job type"): a small
-    // face, the name alone, the hours beside it and the bar under both. How they are employed is in the hint, with the hours.
-    card.append(avatar({ worker_id: p.id, name: p.name }, 'sm'));
+    // the card as it was before 0.7.245 — the face, the name, the hours under it, the bar — with the name alone: how
+    // somebody is employed ("· on demand", "· part time") made the column wide and is in the hint now (0.7.248, owner:
+    // "use the previous team design in the left column, just remove the job category to have a less wide column";
+    // 0.7.245 had squeezed the card to one line, which he did not keep)
+    card.append(avatar({ worker_id: p.id, name: p.name }, 'md'));
     const txt = el('div', 'tk-person-txt');
-    const line = el('div', 'tk-person-line');
-    line.append(el('div', 'tk-person-name', p.name));
+    txt.append(el('div', 'tk-person-name', p.name));
     const over = p.max > 0 && p.assigned > p.max;
     const h = el('div', 'tk-person-hours' + (over ? ' over' : '') + (!p.max ? ' off' : ''));
-    h.textContent = p.max ? `${hrs(p.assigned)}/${hrs(p.max)}` : (p.assigned ? `${hrs(p.assigned)}` : '—');
-    line.append(h);
-    txt.append(line);
+    h.textContent = p.max ? `${hrs(p.assigned)} / ${hrs(p.max)} h` : (p.assigned ? `${hrs(p.assigned)} h · not rostered` : 'not rostered');
+    txt.append(h);
     const bar = el('div', 'tk-person-bar');
     const fill = el('div', 'tk-person-fill' + (over ? ' over' : ''));
     fill.style.width = (p.max ? Math.min(100, Math.round((p.assigned / p.max) * 100)) : 0) + '%';

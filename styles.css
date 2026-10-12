@@ -2263,7 +2263,9 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 /* a photo or a count added by an extra scouting (0204) */
 .pill.pd-extra { background: transparent; border: 1px dashed currentColor; color: var(--text-muted, #9a9aa3); }
 /* The whole greenhouse on a scouting day (0.7.236, greenhouse.js): the notes on the left, the AI's report on the right */
-.pd-gh-note { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); font-size: var(--text-sm); display: grid; gap: 4px; }
+.pd-gh-note { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); font-size: var(--text-sm);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.pd-gh-said { display: grid; gap: 4px; min-width: 0; }
 .pd-gh-who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .pd-gh-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
 .pd-gh-tools { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: var(--text-xs); }
@@ -2319,7 +2321,7 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-ghp-open { list-style: square; }
 .pd-ghp-notes { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); min-width: 0; }
 .pd-ghp-notes .pd-hlabel { margin: 0; }
-.pd-ghp-notegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-2); align-items: start; }
+.pd-ghp-notegrid { display: grid; gap: var(--space-2); }
 .pd-ghp-notegrid .pd-gh-add { align-self: stretch; }
 .pd-gh-text.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
 .pd-gh-press { cursor: pointer; }

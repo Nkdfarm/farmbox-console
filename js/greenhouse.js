@@ -8,10 +8,13 @@
 //   · the day it shows — the last fourteen days as coloured squares, ‹ › between the days that hold something, and a
 //     month calendar for older ones. It opens on today when today has a report or a note, on the last report otherwise
 //   · the AI's report first (greenhouse_opinion, edge function greenhouse-opinion): its word (OK, Watch, Act now), where
-//     the greenhouse is going and why, the points, what to do next, and what earlier reports asked for that is still
-//     open. Written from that day and the days before it, never from what came after
-//   · under it, what people said or wrote about the greenhouse that day (scout_note: the phone's "All" card in a
-//     planned or an extra scouting, or typed here) — when somebody did
+//     the greenhouse is going and why, then three columns — What matters · Next · Still open from before — and What
+//     was missing, which opens on a press only. Written from that day and the days before it, never from what came
+//     after, and short: the prompt asks for a few words a line (0.7.238)
+//   · under it, Team reports: what people said or wrote about the greenhouse that day (scout_note: the phone's "All"
+//     card in a planned or an extra scouting, or typed here), a line each across the panel, its author's picture first
+//     (0.7.238, owner 12 Oct 2026: stacked blocks were tried for the whole panel; "finally a hybrid solution: the AI
+//     report as before (just more concise and direct) and user report as proposed")
 //
 // Not a task and not a zone: nothing here counts in "5/5 scouted". A voice note is written down by the server with the
 // farm's own words; its author, the agronomist or a manager corrects it here, and the recording stays to listen again.
@@ -21,7 +24,7 @@
 // scouting.js owns the page: it asks this kit for the panel and for the pills of a day's line (a press on one shows
 // that day up here). Everything is read beside the page, so a database without 0224 still shows the report.
 import { rpc, fn, api, cachedRpc, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, field, confirmDrawer } from './ui.js';
+import { el, toast, busy, drawer, field, confirmDrawer, avatar } from './ui.js';
 
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
 // the zones' own words for a trend (scouting.js, TREND_AI): down is fewer pests
@@ -37,7 +40,7 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const shift = (day, n) => { const d = at(day); d.setDate(d.getDate() + n); return iso(d); };
 const longDay = day => at(day).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 const shortDay = day => at(day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-const LONG = 320;   // a note longer than this is shown by its first lines
+const LONG = 700;   // a note longer than this is shown by its first lines
 
 export function greenhouseKit({ farm, today, scouted, relist }) {
   let days = new Map();            // day → { notes, by[], opinion: { status, trend, trend_note, headline } } (greenhouse_days)
@@ -165,7 +168,11 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
   }
 
   function noteRow(day, n) {
-    const row = el('div', 'pd-gh-note');
+    // the author's picture first, the same one as on the Tasks board and on Team (a drawn face in their colour without one)
+    const line = el('div', 'pd-gh-note');
+    line.append(avatar({ worker_id: n.worker_id || null, name: n.author || 'somebody' }, 'sm'));
+    const row = el('div', 'pd-gh-said');
+    line.append(row);
     const who = el('div', 'pd-gh-who');
     who.append(el('b', null, n.mine ? 'You' : first(n.author)), el('span', 'hint', hhmm(n.at)));
     if (n.extra) who.append(el('span', 'pill pd-extra', 'extra'));
@@ -223,7 +230,7 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       tools.append(fix, rm);
     }
     if (tools.childNodes.length) row.append(tools);
-    return row;
+    return line;
   }
 
   function addBox(day) {
@@ -396,7 +403,7 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));
     }
     if (cols.childNodes.length) box.append(cols);
-
+    // what was missing: closed until it is pressed, and closed again whenever the panel is drawn
     if ((op.missing || []).length) {
       const m = el('details', 'pd-ai-missing');
       const ul = el('ul');
@@ -415,16 +422,16 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
     return box;
   }
 
-  // ── what people said, under it ──
+  // ── Team reports, under it: a line each across the panel ──
   function said(k, d) {
     const x = days.get(k) || null;
     const box = el('div', 'pd-ghp-notes');
     if (!d) {
-      box.append(el('div', 'pd-hlabel', x?.notes ? `What people said · ${plural(x.notes, 'note')}` : 'What people said'), el('div', 'hint', 'Reading…'));
+      box.append(el('div', 'pd-hlabel', x?.notes ? `Team reports · ${x.notes}` : 'Team reports'), el('div', 'hint', 'Reading…'));
       return box;
     }
     const notes = d.notes || [];
-    box.append(el('div', 'pd-hlabel', notes.length ? `What people said · ${plural(notes.length, 'note')}` : `What people said · nobody wrote on ${k === now() ? 'this day yet' : shortDay(k)}`));
+    box.append(el('div', 'pd-hlabel', notes.length ? `Team reports · ${notes.length}` : `Team reports · nobody wrote on ${k === now() ? 'this day yet' : shortDay(k)}`));
     const grid = el('div', 'pd-ghp-notegrid');
     notes.forEach(nt => grid.append(noteRow(k, nt)));
     if (d.may_write) grid.append(addBox(k));

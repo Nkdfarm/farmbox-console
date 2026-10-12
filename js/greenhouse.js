@@ -8,11 +8,15 @@
 //   · the day it shows — the last fourteen days as coloured squares, ‹ › between the days that hold something, and a
 //     month calendar for older ones. It opens on today when today has a report or a note, on the last report otherwise
 //   · the AI's report first (greenhouse_opinion, edge function greenhouse-opinion): its word (OK, Watch, Act now), where
-//     the greenhouse is going and why, then three columns — What matters · Next · Still open from before — and What
-//     was missing, which opens on a press only. Written from that day and the days before it, never from what came
-//     after, and short: the prompt asks for a few words a line (0.7.238)
+//     the greenhouse is going and why, then three columns — What matters · Next · Still open from before — a fourth
+//     with the photo that shows the worst of it, and What was missing, which opens on a press only. Every line has a
+//     dot in its colour and the worst comes first; a place (Zone 2, Sump 1) is in bold; what a point rests on is a
+//     button a record — a photo, a trap, a case, a note, a sump — that opens it beside the page (0.7.240). Written
+//     from that day and the days before it, never from what came after, and short (0.7.238)
 //   · under it, Team reports: what people said or wrote about the greenhouse that day (scout_note: the phone's "All"
 //     card in a planned or an extra scouting, or typed here), a line each across the panel, its author's picture first
+//     — or, for several notes or a long one, one text the AI wrote from them, with a button a note that opens the note
+//     itself to read, correct or remove (0.7.240; the notes are the record, the text a reading aid)
 //     (0.7.238, owner 12 Oct 2026: stacked blocks were tried for the whole panel; "finally a hybrid solution: the AI
 //     report as before (just more concise and direct) and user report as proposed")
 //
@@ -46,8 +50,20 @@ const LONG = 700;   // a note longer than this is shown by its first lines
 const LEVEL = { act: ['bad', 'Needs action now'], watch: ['warn', 'Building, or not sure yet: look closer'], good: ['ok', 'Improving, or under control'] };
 const WHEN = { today: ['bad', 'today'], this_week: ['warn', 'this week'], later: ['', 'later'] };
 const daysBetween = (a, b) => Math.round((at(b) - at(a)) / 86400000);
+// a line of the report or of the notes, with its places in bold (0.7.240, owner: "the zones and the titles have to be in
+// bold font"): what a line starts with before its colon — "Zone 2 NGS bay:", "Sump 2:" — and every "Zone 3", "Zones 2 to
+// 4.2", "Sump 1" inside it
+const PLACE = /(Zones?\s\d+(?:\.\d+)?(?:(?:,\s|\sand\s|\sto\s)\d+(?:\.\d+)?)*|Sumps?\s\d+(?:(?:,\s|\sand\s)\d+)*)/g;
+function rich(text, lead = true) {
+  const s = el('span');
+  let t = String(text || '');
+  const m = lead ? /^([^:.!?]{2,48}):\s/.exec(t) : null;
+  if (m) { s.append(el('b', null, m[1] + ':'), ' '); t = t.slice(m[0].length); }
+  t.split(PLACE).forEach((part, i) => { if (part) s.append(i % 2 ? el('b', null, part) : part); });
+  return s;
+}
 
-export function greenhouseKit({ farm, today, scouted, relist }) {
+export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   let days = new Map();            // day → { notes, by[], opinion: { status, trend, trend_note, headline } } (greenhouse_days)
   let known = false;               // the database has 0224
   const data = new Map();          // day → greenhouse_day
@@ -172,7 +188,7 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
     d.footer.append(cancel, ok);
   }
 
-  function noteRow(day, n) {
+  function noteRow(day, n, done) {
     // the author's picture first, the same one as on the Tasks board and on Team (a drawn face in their colour without one)
     const line = el('div', 'pd-gh-note');
     line.append(avatar({ worker_id: n.worker_id || null, name: n.author || 'somebody' }, 'sm'));
@@ -225,11 +241,11 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       tools.append(again);
     }
     if (n.may_change) {
-      const fix = el('button', 'linkish', 'Correct'); fix.onclick = () => correct(day, n);
+      const fix = el('button', 'linkish', 'Correct'); fix.onclick = () => { done?.(); correct(day, n); };
       const rm = el('button', 'linkish', 'Remove');
       rm.onclick = async () => {
         if (!await confirmDrawer('Remove this note?', `${first(n.author)}, ${dayMon(n.at)} ${hhmm(n.at)} — it leaves the report. It is not erased: the database keeps it.`, 'Remove', true)) return;
-        try { await rpc('remove_scout_note', { p_id: n.id }); toast('Removed', 'ok'); await after(day); }
+        try { await rpc('remove_scout_note', { p_id: n.id }); toast('Removed', 'ok'); done?.(); await after(day); }
         catch (e) { toast(clean(e), 'bad'); }
       };
       tools.append(fix, rm);
@@ -374,7 +390,8 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       line.append(el('span', 'pill pd-ghp-status ' + c, w));
       const t = TREND[lite.trend];
       if (t) { const p = el('span', 'pill pd-ghp-trend ' + t[0], t[1]); p.title = 'Against the days before'; line.append(p); }
-      line.append(el('span', 'pd-ghp-why', lite.trend_note || (t ? '' : 'Written before the report gave a trend — ask again for it.')));
+      const why = el('span', 'pd-ghp-why'); why.append(lite.trend_note ? rich(lite.trend_note, false) : (t ? '' : 'Written before the report gave a trend — ask again for it.'));
+      line.append(why);
     } else line.append(el('span', 'pd-ghp-why'));
     if (d ? d.ai_ready !== false : !!lite) line.append(ask);
     box.append(line);
@@ -390,32 +407,38 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
 
     const cols = el('div', 'pd-ghp-cols');
     const col = (title, list) => { const c = el('div', 'pd-ghp-col'); c.append(el('div', 'pd-hlabel', title), list); cols.append(c); };
+    // every line a dot in its colour and the worst first: no numbers, the order says it (0.7.240)
+    const by = (key, order) => (x, y) => { const r = o => { const i = order.indexOf(o?.[key]); return i < 0 ? order.length : i; }; return r(x) - r(y); };
     if ((op.points || []).length) {
       const ul = el('ul', 'pd-ai-points');
-      op.points.forEach(p => {
-        const lv = LEVEL[p.level], li = el('li', lv ? 'lv lv-' + lv[0] : null);
+      [...op.points].sort(by('level', ['act', 'watch', 'good'])).forEach(p => {
+        const lv = LEVEL[p.level], li = el('li', 'lv lv-' + (lv ? lv[0] : 'none'));
         if (lv) li.title = lv[1];
-        li.append(el('span', null, p.text || String(p))); if (p.basis) li.append(el('div', 'hint', p.basis)); ul.append(li);
+        li.append(rich(p.text || String(p)));
+        // what it rests on: a button a record, which opens it beside the page; the words alone in a report written before 0226
+        if ((p.refs || []).length) { const r = el('div', 'pd-ghp-refs'); p.refs.forEach(x => r.append(refChip(x, k))); li.append(r); }
+        else if (p.basis) li.append(el('div', 'hint', p.basis));
+        ul.append(li);
       });
       col('What matters', ul);
     }
     if ((op.next_actions || []).length) {
-      const ol = el('ol', 'pd-ai-next');
+      const ul = el('ul', 'pd-ai-next');
       // an action is a line of text in the reports written before 0.7.239, { text, when } since
-      op.next_actions.forEach(t => {
-        const w = WHEN[t?.when], li = el('li', w ? 'lv lv-' + (w[0] || 'none') : null);
+      [...op.next_actions].sort(by('when', ['today', 'this_week', 'later'])).forEach(t => {
+        const w = WHEN[t?.when], li = el('li', 'lv lv-' + ((w && w[0]) || 'none'));
         if (w) li.append(el('span', 'pd-ghp-when ' + w[0], w[1]));
-        li.append(el('span', null, t?.text || String(t))); ol.append(li);
+        li.append(rich(t?.text || String(t))); ul.append(li);
       });
-      col('Next', ol);
+      col('Next', ul);
     }
     if ((op.carried || []).length) {
       const ul = el('ul', 'pd-ai-next pd-ghp-open');
-      // the longer it has waited, the hotter: a week red, three days orange
-      op.carried.forEach(c => {
-        const n = c.since ? daysBetween(c.since, k) : null, cls = n == null ? '' : n >= 7 ? 'bad' : n >= 3 ? 'warn' : 'none';
-        const li = el('li', cls ? 'lv lv-' + cls : null);
-        li.append(el('span', null, c.text || String(c)));
+      // the longer it has waited, the hotter and the higher: a week red, three days orange
+      [...op.carried].sort((x, y) => String(x?.since || '9').localeCompare(String(y?.since || '9'))).forEach(c => {
+        const n = c.since ? daysBetween(c.since, k) : null, cls = n == null ? 'none' : n >= 7 ? 'bad' : n >= 3 ? 'warn' : 'none';
+        const li = el('li', 'lv lv-' + cls);
+        li.append(rich(c.text || String(c)));
         if (c.since) li.append(el('div', 'hint', `since ${shortDay(c.since)}${n > 0 ? ' · ' + plural(n, 'day') : ''}`));
         ul.append(li);
       });
@@ -423,15 +446,21 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
     } else if (op.trend) {
       col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));
     }
+    // the fourth column: the photo that shows the worst of the report, always one while the unit has a photo
+    if (op.picture?.id) cols.append(pictureCol(op.picture, k));
     if (cols.childNodes.length) box.append(cols);
     // what was missing: closed until it is pressed, and closed again whenever the panel is drawn
     if ((op.missing || []).length) {
       const m = el('details', 'pd-ai-missing');
       const ul = el('ul');
-      op.missing.forEach(t => ul.append(el('li', null, t)));
-      m.append(el('summary', null, `What was missing (${op.missing.length})`), ul);
+      op.missing.forEach(t => { const li = el('li', 'lv lv-none'); li.append(rich(t)); ul.append(li); });
+      m.append(el('summary', 'pd-hlabel', `What was missing (${op.missing.length})`), ul);
       box.append(m);
     }
+    const lg = el('div', 'hint pd-ghp-legend');
+    [['bad', 'act now · today · open a week or more'], ['warn', 'watch · this week · open three days'], ['ok', 'improving'], ['none', 'later, or not rated']]
+      .forEach(([c, w]) => { const x = el('span'); x.append(el('i', 'lv-dot lv-' + c), w); lg.append(x); });
+    box.append(lg);
     const st = op.stats || {};
     const read = [st.days ? plural(st.days, 'day') + ' of records' : null, st.reports_before ? plural(st.reports_before, 'earlier report') : null,
                   st.notes ? plural(st.notes, 'note') : null, st.trap_readings ? plural(st.trap_readings, 'trap reading') : null,
@@ -443,7 +472,50 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
     return box;
   }
 
-  // ── Team reports, under it: a line each across the panel ──
+  // ── what a report rests on, opened beside the page ──
+  const OPEN = { photo: 'Open the photo', trap: 'Open the trap and its readings', case: 'Open the case', note: 'Open the note', sump: 'Open the sump and its readings' };
+  async function open(ref, k) {
+    if (ref.kind === 'note') return openNote(ref.day || k, ref.id);
+    if (!openRef) return;
+    try { await openRef({ ...ref, day: ref.day || k }); } catch (e) { toast(clean(e), 'bad'); }
+  }
+  function refChip(x, k) {
+    const b = el('button', 'pd-ghp-ref k-' + x.kind, x.label || x.kind);
+    b.type = 'button'; b.title = OPEN[x.kind] || 'Open';
+    b.onclick = e => { e.stopPropagation(); open(x, k); };
+    return b;
+  }
+  function pictureCol(pic, k) {
+    const c = el('figure', 'pd-ghp-pic');
+    const b = el('button', 'pd-ghp-picbtn'); b.type = 'button'; b.title = 'Open the photo';
+    const img = el('img'); img.alt = pic.caption || 'The photo of the report'; img.decoding = 'async';
+    if (pic.photo_data) img.src = pic.photo_data;
+    else if (pic.photo_path) audioUrl(pic.photo_path).then(u => { if (u) img.src = u; }).catch(() => {});
+    b.append(img);
+    b.onclick = () => open({ kind: 'photo', id: pic.id, day: pic.day, photo_data: pic.photo_data || null }, k);
+    const cap = el('figcaption'); cap.append(rich(pic.caption || ''));
+    if (!pic.chosen) cap.append(el('div', 'hint', 'the worst photo of the day as its AI read it — this report named none'));
+    c.append(el('div', 'pd-hlabel', 'In the picture'), b, cap);
+    return c;
+  }
+  // one note in a drawer: to read whole, listen, correct or remove
+  async function openNote(day, id) {
+    const kd = String(day);
+    if (!data.has(kd)) { try { await readDay(kd, { fresh: true }); } catch { /* said below */ } }
+    const n = (data.get(kd)?.notes || []).find(x => x.id === id);
+    if (!n) { toast('That note is no longer in the report', 'bad'); return; }
+    const dr = drawer(`${n.mine ? 'Your' : first(n.author) + "'s"} note`, `${longDay(kd)} · ${hhmm(n.at)} · about the whole greenhouse`);
+    wide.add(n.id);
+    dr.body.append(noteRow(kd, n, dr.close));
+    const x = el('button', 'btn', 'Close'); x.onclick = dr.close;
+    dr.footer.append(x);
+  }
+
+  // ── Team reports, under it ──
+  // Several notes, or a long one, are read as one text the AI wrote from them (scout_note_digest, 0226), with a button
+  // a note above it that opens the note itself. The text is shown only while it was written from the notes as they
+  // read now; until then, and when it could not be written without losing something, the notes stand as they are.
+  const waits = new Map();         // day → how often the page looked again for a text being written
   function said(k, d) {
     const x = days.get(k) || null;
     const box = el('div', 'pd-ghp-notes');
@@ -451,8 +523,46 @@ export function greenhouseKit({ farm, today, scouted, relist }) {
       box.append(el('div', 'pd-hlabel', x?.notes ? `Team reports · ${x.notes}` : 'Team reports'), el('div', 'hint', 'Reading…'));
       return box;
     }
-    const notes = d.notes || [];
+    const notes = d.notes || [], dg = d.digest || null;
+    if (dg?.fresh && dg.text && notes.length) {
+      waits.delete(k);
+      const head = el('div', 'pd-ghp-sumhead');
+      head.append(el('span', 'pd-hlabel', `Team reports · AI summary of ${plural(notes.length, 'note')}`));
+      notes.forEach(n => {
+        const b = el('button', 'pd-ghp-notechip'); b.type = 'button';
+        b.append(avatar({ worker_id: n.worker_id || null, name: n.author || 'somebody' }, 'xs'), `${n.mine ? 'You' : first(n.author)} ${hhmm(n.at)}`);
+        b.title = 'Open this note: read it as it was said or written, listen, correct or remove it';
+        b.onclick = () => openNote(k, n.id);
+        head.append(b);
+      });
+      const body = el('div', 'pd-ghp-sum');
+      dg.text.split(/\n+/).map(t => t.trim()).filter(Boolean).forEach(t => { const par = el('p'); par.append(rich(t, false)); body.append(par); });
+      box.append(head, body, el('div', 'hint', `Written by the AI from the ${notes.length > 1 ? plural(notes.length, 'note') : 'note'} above${dg.written_at ? ', ' + dayMon(dg.written_at) + ' ' + hhmm(dg.written_at) : ''}: nothing is added. The notes are kept as they were said or written — open one to read, correct or remove it.`));
+      if (d.may_write) box.append(addBox(k));
+      return box;
+    }
     box.append(el('div', 'pd-hlabel', notes.length ? `Team reports · ${notes.length}` : `Team reports · nobody wrote on ${k === now() ? 'this day yet' : shortDay(k)}`));
+    if (d.digest_wanted && notes.length) {
+      const st = dg?.status, line = el('div', 'hint');
+      if (st === 'queued' || st === 'claimed') {
+        line.textContent = 'The AI is writing these as one text…';
+        const n = waits.get(k) || 0;                      // it takes a few seconds: look again, six times at most
+        if (n < 6) { waits.set(k, n + 1); setTimeout(() => { if (current() === k) readDay(k, { fresh: true }).catch(() => {}); }, 5000); }
+      } else if (st === 'no_key') line.textContent = 'Not written as one text: no Groq key in Settings › Integrations.';
+      else {
+        line.append(st === 'failed' ? `Not written as one text${dg?.error ? ' — ' + dg.error : ''}. ` : 'Not written as one text yet. ');
+        if (d.may_write) {
+          const again = el('button', 'linkish', 'Write it');
+          again.onclick = async () => {
+            again.disabled = true;
+            try { await rpc('retry_note_digest', { p_farm: farm.id, p_day: k }); waits.delete(k); await readDay(k, { fresh: true }); draw(); }
+            catch (e) { again.disabled = false; toast(clean(e), 'bad'); }
+          };
+          line.append(again);
+        }
+      }
+      box.append(line);
+    }
     const grid = el('div', 'pd-ghp-notegrid');
     notes.forEach(nt => grid.append(noteRow(k, nt)));
     if (d.may_write) grid.append(addBox(k));

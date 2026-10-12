@@ -55,7 +55,7 @@ import { openViewer, tagChips, photoTitle, partLabel } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection } from './robot.js';
-import { sumpBlock } from './sump.js';
+import { sumpBlock, openSump } from './sump.js';
 import { treatBlock } from './treatments.js';
 import { unfiledButton } from './unfiled.js';
 import { greenhouseKit } from './greenhouse.js';
@@ -226,7 +226,7 @@ async function load(fresh = false) {
       if (!gh || ghFarm !== farm.id) {
         ghFarm = farm.id;
         gh = greenhouseKit({ farm, today: () => over?.today, scouted: () => (dates || []).map(d => d.day),
-                             relist: () => { if (mount && mount.isConnected) paint(); } });
+                             relist: () => { if (mount && mount.isConnected) paint(); }, openRef: openGhRef });
       }
       paint();
       readExtras(here);
@@ -238,6 +238,29 @@ async function load(fresh = false) {
   });
 }
 const reload = () => load(true);   // after a change: the server's answer, not the old copy
+
+// what the whole-greenhouse report rests on, opened beside the page (0.7.240): the windows the page already has
+async function openGhRef(ref) {
+  if (ref.kind === 'case') return openCase(ref.id, reload, farm);
+  if (ref.kind === 'sump') return openSump(farm, { sump: ref.id, day: ref.day || null });
+  if (ref.kind === 'trap') {
+    const sp = ref.trap ? kit?.spotOf(ref.trap) : null;
+    if (sp) return kit.openSpots(`Trap ${ref.trap}`, [sp]);
+    toast(`Trap ${ref.trap || ''} is no longer on the map`, 'bad');
+    return;
+  }
+  if (ref.kind === 'photo') {
+    // the photo as its day holds it, so the viewer has its zone, its crops and its cases
+    const dstr = String(ref.day || over?.today || '');
+    let day = dayData.get(dstr);
+    if (!day) { day = await calm('scouting_day_light', { p_farm: farm.id, p_day: dstr }); dayData.set(dstr, day); }
+    for (const z of (day.units || day.zones || [])) {
+      const p = (z.photos || []).find(q => q.id === ref.id);
+      if (p) return openViewer(viewerCtx({ ...p, zone: z.name, photo_data: p.photo_data || ref.photo_data || thumbMaps.get(dstr)?.[p.id] || '' }, z, day));
+    }
+    toast('That photo is no longer in the report of that day', 'bad');
+  }
+}
 
 // the extra scoutings (0206), read beside the page so a database without the function still shows the report: this
 // device's copy at once, then the database's; each date line gets its pill when the answer lands

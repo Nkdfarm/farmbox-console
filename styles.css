@@ -2262,3 +2262,23 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 
 /* a photo or a count added by an extra scouting (0204) */
 .pill.pd-extra { background: transparent; border: 1px dashed currentColor; color: var(--text-muted, #9a9aa3); }
+/* The whole greenhouse on a scouting day (0.7.236, greenhouse.js): the notes on the left, the AI's report on the right */
+.pd-zone-band.pd-gh { border-style: dashed; background: var(--surface); }
+.pd-gh-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+@container (max-width: 760px) { .pd-gh-body { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .pd-gh-body { grid-template-columns: minmax(0, 1fr); } }
+.pd-gh-notes { display: grid; gap: var(--space-2); min-width: 0; }
+.pd-gh-note { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); font-size: var(--text-sm); display: grid; gap: 4px; }
+.pd-gh-who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pd-gh-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.pd-gh-tools { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: var(--text-xs); }
+.pd-gh-audio { height: 32px; max-width: 100%; }
+.pd-gh-add { display: flex; gap: 6px; align-items: flex-end; }
+.pd-gh-box { flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: var(--text-sm); padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--field-bg); color: var(--text); }
+.pd-gh-ai { margin: 0; padding: var(--space-3); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md); background: var(--surface-2); }
+.pd-gh-headline { font-size: var(--text-base); line-height: 1.4; }
+.pd-gh-line { max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--text-muted); }
+.pd-gh-stale { padding: 6px 10px; font-size: var(--text-xs); }
+.pd-gh-heard { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
+.pd-gh-heard summary { cursor: pointer; }
+.pd-gh-pill { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }

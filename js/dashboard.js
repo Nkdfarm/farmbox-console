@@ -424,7 +424,7 @@ function dashboardWeek() {
 // include the last days of the month before.
 function totals(res, w) {
   const a = ymd(w.first), b = ymd(w.last);
-  let kg = 0, h = 0, t = 0, s = 0;
+  let kg = 0, h = 0, t = 0, s = 0, nd = 0, counted = false;
   (res.days || []).forEach(r => {
     const k = String(r.date).slice(0, 10);
     if (k < a || k > b) return;
@@ -432,9 +432,11 @@ function totals(res, w) {
     h += r.harvests || 0;
     t += r.transplants || 0;
     s += r.sowings || 0;
+    if (r.seedlings != null) { counted = true; nd += Number(r.seedlings) || 0; }
   });
-  // seedlings arriving from a nursery: the days carry no count of them, the events do
-  const n = (res.events || []).filter(x => x.kind === 'seedlings' && String(x.date).slice(0, 10) >= a && String(x.date).slice(0, 10) <= b).length;
+  // seedlings arriving from a nursery: counted on the days since FarmBox 0232 — the Year view is sent no events, so
+  // its summary left the deliveries out. From the events on a database that does not count them yet (Week, Month).
+  const n = counted ? nd : (res.events || []).filter(x => x.kind === 'seedlings' && String(x.date).slice(0, 10) >= a && String(x.date).slice(0, 10) <= b).length;
   if (!h && !t && !s && !n) return 'nothing sown, transplanted or harvested';
   const bits = [];
   if (h) bits.push(`${num(kg)} kg from ${h} harvest${h === 1 ? '' : 's'}`);

@@ -101,12 +101,12 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   async function readDays() {
     const before = JSON.stringify([...days]);
     try { const copy = await cachedRpc('greenhouse_days', a()); if (copy) take(copy); } catch { /* no copy */ }
-    if (JSON.stringify([...days]) !== before) { list(); draw(); }
+    if (JSON.stringify([...days]) !== before) { list(); drawSoon(); }
     try {
       const fresh = await rpc('greenhouse_days', a());
       const was = JSON.stringify([...days]);
       take(fresh);
-      if (JSON.stringify([...days]) !== was) { list(); draw(); }
+      if (JSON.stringify([...days]) !== was) { list(); drawSoon(); }
     } catch { /* a database without the function, or no connection: the page goes on without the panel's figures */ }
   }
   // the page read again (a change made here or on another device): the list, and the day on show. What was read of
@@ -129,7 +129,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     asked.set(k, my);
     tried.set(k, Date.now());
     if (!fresh && !data.has(k)) {
-      try { const copy = await cachedRpc('greenhouse_day', args); if (copy && !data.has(k)) { data.set(k, copy); if (k === current()) draw(); } } catch { /* no copy */ }
+      try { const copy = await cachedRpc('greenhouse_day', args); if (copy && !data.has(k)) { data.set(k, copy); if (k === current()) drawSoon(); } } catch { /* no copy */ }
     }
     try {
       const d = await rpc('greenhouse_day', args);
@@ -138,13 +138,13 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
       landed.set(k, my);
       failed.delete(k);
       data.set(k, d);
-      if (JSON.stringify(d) !== was && k === current()) draw();
+      if (JSON.stringify(d) !== was && k === current()) drawSoon();
     } catch (e) {
       // said on the panel, with "Try again" (review 13 Oct 2026: a read that failed left "Reading…" for ever). Only a
       // day with nothing to show is drawn again, and the failure counts as its last try, so it is not asked in a loop.
       if ((landed.get(k) || 0) < my) {
         failed.set(k, clean(e)); tried.set(k, Date.now());
-        if (!data.has(k) && k === current()) draw();
+        if (!data.has(k) && k === current()) drawSoon();
       }
       if (fresh) throw e;
     }
@@ -667,12 +667,34 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
 
   function draw() {
     if (gone) return;
+    owed = false; clearTimeout(owedTimer);
     const k = current(), d = data.get(k) || null;
     node.textContent = '';
     node.append(headRow(k), report(k, d), said(k, d));
     if (!d && Date.now() - (tried.get(k) || 0) > 30000) readDay(k).catch(() => {});
     refocus();
   }
+  // An answer that arrives by itself — the day or the list read again, a colleague's note, the AI's text — waits for
+  // a voice note that is playing: drawing takes the player away mid-sentence (0.7.250 kept it only when the page
+  // itself painted; these reads drew straight over it). What the person does here (another day, the calendar, a
+  // save) is drawn at once, as before.
+  // The answer that waited is drawn when the note ends or fails, twenty seconds after it is paused if it was not
+  // started again, and after six minutes whatever happens (a note is five at most): a recording that stalls
+  // without ending must not keep the panel on old data. The listeners are on the panel itself, in the capture
+  // phase (these events do not bubble), so a note started after the answer was held is heard as well.
+  let owed = false, owedTimer = null;
+  const settle = () => { if (owed && !gone && !playing()) draw(); };
+  function drawSoon() {
+    if (gone) return;
+    if (!(node.childNodes.length && playing())) { draw(); return; }
+    if (owed) return;
+    owed = true;
+    clearTimeout(owedTimer);
+    owedTimer = setTimeout(() => { if (owed && !gone) draw(); }, 360000);
+  }
+  node.addEventListener('ended', settle, true);
+  node.addEventListener('error', settle, true);
+  node.addEventListener('pause', () => { if (owed) setTimeout(settle, 20000); }, true);
   // a click anywhere else, or Escape, closes the calendar
   const shut = e => { if (calMonth && node.isConnected && !(e.type === 'keydown' && e.key !== 'Escape')) { calMonth = null; draw(); } };
   document.addEventListener('click', shut);
@@ -684,11 +706,12 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     document.removeEventListener('click', shut);
     document.removeEventListener('keydown', shut);
     timers.forEach(t => clearTimeout(t)); timers.clear();
+    clearTimeout(owedTimer);
   }
 
   // the panel, for the page to place: the same node every time, so what is being typed and played stays. While a
   // voice note plays it is not drawn again: that would take the player away mid-sentence (review 13 Oct 2026)
-  const playing = () => [...node.querySelectorAll('audio')].some(p => !p.paused && !p.ended);
+  const playing = () => [...node.querySelectorAll('audio')].some(p => !p.paused && !p.ended && !p.error);   // a recording that failed is not playing
   function panel() { if (node.childNodes.length && playing()) refocus(); else draw(); return node; }
 
   return { readDays, refresh, pills, panel, select, ready: () => known, dispose };

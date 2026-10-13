@@ -208,6 +208,31 @@ export async function renderScouting(container, currentFarm) {
   await load();
 }
 
+// The days brought by "Show older reports" are read again as well, behind the first 21: kept as they had been read,
+// a day changed since — a photo removed, a case tagged — went on showing its old counts and dot on its line, and a
+// day emptied stayed as a line with nothing behind it. Only the latest answer counts; the page is painted again only
+// when a line differs.
+let olderSeq = 0;
+async function rereadOlder(before, n, here) {
+  const my = ++olderSeq, f = farm.id;
+  try {
+    // in pieces: the function gives 120 days at most in one answer
+    let older = [], cursor = before, end = false;
+    while (older.length < n && !end) {
+      const ask = Math.min(120, n - older.length);
+      const part = await rpc('scouting_dates', { p_farm: f, p_before: cursor, p_limit: ask });
+      if (my !== olderSeq || farm?.id !== f || mount !== here || !here.isConnected || !Array.isArray(part)) return;
+      older = older.concat(part);
+      if (part.length < ask) end = true; else cursor = part[part.length - 1].day;
+    }
+    const head = dates.filter(x => String(x.day) >= String(before));
+    if (JSON.stringify(older) === JSON.stringify(dates.slice(head.length))) return;
+    dates = head.concat(older);
+    if (end) moreDone = true;                  // fewer than were asked for: there is nothing older than these
+    paint();
+  } catch { /* no answer: the lines stay as they were read */ }
+}
+
 async function load(fresh = false) {
   const here = mount, a = { p_farm: farm.id };
   // last time's copy at once, the server's answer behind it (0.7.107)
@@ -240,6 +265,7 @@ async function load(fresh = false) {
                              relist: () => { if (farm?.id === mine && mount && mount.isConnected) paint(); }, openRef: openGhRef });
       }
       paint();
+      if (tail.length) rereadOlder(d[d.length - 1].day, tail.length, here);
       readExtras(here);
       gh.refresh();
     },
@@ -431,8 +457,11 @@ function paint() {
     const more = el('button', 'btn btn-sm', 'Show older reports');
     more.onclick = async () => {
       more.disabled = true;
+      olderSeq++;                              // a re-read of the older days on its way knows nothing of these: dropped
+      const base = dates;
       try {
         const older = await rpc('scouting_dates', { p_farm: farm.id, p_before: dates[dates.length - 1].day, p_limit: 21 });
+        if (dates !== base) return;            // the page was read and painted again meanwhile: its own button asks afresh
         moreDone = older.length < 21;
         dates = dates.concat(older);
         const start = list.children.length;

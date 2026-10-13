@@ -47,12 +47,19 @@ export async function renderBaskets(container, currentFarm) {
   await load();
 }
 
+let clientsSaved = 0;   // counts this page's own saves of the figure
 async function load(fresh = false) {
-  const here = mount;
+  const here = mount, saved0 = clientsSaved;
   await openFast([['basket_plan', basketArgs(farm.id, offset)]], {
     // the figure in the field is kept while it is being typed, and replaced when the server's own changed —
-    // somebody else, or a sister unit, set it meanwhile (review 13 Oct 2026)
-    show: ([d]) => { if (clients == null || fresh || d.clients !== data?.clients) clients = d.clients; data = d; paint(); },
+    // somebody else, or a sister unit, set it meanwhile (review 13 Oct 2026). Not by an answer asked before this
+    // page's own save had landed (the figure typed, then ‹ or › at once): it can still carry the figure from before
+    // the save, and put it back in the field although the server holds the new one.
+    show: ([d]) => {
+      if (saved0 !== clientsSaved) d = { ...d, clients: data?.clients ?? d.clients };
+      else if (clients == null || fresh || d.clients !== data?.clients) clients = d.clients;
+      data = d; paint();
+    },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the harvest days…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
     stillHere: () => here.isConnected && mount === here, fresh,
@@ -88,7 +95,7 @@ function paint() {
                             : 'Set by the farm manager';
   inp.oninput = () => { clients = inp.value === '' ? null : Math.max(0, Math.round(Number(inp.value))); paintChart(); paintTiles(); };
   inp.onchange = async () => {
-    try { await rpc('set_basket_clients', { p_farm: farm.id, p_clients: clients }); toast(`${clients ?? 0} direct clients saved`, 'ok'); data.clients = clients; }
+    try { await rpc('set_basket_clients', { p_farm: farm.id, p_clients: clients }); toast(`${clients ?? 0} direct clients saved`, 'ok'); data.clients = clients; clientsSaved++; }
     catch (e) { toast(e.message, 'bad'); }
   };
   cl.append(el('span', null, 'Direct clients'), inp);

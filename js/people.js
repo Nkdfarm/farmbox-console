@@ -125,7 +125,7 @@ function openPerson(p) {
   acct.append(el('div', 'hint', isNew
     ? 'They sign in to Naked Brain with this e-mail and password. Write it down before you save — it is not shown again.'
     : p.has_login
-      ? 'Type a new password only if you are resetting it.'
+      ? 'Type a new password only if you are resetting it. Changing the e-mail above changes the address they sign in with.'
       : 'Fill in an e-mail and a password to give this person a login.'));
 
   d.body.append(
@@ -189,13 +189,20 @@ function openPerson(p) {
       toast('The password needs at least 10 characters', 'bad'); pw.focus(); return;
     }
 
-    // the address somebody signs in with belongs to their account: this form cannot change it, and used to say "Saved"
-    if (!isNew && p.has_login && (body.email || '') !== (p.email || '')) {
+    // The address somebody signs in with belongs to their account: it is changed there (admin-user "email",
+    // 13 Oct 2026), asked first. The account stays the same one, so the password and the name beside what they did
+    // stay — "remove the login and give a new one" would delete the account that name is read through (0231). This
+    // form used to say "Saved" and leave them signing in with the old address.
+    const newLogin = !isNew && p.has_login && (body.email || '').toLowerCase() !== (p.email || '').toLowerCase();
+    if (newLogin && !body.email) {
       email.value = p.email || '';
-      // not "remove the login and give a new one": for somebody who has worked that deletes the account their name is
-      // read through (0231)
-      toast('The sign-in address cannot be changed here. Only for somebody who has not worked yet: ⋯ › Remove the login, then give a new one. For anybody else, leave it: removing the login takes their name off the work they did', 'bad');
-      return;
+      toast('Somebody with a login needs an e-mail: it is the address they sign in with', 'bad'); email.focus(); return;
+    }
+    if (newLogin) {
+      body.email = body.email.toLowerCase();
+      if (!await confirmDrawer('Change the sign-in e-mail?',
+        `${body.name} will sign in with ${body.email} from now on${p.email ? `, no longer with ${p.email}` : ''}. ` +
+        'The password stays the same, and so does everything recorded under their name.', 'Change the e-mail')) return;
     }
 
     busy(save, true, isNew ? 'Adding…' : 'Saving…');
@@ -208,6 +215,9 @@ function openPerson(p) {
         // a login given to somebody switched off brings them back, as admin-user just did: the profile must not undo it
         await rpc('save_person', { p: { ...body, active: true, worker_id: made.worker_id } });
       } else {
+        // the account first: refused there (an address another account has, a login used outside this FarmBox),
+        // nothing is saved here either
+        if (newLogin) await fn('admin-user', { action: 'email', farm_id: farm.id, worker_id: p.worker_id, email: body.email });
         await rpc('save_person', { p: body });
         if (wantsAccount) {
           await fn('admin-user', { action: 'password', farm_id: farm.id,
@@ -215,7 +225,7 @@ function openPerson(p) {
         }
       }
       d.close();
-      toast(isNew ? `${body.name} added` : 'Saved', 'ok');
+      toast(isNew ? `${body.name} added` : newLogin ? `Saved · ${body.name} signs in with ${body.email} now` : 'Saved', 'ok');
       await afterSave();
     } catch (e) {
       busy(save, false, isNew ? 'Add person' : 'Save');
@@ -368,8 +378,8 @@ function openActions(p) {
          '', async () => {
       d.close();
       if (!await confirmDrawer('Remove the login?',
-        `${p.name} will stay on the roster and keep every run they signed, but the account ` +
-        `${p.email || ''} will be deleted.`, 'Remove the login', true)) return;
+        `${p.name} will stay on the roster and keep every run they signed, but will no longer sign in here with ` +
+        `${p.email || 'their e-mail'}. The account itself is deleted unless another FarmBox still uses it.`, 'Remove the login', true)) return;
       await act({ action: 'unlink', worker_id: p.worker_id }, 'Login removed');
     });
   } else {

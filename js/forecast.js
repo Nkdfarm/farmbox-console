@@ -10,7 +10,7 @@
 // taken as it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal } from './ui.js';
+import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal, farmToday } from './ui.js';
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
@@ -61,13 +61,20 @@ function row(b) {
   who.append(nm);
   const plan = el('div', 'fc-plan');
   const dated = b.harvest_start != null && b.days_to_harvest != null;
+  // The days are counted here, from the harvest date and the farm's day as it is now, not taken as the list read
+  // them: a list read on Monday and still on screen on Thursday (the console left open on this page, or the kept
+  // copy when the read fails) sent Monday's figure, and "As planned" moved the harvest to Thursday + that. The server
+  // counts the same way (forecast_review: harvest start − the farm's today), so on a fresh list the two are equal.
+  // Counted again at each click: the page has no refresh of its own, so the row can be days old when it is pressed.
+  const daysLeft = () => dated ? Math.round((parseYmd(b.harvest_start) - farmDate()) / 86400000) : null;
+  const left = daysLeft();
   plan.append(el('span', null, `plan: ${dated ? (b.planned_phase?.name || '—') : '—'}`),
-              el('span', 'hint', dated ? `harvest ${nice(b.harvest_start)} · ${Number(b.days_to_harvest) < 0 ? -Number(b.days_to_harvest) + ' d ago' : b.days_to_harvest + ' d'} · ${Math.round(Number(b.expected_kg || 0))} kg` : 'no dates yet — set them on the Crop planner, or give the days to harvest here'));
+              el('span', 'hint', dated ? `harvest ${nice(b.harvest_start)} · ${left < 0 ? -left + ' d ago' : left + ' d'} · ${Math.round(Number(b.expected_kg || 0))} kg` : 'no dates yet — set them on the Crop planner, or give the days to harvest here'));
   const may = data.may_review;
   const phase = document.createElement('select'); phase.className = 'input';
   PHASES.forEach(([v, l]) => { const o = el('option', null, l); o.value = v; phase.append(o); });
   phase.value = b.current_phase || b.planned_phase?.phase_type || 'vegetative';
-  const days = el('input', 'input'); days.type = 'number'; days.min = '0'; days.max = '365'; days.value = dated && Number(b.days_to_harvest) >= 0 ? Number(b.days_to_harvest) : '';
+  const days = el('input', 'input'); days.type = 'number'; days.min = '0'; days.max = '365'; days.value = dated && left >= 0 ? left : '';
   const kg = el('input', 'input'); kg.type = 'number'; kg.min = '0'; kg.step = '0.5'; kg.value = Math.round(Number(b.expected_kg || 0) * 10) / 10;
   const kgShown = kg.value;          // compared with what was shown, not the unrounded figure (each Save rewrote it)
   // Days sent to the database MOVE the harvest to today + days and make a validated batch "growing" (the phase
@@ -78,7 +85,8 @@ function row(b) {
   // has to mean "harvest today" (it was read as "left as shown" and moved nothing).
   const daysShown = days.value;
   if (dated && daysShown === '') { days.placeholder = '—'; days.title = 'The date has passed. Leave it empty to keep it; a number moves the harvest to today + that many days (0 = today)'; }
-  const noMove = dated && (Number(b.days_to_harvest) < 0 || b.status === 'validated');
+  // nothing to say about the days: the date has passed, or the batch is still only validated (asked at the click)
+  const still = () => dated && (daysLeft() < 0 || b.status === 'validated');
   [phase, days, kg].forEach(x => { x.disabled = !may; });
   const f = el('div', 'fc-fields');
   const lab = (t, x) => { const w = el('label', 'fc-f'); w.append(el('span', 'hint', t), x); return w; };
@@ -86,11 +94,27 @@ function row(b) {
   const last = el('div', 'hint fc-last', b.last ? `looked at ${ago(b.last.at)}${b.last.by ? ' by ' + b.last.by : ''}${b.last.source === 'camera' ? ' (camera)' : ''}` : 'never looked at');
   const acts = el('div', 'fc-acts');
   if (may) {
+    // a list read on another day is read again before anything is said about it: its figures are that day's, and a
+    // figure left as shown could not be told from one confirmed (the page has no refresh of its own)
+    const stale = () => {
+      if (!data.today || String(data.today).slice(0, 10) === farmToday()) return false;
+      toast('This list was read on another day: it is read again. Look, then press again.', 'bad');
+      load(true);
+      return true;
+    };
     const same = el('button', 'btn btn-sm', 'As planned');
     same.title = 'Confirm: it is where the plan says';
-    same.onclick = () => save(same, b, b.planned_phase?.phase_type || phase.value, noMove ? null : Number(b.days_to_harvest), null);
+    same.onclick = () => { if (stale()) return; save(same, b, b.planned_phase?.phase_type || phase.value, still() ? null : daysLeft(), null); };
     const go = el('button', 'btn btn-sm btn-primary', 'Save');
-    go.onclick = () => { if (days.value === '' && !(noMove && daysShown === '')) { toast('How many days to harvest?', 'bad'); return; } save(go, b, phase.value, noMove && days.value === daysShown ? null : Number(days.value), kg.value !== '' && kg.value !== kgShown ? Number(kg.value) : null); };
+    go.onclick = () => {
+      if (stale()) return;
+      // the days left as they were shown say "as planned": what is sent is today's count, not the figure painted
+      // (on a row some days old the painted figure moved the harvest by those days), and nothing when there is
+      // nothing to say. Days typed are sent as typed.
+      const untouched = days.value === daysShown;
+      if (days.value === '' && !(untouched && dated)) { toast('How many days to harvest?', 'bad'); return; }
+      save(go, b, phase.value, untouched ? (still() ? null : daysLeft()) : Number(days.value), kg.value !== '' && kg.value !== kgShown ? Number(kg.value) : null);
+    };
     if (dated) acts.append(same);
     acts.append(go);
     if (b.camera) {

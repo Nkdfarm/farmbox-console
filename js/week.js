@@ -534,7 +534,12 @@ async function saveOrder(ids) {
   paintPeople();
   try {
     const r = await rpc('set_board_order', { p_farm: farm.id, p_workers: ids });
-    if (r?.board_order) for (const w of weeks.values()) if (w) w.board_order = r.board_order;
+    // …nor one that started while this was being saved: it read the order as it was. One that has painted already
+    // (the minute's refresh, or a phone's change, in that fraction of a second) is painted over with the order kept.
+    loadGen++;
+    const kept = r?.board_order || [...ids, ...rest];
+    for (const w of weeks.values()) { if (w) w.board_order = kept; }
+    paintPeople();
   } catch (e) { toast(e.message, 'bad'); await load(); }
 }
 

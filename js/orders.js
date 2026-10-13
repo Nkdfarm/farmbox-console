@@ -10,7 +10,7 @@
 // the Crop planner, where the machine's own proposals make way for them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
-import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign } from './ui.js';
+import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays } from './ui.js';
 
 let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -167,7 +167,7 @@ function lineRow(o, l) {
 // a delivery against a line: the day, the kg, the price a kg (the price book times the customer's factor)
 function deliver(o, l) {
   const d = drawer(`Delivered · ${l.crop}`, `${o.customer} — ${(l.delivered || []).length + 1} of ${l.deliveries || 1}`);
-  const on = input({ type: 'date', value: String(l.next_delivery || l.delivery_date || ymd(new Date())).slice(0, 10) });
+  const on = input({ type: 'date', value: String(l.next_delivery || l.delivery_date || ymd(farmDate())).slice(0, 10) });
   const q = input({ type: 'number', min: 0, step: 'any', value: l.qty_kg });
   const price = input({ type: 'number', min: 0, step: '0.01', value: l.price_hint ?? '' });
   const note = input({ placeholder: 'optional' });
@@ -215,8 +215,7 @@ async function editOrder(o) {
   const crop = selectBox(crops.map(c => [c.id, c.name]));
   const zone = selectBox([]);
   const qty = input({ type: 'number', min: 1, step: 'any', placeholder: 'kg' });
-  const t = new Date(); t.setDate(t.getDate() + 60);
-  const when = input({ type: 'date', value: ymd(t) });
+  const when = input({ type: 'date', value: ymd(addDays(farmDate(), 60)) });   // from the farm's day, not this computer's
   const repeat = selectBox([['', 'Once'], ['1', 'Every week'], ['2', 'Every 2 weeks'], ['4', 'Every 4 weeks']], '');
   const times = input({ type: 'number', min: 1, max: 52, value: 4 });
   const timesF = field('How many deliveries', times);

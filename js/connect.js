@@ -571,12 +571,17 @@ function editLimit(mount, farm, m) {
     dr.body.append(field(label, i));
   });
   const std = el('button', 'btn btn-ghost', 'Back to the standard');
-  std.onclick = async () => { try { await rpc('save_metric_limit', { p_farm: farm.id, p_metric: m.code, p_zone: null, p: {} }); dr.close(); renderDevices(mount, farm); } catch (e) { toast(e.message, 'bad'); } };
+  std.onclick = async () => {
+    busy(std, true, 'Saving…');
+    try { await rpc('save_metric_limit', { p_farm: farm.id, p_metric: m.code, p_zone: null, p: {} }); dr.close(); renderDevices(mount, farm); }
+    catch (e) { busy(std, false, 'Back to the standard'); toast(e.message, 'bad'); }
+  };
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
     const p = {}; Object.entries(inputs).forEach(([k, i]) => { p[k] = i.value === '' ? null : Number(i.value); });
+    busy(go, true, 'Saving…');
     try { await rpc('save_metric_limit', { p_farm: farm.id, p_metric: m.code, p_zone: null, p }); dr.close(); renderDevices(mount, farm); }
-    catch (e) { toast(e.message, 'bad'); }
+    catch (e) { busy(go, false, 'Save'); toast(e.message, 'bad'); }
   };
   dr.footer.append(std, el('div', 'spacer'), go);
 }

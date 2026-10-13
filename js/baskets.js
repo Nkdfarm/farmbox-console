@@ -11,7 +11,7 @@
 // that way). Sister units are read together unless one is switched off.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer } from './ui.js';
+import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate } from './ui.js';
 
 const DAY = 86400000;
 const SPAN_KEY = 'fbc_basket_span', PROP_KEY = 'fbc_basket_proposed', UNITS_KEY = 'fbc_basket_units';
@@ -32,8 +32,7 @@ const basketText = n => { n = Number(n || 0); return n < 1 ? `${Math.round(n * 1
 
 // the window on screen (warm() reads the same)
 export function basketRange(off = 0) {
-  const t = new Date();
-  const from = addDays(new Date(t.getFullYear(), t.getMonth(), t.getDate()), -BACK + off);
+  const from = addDays(farmDate(), -BACK + off);   // the farm's day, not this computer's
   return { p_from: ymd(from), p_to: ymd(addDays(from, span() - 1)) };
 }
 function unitsPicked() {

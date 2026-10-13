@@ -356,7 +356,9 @@ async function loadFarms() {
     o.value = f.id;
     pick.append(o);
   });
-  const wanted = pref.get(FARM_KEY);
+  // this tab's own FarmBox first, when it has one: the list is read again after some saves (Farm setup, a new
+  // unit), and the kept choice may by then be another tab's — the page used to follow it (13 Oct 2026)
+  const wanted = farm?.id || pref.get(FARM_KEY);
   farm = choices.find(f => f.id === wanted) || sites.find(s => s.units.some(u => u.id === wanted)) || choices[0] || null;
   if (farm) pick.value = farm.id;
   pick.disabled = choices.length < 2;

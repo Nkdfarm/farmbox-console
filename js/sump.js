@@ -14,7 +14,7 @@
 // paper tracker's. Nothing here sets a limit: they are the unit's own, in Connections.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, drawer, toast, busy, input, field, farmInstant, farmToday } from './ui.js';
+import { el, num, drawer, confirmDrawer, toast, busy, input, field, farmInstant, farmToday } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const METRICS = [
@@ -197,7 +197,11 @@ export function openSump(farm, { sump, day = null, onChange = null } = {}) {
         const last = el('td');
         if (h.may_write && r.source !== 'checklist') {
           const x = el('button', 'btn btn-ghost btn-sm', '✕'); x.title = 'Take this reading out';
-          x.onclick = async () => { try { await rpc('save_sump_reading', { p: { sump_id: h.sump.id, id: r.id, remove: true } }); read(); onChange?.(); } catch (e) { toast(e.message, 'bad'); } };
+          x.onclick = async () => {
+            // it asks first (13 Oct 2026): a typed reading went on one click of a small ✕ beside its row
+            if (!await confirmDrawer('Take this reading out?', 'It leaves the curve and the report of its day. A reading typed by mistake is what this is for.', 'Take it out', true)) return;
+            try { await rpc('save_sump_reading', { p: { sump_id: h.sump.id, id: r.id, remove: true } }); read(); onChange?.(); } catch (e) { toast(e.message, 'bad'); }
+          };
           last.append(x);
         }
         tr.append(last);

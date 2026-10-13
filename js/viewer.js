@@ -452,6 +452,7 @@ export function openViewer(ctx) {
           try {
             await rpc('add_case_point', { p_case: c.id, p_kind: photo.kind, p_ref: photo.id, p_severity: Number(sev.value), p_count: null, p_note: null });
             busy(add, false); add.textContent = 'Added ✓';   // busy() puts the first label back: the tick is written after it
+            add.disabled = true;                              // once a photo: a second press put a second point on the curve
             toast('Added to the case — it is on its curve', 'ok'); ctx.onChange?.(photo);
           } catch (e) { busy(add, false, 'Add to this case'); toast(e.message, 'bad'); }
         };

@@ -279,7 +279,7 @@ const reload = () => load(true);   // after a change: the server's answer, not t
 // what the whole-greenhouse report rests on, opened beside the page (0.7.240): the windows the page already has
 async function openGhRef(ref) {
   if (ref.kind === 'case') return openCase(ref.id, reload, farm);
-  if (ref.kind === 'sump') return openSump(farm, { sump: ref.id, day: ref.day || null });
+  if (ref.kind === 'sump') return openSump(farm, { sump: ref.id, day: ref.day || null, onChange: reload });
   if (ref.kind === 'trap') {
     const sp = ref.trap ? kit?.spotOf(ref.trap) : null;
     if (sp) return kit.openSpots(`Trap ${ref.trap}`, [sp]);

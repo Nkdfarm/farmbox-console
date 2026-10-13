@@ -206,6 +206,7 @@ function openPerson(p) {
     }
 
     busy(save, true, isNew ? 'Adding…' : 'Saving…');
+    const done = [];   // what was already changed on the login when a later step fails: said, so nobody thinks nothing happened
     try {
       if (wantsAccount && (isNew || !p.has_login)) {
         // account + access + person, in the edge function that holds the key
@@ -216,20 +217,25 @@ function openPerson(p) {
         await rpc('save_person', { p: { ...body, active: true, worker_id: made.worker_id } });
       } else {
         // the account first: refused there (an address another account has, a login used outside this FarmBox),
-        // nothing is saved here either
-        if (newLogin) await fn('admin-user', { action: 'email', farm_id: farm.id, worker_id: p.worker_id, email: body.email });
-        await rpc('save_person', { p: body });
+        // nothing is saved here either. The password too goes before the profile (it came after: a password refused —
+        // a login used outside this FarmBox — was said in red over a profile already saved, in a window left open)
+        if (newLogin) {
+          await fn('admin-user', { action: 'email', farm_id: farm.id, worker_id: p.worker_id, email: body.email });
+          done.push('the sign-in e-mail');
+        }
         if (wantsAccount) {
           await fn('admin-user', { action: 'password', farm_id: farm.id,
                                    worker_id: p.worker_id, password: pw.value.trim() });
+          done.push('the password');
         }
+        await rpc('save_person', { p: body });
       }
       d.close();
       toast(isNew ? `${body.name} added` : newLogin ? `Saved · ${body.name} signs in with ${body.email} now` : 'Saved', 'ok');
       await afterSave();
     } catch (e) {
       busy(save, false, isNew ? 'Add person' : 'Save');
-      toast(e.message, 'bad');
+      toast(done.length ? `${e.message} — ${done.join(' and ')} ${done.length > 1 ? 'were' : 'was'} changed, the rest was not saved: press Save again` : e.message, 'bad');
     }
   };
   d.footer.append(cancel, save);

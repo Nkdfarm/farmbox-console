@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
-         num, shortDate, selectBox, confirmDrawer, isFranchisor } from './ui.js';
+         num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign } from './ui.js';
 
 let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
 let stockOnly = false;
@@ -24,6 +24,8 @@ const waNumber = ph => {
   else if (n.length === 10 && n.startsWith('0')) n = '27' + n.slice(1);
   return n;
 };                            // Office › Stock shows the stock alone, no Buy chips
+
+const R = () => curSign({ currency: data?.currency || farm?.currency });   // "R", as on Orders and Customers
 
 export async function renderPurchasing(container, currentFarm) {
   farm = currentFarm; mount = container; chosen = new Set(); stockOnly = false;
@@ -55,7 +57,10 @@ function paint() {
   const drafts = data.requests.filter(r => r.status === 'draft');
   const toOrder = drafts.filter(r => !r.po_id);
   const ordered = data.requests.filter(r => r.status === 'ordered');
-  const late = drafts.filter(r => r.late).length;
+  // late and still to order. A late request already on a purchase order is counted apart: the head used to say
+  // "0 to order, 2 already late" (review 13 Oct 2026)
+  const late = toOrder.filter(r => r.late).length;
+  const latePo = drafts.filter(r => r.po_id && r.late).length;
   const below = data.stock.filter(s => s.below).length;
 
   const compute = el('button', 'btn btn-primary', 'Work out what to buy');
@@ -79,6 +84,11 @@ function paint() {
     mount.append(el('div', 'note warn',
       `${late} request${late === 1 ? ' has' : 's have'} an order-by date in the past. ` +
       'Those batches are at risk — order today, or move the transplant.'));
+  }
+  if (latePo) {
+    mount.append(el('div', 'note warn',
+      `${latePo} late request${latePo === 1 ? ' is' : 's are'} already on a purchase order that is not sent yet: ` +
+      'approve and send it under "Purchase orders".'));
   }
 
   const openPos = (data.orders || []).filter(o => ['draft', 'approved', 'sent'].includes(o.status));
@@ -133,7 +143,8 @@ function requestsCard(rows, may) {
     { key: 'item', label: 'Item', fmt: (v, r) => {
         const b = el('div');
         b.append(el('b', null, v));
-        b.append(el('div', 'hint', r.category + (r.why === 'reorder' ? ' · below its reorder point' : r.why === 'plan' ? ' · for the crop plan' : '')));
+        b.append(el('div', 'hint', catLabel(r.category) + (r.why === 'reorder' ? ' · below its reorder point' : r.why === 'plan' ? ' · for the crop plan'
+          : r.why === 'treatment' ? ' · for a treatment' : '')));
         return b; } },
     { key: 'qty', label: 'Quantity', align: 'right',
       fmt: (v, r) => `${num(v, 2)} ${r.unit || ''}` },
@@ -144,7 +155,7 @@ function requestsCard(rows, may) {
         return s; } },
     { key: 'need_by', label: 'Needed', fmt: shortDate },
     { key: 'cost', label: 'Cost', align: 'right',
-      fmt: v => v ? `${data.currency} ${num(v, 2)}` : '—' },
+      fmt: v => v ? `${R()} ${num(v, 2)}` : '—' },
   ], rows, { empty: 'Nothing to buy — press "Work out what to buy" after validating a plan.' }));
   return c;
 }
@@ -175,16 +186,16 @@ function stockCard(may) {
     c._head.append(add);
   }
   const total = data.stock.reduce((a, s) => a + Number(s.value || 0), 0);
-  if (total) c._head.insertBefore(el('span', 'hint', `worth ${data.currency} ${num(total, 0)} at cost`), c._head.lastChild);
+  if (total) c._head.insertBefore(el('span', 'hint', `worth ${R()} ${num(total, 0)} at cost`), c._head.lastChild);
   c.append(table([
     { key: 'item', label: 'Item' },
-    { key: 'category', label: 'Category' },
+    { key: 'category', label: 'Category', fmt: catLabel },
     { key: 'on_hand', label: 'On hand', align: 'right',
       fmt: (v, r) => `${num(v, 2)} ${r.unit || ''}` },
     { key: 'used_30d', label: 'Used · 30 d', align: 'right', fmt: v => Number(v) ? num(v, 2) : '—' },
     { key: 'reorder_point', label: 'Reorder at', align: 'right',
       fmt: (v, r) => v == null ? '—' : `${num(v, 2)}${r.own_rule ? ' ·' : ''}` },
-    { key: 'value', label: 'Value', align: 'right', fmt: v => Number(v) ? `${data.currency} ${num(v, 0)}` : '—' },
+    { key: 'value', label: 'Value', align: 'right', fmt: v => Number(v) ? `${R()} ${num(v, 0)}` : '—' },
     { key: 'below', label: '', fmt: v => v ? el('span', 'pill bad', 'low') : '' },
     { key: 'item_id', label: '', align: 'right', fmt: (v, r) => {
         if (!may) return '';
@@ -222,7 +233,7 @@ function suppliersCard() {
         (v || []).map(d => ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d]).join(', ') },
     { key: 'email', label: 'E-mail' },
     { key: 'phone', label: 'Phone' },
-  ], data.suppliers, { empty: 'No suppliers yet — add them on Farm setup.' }));
+  ], data.suppliers, { empty: 'No suppliers yet.' }));
   return c;
 }
 
@@ -334,7 +345,7 @@ function ordersCard(rows, may) {
     const head = el('div', 'row');
     const st = ST[po.status] || [po.status, ''];
     head.append(el('b', null, po.number), el('span', 'pill ' + st[1], st[0]), el('span', null, po.supplier || 'no supplier'),
-                el('div', 'spacer'), el('b', null, `${data.currency} ${num(po.total, 2)}`));
+                el('div', 'spacer'), el('b', null, `${R()} ${num(po.total, 2)}`));
     c.append(head);
     const sub = [po.expected_delivery ? `expected ${shortDate(po.expected_delivery)}` : null, po.reference ? `ref ${po.reference}` : null,
                  po.approved_by ? `approved by ${po.approved_by}` : null, po.sent_at ? `sent ${shortDate(String(po.sent_at).slice(0, 10))}` : null].filter(Boolean);
@@ -360,9 +371,9 @@ function ordersCard(rows, may) {
         acts.append(se);
       }
       if (po.status !== 'sent') {
-        const cx = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel');
+        const cx = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel order');
         cx.onclick = async () => {
-          if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel it')) return;
+          if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel it', true)) return;
           try { await rpc('cancel_purchase_order', { p_po: po.id }); await load(); } catch (e) { toast(e.message, 'bad'); }
         };
         acts.append(cx);
@@ -527,8 +538,11 @@ function seedMessage(o) {
   d.footer.append(el('div', 'spacer'), close);
 }
 
+// crop protection: the products of Scouting › Products are stock items too (0197); the lists printed their category
+// as the code "crop_protection" (review 13 Oct 2026)
 const ITEM_CATS = [['seed', 'Seed'], ['medium', 'Growing medium'], ['nutrient', 'Nutrient'], ['pot_cap', 'Pots and caps'], ['packaging', 'Packaging'],
-                   ['consumable', 'Consumable'], ['equipment', 'Equipment'], ['seedling', 'Seedlings']];
+                   ['consumable', 'Consumable'], ['equipment', 'Equipment'], ['seedling', 'Seedlings'], ['crop_protection', 'Crop protection']];
+function catLabel(c) { return (ITEM_CATS.find(x => x[0] === c) || [c, String(c || '').replace(/_/g, ' ')])[1]; }   // never the raw code
 function editItem(r) {
   const own = !r || r.scope === 'farm';
   const d = drawer(r ? r.item : 'New item', own ? 'An item of this FarmBox' : 'A standard item: this FarmBox sets its own reorder point and quantity');
@@ -542,10 +556,10 @@ function editItem(r) {
   if (own) {
     const g = el('div', 'grid2'); g.append(field('Name', name), field('Code', code));
     const g2 = el('div', 'grid2'); g2.append(field('Category', cat), field('Unit', unit));
-    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'orders are rounded up to it'), field(`Unit cost (${data.currency})`, cost));
+    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'orders are rounded up to it'), field(`Unit cost (${R()})`, cost));
     d.body.append(g, g2, g3);
   } else if (std) {
-    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'for every farm — orders are rounded up to it'), field(`Unit cost (${data.currency})`, cost, 'for every farm'));
+    const g3 = el('div', 'grid2'); g3.append(field('Pack size', pack, 'for every farm — orders are rounded up to it'), field(`Unit cost (${R()})`, cost, 'for every farm'));
     d.body.append(g3);
   }
   const g4 = el('div', 'grid2'); g4.append(field('Reorder at', rp, 'below it, "Work out what to buy" tops it up'), field('Reorder quantity', rq));

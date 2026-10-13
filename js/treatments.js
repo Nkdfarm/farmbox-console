@@ -281,13 +281,13 @@ export async function openApply(farm, z, opts = {}) {
       out.textContent = ''; out.append(el('div', 'hint', state.mode === 'program' ? 'Choose a program to see its days, quantities and what the store holds.' : 'Choose a product.'));
       // the tables can be chosen before the program: any product gives the scope
       if (!tablesBox.childElementCount && lib.products[0]) {
-        try { const pv = await rpc('ipm_preview', { p: { ...args(), template_id: null, steps: [{ product_id: lib.products[0].id }] } }); if (mine === seq) paintTables(pv.scope); } catch (e) { /* shown with the program */ }
+        try { const pv = await rpc('ipm_preview', { p: { ...args(), template_id: null, steps: [{ product_id: lib.products[0].id }] } }, { quiet: true }); if (mine === seq) paintTables(pv.scope); } catch (e) { /* shown with the program */ }
       }
       return;
     }
     out.classList.add('stale');
     try {
-      const pv = await rpc('ipm_preview', { p: args() });
+      const pv = await rpc('ipm_preview', { p: args() }, { quiet: true });
       if (mine !== seq) return;
       state.pv = pv;
       paintTables(pv.scope);
@@ -365,9 +365,8 @@ function filterBar(parts, repaint) {
 
 function paintPrograms() {
   const lib = pLib; pMount.textContent = '';
-  pMount.append(pageHead(null, `The IPM program library: ${lib.templates.length} programs over ${lib.products.length} products of the suppliers' catalogues. `
-    + 'A program is a sequence of products against one pest or disease; it is started from a zone\'s daily report (Scouting › a zone › Treatments › Apply…), on the tables you choose. '
-    + 'Every rate and withholding period comes from the product\'s label or its supplier — "to verify" means nobody has yet checked it against the label.'));
+  pMount.append(pageHead(null, `${lib.templates.length} programs over ${lib.products.length} products. `
+    + 'A program is a sequence of products against one pest or disease; start one from a zone\'s report (Apply…).'));
   const targets = [...new Map(lib.templates.map(t => [t.target, t.target_label])).entries()];
   const tSel = selectBox([['', 'Every pest and disease'], ...targets], pf.target);
   const mSel = selectBox([['', 'Any method'], ['biological', 'Biological'], ['chemical', 'Chemical'], ['integrated', 'Integrated']], pf.method);
@@ -382,7 +381,7 @@ function paintPrograms() {
     list.textContent = '';
     list.append(el('div', 'hint tr-count', `${rows.length} program${rows.length === 1 ? '' : 's'}`));
     list.append(table([
-      { key: 'name', label: 'Program', fmt: (v, r) => { const b = el('b', null, v); const w = el('span'); w.append(b); if (r.unverified) { const u = el('span', 'pill warn', 'to verify'); u.style.marginLeft = '6px'; w.append(u); } return w; } },
+      { key: 'name', label: 'Program', fmt: (v, r) => { const b = el('b', null, v); const w = el('span'); w.append(b); if (r.unverified) { const u = el('span', 'pill warn', 'to verify'); u.title = 'Not yet checked against the label by a person'; u.style.marginLeft = '6px'; w.append(u); } return w; } },
       { key: 'target_label', label: 'Against' },
       { key: 'method', label: 'Method', fmt: v => METHOD[v] || v },
       { key: 'approach', label: 'Approach' },
@@ -437,8 +436,8 @@ export async function renderIpmProducts(container, farm) {
 function paintProducts() {
   const lib = cLib; cMount.textContent = '';
   const checked = lib.products.filter(p => p.verified_at).length;
-  cMount.append(pageHead(null, `${lib.products.length} crop-protection products of ${new Set(lib.products.map(p => p.supplier)).size} suppliers, as their labels and product pages say — `
-    + `${checked} checked against the label by a person so far. A product is also a stock item: Office › Stock holds what is in the store, and a program asks for what is missing.`));
+  cMount.append(pageHead(null, `${lib.products.length} crop-protection products of ${new Set(lib.products.map(p => p.supplier)).size} suppliers, from their labels; `
+    + `${checked} checked by a person. Each is also a stock item on Office › Stock.`));
   const label = code => lib.catalog.find(k => k.code === code)?.label || code;
   const sSel = selectBox([['', 'Every supplier'], ...[...new Set(lib.products.map(p => p.supplier))].sort().map(s => [s, s])], cf.supplier);
   const kSel = selectBox([['', 'Any kind'], ...Object.entries(KIND)], cf.kind);

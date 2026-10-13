@@ -21,7 +21,9 @@ const KIND_WORD = { direct: 'direct client', super_user: 'super user', restauran
 const STATUS = { open: ['open', ''], planned: ['planned', 'ok'], short: ['short', 'bad'], delivered: ['delivered', 'ok'], cancelled: ['cancelled', ''] };
 
 export async function renderOrders(container, currentFarm) {
-  if (farm?.id !== currentFarm.id) planMap = null;
+  // read again each time the page opens: a crop or a zone added since was missing from the order window until a reload
+  // (review 13 Oct 2026). The window takes the kept copy of the map when it is still good, the server's if not.
+  planMap = null;
   farm = currentFarm; mount = container;
   await load();
 }
@@ -44,9 +46,7 @@ function paint() {
   const closed = el('button', 'btn btn-ghost btn-sm', showClosed ? 'Hide delivered and cancelled' : 'Show delivered and cancelled');
   closed.onclick = () => { showClosed = !showClosed; load(); };
   mount.append(pageHead(null,
-    'What has been promised to customers. Each order is planned backwards from its delivery day: the harvest, the transplant, ' +
-    'the sowing, and the positions it needs — which it takes before the planner fills the rest. Check first: the answer is yes, ' +
-    'tight, or no with the reason and what would work instead.', closed, add));
+    'Orders promised to customers, each planned backwards from its delivery day. Check before promising.', closed, add));
 
   const orders = data.orders || [];
   if (!orders.length) {
@@ -120,7 +120,7 @@ function lineRow(o, l) {
     };
     acts.append(plan);
     if (l.proposed) {
-      const ok = el('button', 'btn btn-sm btn-primary', `Validate ${l.proposed}`);
+      const ok = el('button', 'btn btn-sm btn-primary', `Validate ${l.proposed} batch${Number(l.proposed) === 1 ? '' : 'es'}`);
       ok.title = 'Validate the proposed batches of this line: their tasks are created';
       ok.onclick = async () => {
         busy(ok, true, 'Validating…');
@@ -201,7 +201,8 @@ async function editOrder(o) {
     try { planMap = (await cachedRpc('crop_map', { p_farm: farm.id })) || await rpc('crop_map', { p_farm: farm.id }); } catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
     d.body.textContent = '';
   }
-  const crops = (planMap.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const map = planMap;   // the window's own: the page nulls planMap at every draw, and this window outlives a draw
+  const crops = (map.crops || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   let book = [];
   if (!o) { try { book = ((await cachedRpc('customers', { p_farm: farm.id, p_inactive: false })) || await rpc('customers', { p_farm: farm.id, p_inactive: false })).customers || []; } catch { book = []; } }
   // no customer chosen for the person (0.7.162): the first of the book used to be taken unless somebody noticed
@@ -224,7 +225,7 @@ async function editOrder(o) {
     const c = crops.find(x => x.id === crop.value);
     zone.textContent = '';
     const any = el('option', null, 'Any zone it grows in'); any.value = ''; zone.append(any);
-    (planMap.systems || []).filter(s => c && fits(c, s)).forEach(s => { const op = el('option', null, `${s.name} · ${systemLabel(s.type)}`); op.value = s.code; zone.append(op); });
+    (map.systems || []).filter(s => c && fits(c, s)).forEach(s => { const op = el('option', null, `${s.name} · ${systemLabel(s.type)}`); op.value = s.code; zone.append(op); });
     answer.textContent = '';
   };
   const showTimes = () => { timesF.style.display = repeat.value ? '' : 'none'; answer.textContent = ''; };
@@ -245,7 +246,7 @@ async function editOrder(o) {
     if (!Number(qty.value)) { toast('How many kg?', 'bad'); return; }
     busy(check, true, 'Checking…');
     try {
-      const r = await rpc('order_check', { p_farm: farm.id, p_crop: crop.value, p_qty: Number(qty.value), p_delivery: when.value, p_system: zone.value || null });
+      const r = await rpc('order_check', { p_farm: farm.id, p_crop: crop.value, p_qty: Number(qty.value), p_delivery: when.value, p_system: zone.value || null }, { quiet: true });
       paintAnswer(answer, r, { qty, when });
     } catch (e) { toast(e.message, 'bad'); }
     busy(check, false, 'Check');
@@ -266,9 +267,14 @@ async function editOrder(o) {
                                                    customer_id: o ? (o.customer_id || null) : (who.value || null),
                                                    notes: o ? o.notes : notes.value.trim() || null, lines } });
       const newLine = (saved.lines || []).filter(l => !(o?.lines || []).some(x => x.id === l.id)).pop();
-      const p = newLine ? await rpc('plan_order_line', { p_line: newLine.id }) : null;
+      // the order is saved from here on: whatever the planning does, the window closes and the list is read again —
+      // it used to stay open on a planning error, and the second press saved the order a second time
+      let p = null, planErr = null;
+      try { p = newLine ? await rpc('plan_order_line', { p_line: newLine.id }) : null; } catch (e) { planErr = e; }
       d.close();
-      toast(p ? (p.ok ? `Saved and planned · ${p.batches} batch${p.batches === 1 ? '' : 'es'} proposed on the Crop planner` : `Saved · only partly planned — see why on the line`) : 'Saved', p && !p.ok ? 'bad' : 'ok');
+      toast(planErr ? `Saved · not planned (${planErr.message}) — press Plan on the line`
+        : p ? (p.ok ? `Saved and planned · ${p.batches} batch${p.batches === 1 ? '' : 'es'} proposed on the Crop planner` : `Saved · only partly planned — see why on the line`) : 'Saved',
+        planErr || (p && !p.ok) ? 'bad' : 'ok');
       await reload();
     } catch (e) { busy(save, false, 'Save and plan'); toast(e.message, 'bad'); }
   };

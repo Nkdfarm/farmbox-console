@@ -45,8 +45,7 @@ function paint() {
     b.onclick = () => { pref.set('fbc_valid_show', v); paint(); };
     seg.append(b);
   });
-  mount.append(pageHead(null, 'Corrections to the crop database and the procedures, proposed from the field with evidence and decided by the Farm manager or the agronomist. ' +
-    'A figure on the farm\'s own crops is applied at once; on a standard crop it goes to the franchisor.', seg, add));
+  mount.append(pageHead(null, 'Corrections proposed from the field; the Farm manager or the agronomist decides.', seg, add));
   const items = (data.items || []).filter(i => show === 'all' || (show === 'proposed' ? i.status === 'proposed' : i.status !== 'proposed'));
   if (!items.length) { mount.append(el('div', 'empty', show === 'proposed' ? 'Nothing waiting for a decision.' : 'No correction yet.')); return; }
   const list = el('div', 'va-list');
@@ -71,7 +70,7 @@ function card(i) {
   if (i.evidence_path) {
     const ph = el('button', 'btn btn-sm btn-ghost', 'See the photo');
     ph.onclick = async () => {
-      try { const r = await api('/storage/v1/object/sign/evidence/' + i.evidence_path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+      try { const r = await api('/storage/v1/object/sign/evidence/' + i.evidence_path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
             if (r?.signedURL) window.open(URL_BASE + '/storage/v1' + r.signedURL, '_blank', 'noopener'); } catch (e) { toast(e.message, 'bad'); }
     };
     c.append(ph);

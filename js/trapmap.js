@@ -19,7 +19,7 @@ import { el, drawer, num, toast, busy, input, field, trapCheckPill } from './ui.
 import { openViewer } from './viewer.js';
 import { renderIpm } from './ipm.js';
 
-const TONE_WORD = { red: 'over the threshold', orange: 'watch', green: 'low' };
+const TONE_WORD = { red: 'over the limit', orange: 'watch', green: 'low' };
 const TREND = { up: '▲', down: '▼', flat: '–' };
 const TREND_WORD = { up: 'rising against last week', down: 'falling against last week', flat: 'about the same as last week' };
 const shortCode = c => String(c || '').replace(/D\d{4}(?:\d{4})?$/, '');

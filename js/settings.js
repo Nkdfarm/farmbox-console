@@ -7,7 +7,7 @@
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { api, fn, select, rpc } from './api.js';
-import { el, toast, drawer, busy, icon, avatar, input, pref } from './ui.js';
+import { el, toast, drawer, confirmDrawer, busy, icon, avatar, input, pref } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
 import { familiesRow } from './families.js';
@@ -318,6 +318,7 @@ function integrations(ctx) {
     if (k0?.set) {
       const rm = el('button', 'btn btn-sm key-ctl', 'Remove');
       rm.onclick = async () => {
+        if (!await confirmDrawer(`Remove the ${def.label}?`, 'The key is deleted from the server. To use the service again somebody pastes a key here.', 'Remove', true)) return;
         try {
           paint(await rpc('set_integration_key', { p_name: def.name, p_value: '' }));
           toast(`${def.label} removed`, 'ok');
@@ -352,7 +353,7 @@ function layout(ctx, touched) {
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
   [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'Scouting'], ['office', 'Office'],
-   ['maintenance', 'Maintenance'], ['farm', 'Farm setup']].forEach(([v, label]) => {
+   ['maintenance', 'Maintenance'], ['connect', 'Connections'], ['farm', 'Farm setup']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;
     pick.append(o);
@@ -444,7 +445,7 @@ function syncCard(ctx, o) {
     out.hidden = false;
     out.textContent = '';
     try {
-      const r = await fn(o.fnName, { dry_run: dry });
+      const r = await fn(o.fnName, { dry_run: dry }, dry ? { quiet: true } : undefined);
       busy(button, false, label);
       const summary = o.summary(r) || 'Done.';
       out.append(el('div', 'sync-sum', (dry ? 'Preview — nothing written. ' : 'Synced. ') + summary));

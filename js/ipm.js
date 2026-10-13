@@ -56,8 +56,8 @@ function paint() {
   const thr = data.may_edit ? el('button', 'btn', `Limits ${th.watch} / ${th.over} a day`) : el('span', 'pill', `watch ${th.watch} · over ${th.over} a day`);
   if (data.may_edit) thr.onclick = () => editThreshold(th);
   mount.append(pageHead(null,
-    'The sticky traps and their counts. They are counted during the daily scouting when the person opens the trap cards; ' +
-    'a trap over the threshold has raised an issue. The curves are drawn by date, so a gap is a gap.', thr, add));
+    'The sticky traps and their counts from the daily scouting. A trap over the limit raises an issue. ' +
+    'Curves run by date: a gap is a gap.', thr, add));
 
   // ── the numbers ──
   const tiles = el('div', 'tiles ipm-tiles');
@@ -323,7 +323,7 @@ function openReading(t, r) {
 // a signed URL (one hour) for a photo in the private evidence bucket; storage RLS
 // lets a member of the farm read its own farm's folder
 async function fullPhotoUrl(path) {
-  const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
   return res?.signedURL ? URL_BASE + '/storage/v1' + res.signedURL : null;
 }
 
@@ -415,7 +415,7 @@ function editThreshold(th) {
     busy(save, true, 'Saving…');
     try {
       await rpc('save_ipm_threshold', { p_farm: farm.id, p_watch: w, p_over: o });
-      d.close(); toast('Thresholds saved — sync the phones', 'ok'); await load();
+      d.close(); toast('Limits saved — sync the phones', 'ok'); await load();
     } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);

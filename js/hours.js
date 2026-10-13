@@ -9,11 +9,14 @@
 // dashboard reads it).
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate, parseYmd, curSign } from './ui.js';
 
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const h = m => { m = Math.round(Number(m || 0)); return m ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : '—'; };
-const nice = s => s ? new Date(s).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+// the farm's clock, like the In and Out fields of the window: on a laptop set to another zone the list said one hour
+// and the window another (review 13 Oct 2026)
+const clock = s => farmLocal(s).slice(11);
+const nice = s => s ? `${parseYmd(farmLocal(s)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${clock(s)}` : '—';
 const dayShort = s => new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
 const localInput = s => farmLocal(s);           // shown and typed on the farm's clock, whatever the laptop's
 
@@ -51,15 +54,16 @@ function paint() {
   });
   const add = data.may_edit ? el('button', 'btn btn-sm', 'Add hours') : null;
   if (add) add.onclick = () => editEntry(null);
-  mount.append(pageHead(null, 'Hours worked — the task timers on the phone — against the hours of the tasks planned for each person and the tasks they finished. ' +
-    'The Admin and the Farm manager correct the record and set what an hour costs.', add, seg));
+  mount.append(pageHead(null, 'Hours worked (the phone\'s task timers) against the hours planned per person. ' +
+    'The Admin and the Farm manager correct them and set the cost.', add, seg));
+  const R = curSign({ currency: data.currency || farm.currency });   // "R", as on Orders and Customers
 
   const ppl = data.people || [];
   const tot = k => ppl.reduce((a, p) => a + Number(p[k] || 0), 0);
   const tiles = el('div', 'tiles hr-tiles');
   const tile = (v, l, s) => { const x = el('div', 'tile'); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); x.append(b); return x; };
   tiles.append(tile(h(tot('clocked')), 'Worked'), tile(h(tot('planned')), 'Tasks planned'), tile(h(tot('done')), 'Tasks done', `${tot('tasks_done')} of ${tot('tasks')} tasks`),
-               tile(tot('cost') ? `${data.currency} ${Math.round(tot('cost')).toLocaleString()}` : '—', 'Cost of the hours worked'));
+               tile(tot('cost') ? `${R} ${Math.round(tot('cost')).toLocaleString()}` : '—', 'Cost of the hours worked'));
   mount.append(tiles);
 
   const card = el('div', 'card');
@@ -70,7 +74,7 @@ function paint() {
     const tr = el('tr', 'hr-row');
     const who = el('td', 'hr-who'); who.append(avatar({ ...p, id: p.worker_id }, 'sm'));
     const nm = el('div'); nm.append(el('b', null, p.name));
-    if (p.open) nm.append(el('div', 'hint hr-on', `clocked in since ${new Date(p.open).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`));
+    if (p.open) nm.append(el('div', 'hint hr-on', `clocked in since ${clock(p.open)}`));
     else if (p.employment === 'casual') nm.append(el('div', 'hint', 'on demand'));
     who.append(nm);
     const ratio = Number(p.clocked) ? Math.round(100 * Number(p.done) / Number(p.clocked)) : null;
@@ -78,12 +82,12 @@ function paint() {
     rt.append(bar, el('span', 'hint', ratio == null ? '—' : `${ratio}%`));
     const rate = el('td', 'num');
     if (data.may_edit) {
-      const b = el('button', 'btn btn-sm btn-ghost', p.hourly_cost != null ? `${data.currency} ${Number(p.hourly_cost)}` : 'set');
+      const b = el('button', 'btn btn-sm btn-ghost', p.hourly_cost != null ? `${R} ${Number(p.hourly_cost)}` : 'set');
       b.onclick = e => { e.stopPropagation(); setCost(p); };
       rate.append(b);
-    } else rate.textContent = p.hourly_cost != null ? `${data.currency} ${Number(p.hourly_cost)}` : '—';
+    } else rate.textContent = p.hourly_cost != null ? `${R} ${Number(p.hourly_cost)}` : '—';
     tr.append(who, el('td', 'num', h(p.clocked)), el('td', 'num', h(p.planned)), el('td', 'num', h(p.done)), rt,
-              el('td', 'num', `${p.tasks_done}/${p.tasks}`), rate, el('td', 'num', Number(p.cost) ? `${data.currency} ${Math.round(p.cost).toLocaleString()}` : '—'));
+              el('td', 'num', `${p.tasks_done}/${p.tasks}`), rate, el('td', 'num', Number(p.cost) ? `${R} ${Math.round(p.cost).toLocaleString()}` : '—'));
     tr.onclick = () => { open.has(p.worker_id) ? open.delete(p.worker_id) : open.add(p.worker_id); paint(); };
     tb.append(tr);
     if (open.has(p.worker_id)) {
@@ -124,7 +128,7 @@ function paint() {
 function setCost(p) {
   const d = drawer(`What an hour of ${p.name} costs`, 'Wage and what comes with it, per hour — the money dashboard uses it');
   const v = el('input', 'input'); v.type = 'number'; v.min = '0'; v.step = '0.5'; v.value = p.hourly_cost ?? '';
-  d.body.append(field(`Per hour (${data.currency})`, v));
+  d.body.append(field(`Per hour (${curSign({ currency: data.currency || farm.currency })})`, v));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
@@ -145,9 +149,9 @@ function editEntry(e) {
   d.body.append(field('Person', who), field('In', cin), field('Out', cout, 'empty = still in'), field('Note', note));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   if (e) {
-    const rm = el('button', 'btn btn-ghost tl-clear', 'Remove');
+    const rm = el('button', 'btn btn-danger', 'Remove');
     rm.onclick = async () => {
-      if (!await confirmDrawer('Remove these hours?', `${e.name}, ${nice(e.clock_in)}.`, 'Remove')) return;
+      if (!await confirmDrawer('Remove these hours?', `${e.name}, ${nice(e.clock_in)}.`, 'Remove', true)) return;
       try { await rpc('remove_time_entry', { p_id: e.id }); d.close(); load(true); } catch (x) { toast(x.message, 'bad'); }
     };
     d.footer.append(rm);

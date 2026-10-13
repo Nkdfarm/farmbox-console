@@ -101,7 +101,7 @@ export function confirmDrawer(title, message, okLabel, danger) {
   return new Promise(resolve => {
     const d = drawer(title, undefined, { onClose: () => resolve(false) });   // Escape or the scrim = no
     d.body.append(el('p', null, message));
-    const no = el('button', 'btn', 'Cancel');
+    const no = el('button', 'btn', /^cancel/i.test(okLabel || '') ? 'Keep it' : 'Cancel');   // not "Cancel" beside "Cancel the order"
     const yes = el('button', 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), okLabel);
     // answer first: closing answers "no" through onClose, and a promise keeps its first answer
     no.onclick = () => { resolve(false); d.close(); };

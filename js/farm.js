@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
-         systemTypes, mediaList, systemLabel, mediumLabel } from './ui.js';
+         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 import { patch } from './api.js';
@@ -17,22 +17,35 @@ import { patch } from './api.js';
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
 const CHANNELS = [['direct','Direct to the consumer'], ['retail','To a retailer']];
 
-let farm = null, data = null, mount = null;
+let farm = null, data = null, mount = null, ctx = null;
 
-export async function renderFarm(container, currentFarm) {
-  farm = currentFarm; mount = container;
+export async function renderFarm(container, currentFarm, context) {
+  farm = currentFarm; mount = container; ctx = context || null;
   await load();
 }
 
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108).
+// fresh, after a save: the page stays as it is until the answer redraws it — it used to go blank behind a reading
+// bar and come back at its top (review 13 Oct 2026)
+async function load(fresh = false) {
   const here = mount;
   await openFast([['farm_market', { p_farm: farm.id }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the setup…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
+    stillHere: () => here.isConnected && mount === here, fresh,
   });
+}
+
+// One of the small saves of "The week". The page's own copy takes what was saved (review 13 Oct 2026): a repaint —
+// Available systems, at the bottom, repaints the page — drew the fields from the copy read when the page opened,
+// with the old values back in them. app = the app keeps this value too (the unit's mark, where its seedlings come
+// from): its list of units is read again, so the planner and the unit bar have it without a reload.
+async function saveFarm(body, refused, app = false) {
+  const rows = await patch('farm', `id=eq.${farm.id}`, body);
+  if (!rows?.length) throw new Error(refused);
+  Object.assign(data, body);
+  if (app) ctx?.reloadFarms?.().catch(() => {});
 }
 
 function paint() {
@@ -121,7 +134,7 @@ function marketCard(may) {
         await rpc('set_farm_market', { p_farm: farm.id, p_country: country.value,
                                        p_currency: cur, p_channel: channel.value });
         toast('Market saved', 'ok');
-        await load();
+        await load(true);
       } catch (e) { busy(save, false, 'Save the market'); toast(e.message, 'bad'); }
     };
     row.append(save);
@@ -195,15 +208,14 @@ function weekCard(may) {
   // the anytime tasks fill before the line; the afternoon starts at its end
   const mf = el('input', 'input'); mf.type = 'time'; mf.value = String(data.morning_from || '08:00').slice(0, 5);
   const mt = el('input', 'input'); mt.type = 'time'; mt.value = String(data.morning_to || '13:00').slice(0, 5);
-  const save = el('button', 'btn btn-sm', 'Save');
+  const save = el('button', 'btn btn-sm btn-primary', 'Save the morning');
   save.onclick = async () => {
     if (!mf.value || !mt.value || mt.value <= mf.value) { toast('The morning must end after it starts', 'bad'); return; }
     busy(save, true, 'Saving…');
     try {
-      const rows = await patch('farm', `id=eq.${farm.id}`, { morning_from: mf.value, morning_to: mt.value });
-      if (!rows?.length) throw new Error('Only an admin or the farm manager may change the working day');
-      toast(`Morning ${mf.value}–${mt.value}`, 'ok'); busy(save, false, 'Save');
-    } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
+      await saveFarm({ morning_from: mf.value, morning_to: mt.value }, 'Only an admin or the farm manager may change the working day');
+      toast(`Morning ${mf.value}–${mt.value}`, 'ok'); busy(save, false, 'Save the morning');
+    } catch (e) { busy(save, false, 'Save the morning'); toast(e.message, 'bad'); }
   };
   const m = el('div', 'row'); m.style.marginTop = 'var(--space-3)'; m.style.alignItems = 'center';
   m.append(el('span', null, 'Morning'), mf, el('span', null, 'to'), mt);
@@ -214,16 +226,15 @@ function weekCard(may) {
   // seedlings ordered from an external nursery: the spare on top of the places (0101)
   const spare = el('input', 'input'); spare.type = 'number'; spare.min = 0; spare.max = 3; spare.step = 0.5;
   spare.value = data.seedling_spare_pct ?? 3; spare.style.width = '6em';
-  const saveSp = el('button', 'btn btn-sm', 'Save');
+  const saveSp = el('button', 'btn btn-sm btn-primary', 'Save the spare');
   saveSp.onclick = async () => {
     const v = Number(spare.value);
     if (!(v >= 0 && v <= 3)) { toast('Between 0 and 3 %', 'bad'); return; }
     busy(saveSp, true, 'Saving…');
     try {
-      const rows = await patch('farm', `id=eq.${farm.id}`, { seedling_spare_pct: v });
-      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
-      toast(`Seedlings ordered with ${v} % spare`, 'ok'); busy(saveSp, false, 'Save');
-    } catch (e) { busy(saveSp, false, 'Save'); toast(e.message, 'bad'); }
+      await saveFarm({ seedling_spare_pct: v }, 'Only an admin or the farm manager may change it');
+      toast(`Seedlings ordered with ${v} % spare`, 'ok'); busy(saveSp, false, 'Save the spare');
+    } catch (e) { busy(saveSp, false, 'Save the spare'); toast(e.message, 'bad'); }
   };
   const sp = el('div', 'row'); sp.style.marginTop = 'var(--space-3)'; sp.style.alignItems = 'center';
   sp.append(el('span', null, 'Seedlings from a nursery'), spare, el('span', null, '% spare'));
@@ -234,16 +245,15 @@ function weekCard(may) {
   // which tasks this FarmBox gets, and where its seedlings come from (0.7.136, migration 0121)
   const mode = selectBox([['all', 'Every task'], ['seedlings', 'Seedling orders only'], ['none', 'No tasks']], data.task_mode || 'all');
   const nurs = selectBox([['', 'As each crop says'], ['external', 'From a nursery'], ['internal', 'Our own nursery']], data.nursery_default || '');
-  const saveMode = el('button', 'btn btn-sm', 'Save');
+  const saveMode = el('button', 'btn btn-sm btn-primary', 'Save tasks and seedlings');
   saveMode.onclick = async () => {
     busy(saveMode, true, 'Saving…');
     try {
-      const rows = await patch('farm', `id=eq.${farm.id}`, { task_mode: mode.value, nursery_default: nurs.value || null });
-      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+      await saveFarm({ task_mode: mode.value, nursery_default: nurs.value || null }, 'Only an admin or the farm manager may change it', true);
       toast(mode.value === 'all' ? 'Every task is generated' : mode.value === 'seedlings'
         ? 'Only the seedling orders and deliveries are generated' : 'No tasks are generated', 'ok');
-      busy(saveMode, false, 'Save');
-    } catch (e) { busy(saveMode, false, 'Save'); toast(e.message, 'bad'); }
+      busy(saveMode, false, 'Save tasks and seedlings');
+    } catch (e) { busy(saveMode, false, 'Save tasks and seedlings'); toast(e.message, 'bad'); }
   };
   const tm = el('div', 'row'); tm.style.marginTop = 'var(--space-3)'; tm.style.alignItems = 'center';
   tm.append(el('span', null, 'Tasks generated'), mode, el('span', null, 'Seedlings'), nurs);
@@ -262,16 +272,17 @@ function weekCard(may) {
     const lab = input({ value: data.badge_label || farm.code || '', maxLength: 6 }); lab.style.width = '6em'; lab.setAttribute('aria-label', 'This unit’s mark');
     const col = el('input', 'input'); col.type = 'color'; col.value = data.badge_colour || '#6d8cf0'; col.setAttribute('aria-label', 'This unit’s colour');
     col.style.width = '3em'; col.style.padding = '2px';
-    const saveU = el('button', 'btn btn-sm', 'Save mark');
+    const mine = mark(data.badge_label || farm.code, data.badge_colour);
+    const saveU = el('button', 'btn btn-sm btn-primary', 'Save mark');
     saveU.onclick = async () => {
       busy(saveU, true, 'Saving…');
       try {
-        const rows = await patch('farm', `id=eq.${farm.id}`, { badge_label: lab.value.trim() || null, badge_colour: col.value });
-        if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+        await saveFarm({ badge_label: lab.value.trim() || null, badge_colour: col.value }, 'Only an admin or the farm manager may change it', true);
+        mine.textContent = data.badge_label || farm.code; mine.style.setProperty('--u', data.badge_colour);   // the mark beside the fields is the saved one
         toast('This unit’s mark is saved', 'ok'); busy(saveU, false, 'Save mark');
       } catch (e) { busy(saveU, false, 'Save mark'); toast(e.message, 'bad'); }
     };
-    sr.append(el('span', 'hint', 'This unit:'), mark(data.badge_label || farm.code, data.badge_colour), lab, col);
+    sr.append(el('span', 'hint', 'This unit:'), mine, lab, col);
     if (may) sr.append(saveU); else { lab.disabled = col.disabled = true; }
     card.append(sr);
     card.append(el('div', 'hint', 'Sister units share their people, suppliers, stock, working days, harvest days and holidays; ' +
@@ -290,16 +301,15 @@ function weekCard(may) {
     b.onclick = () => { hd.has(n) ? hd.delete(n) : hd.add(n); b.setAttribute('aria-pressed', String(hd.has(n))); };
     hdRow.append(b);
   });
-  const saveHd = el('button', 'btn btn-sm', 'Save');
+  const saveHd = el('button', 'btn btn-sm btn-primary', 'Save the harvest days');
   saveHd.onclick = async () => {
     const days = [...hd].sort((a, b) => a - b);
     busy(saveHd, true, 'Saving…');
     try {
-      const rows = await patch('farm', `id=eq.${farm.id}`, { harvest_days: days.length ? days : null });
-      if (!rows?.length) throw new Error('Only an admin or the farm manager may change it');
+      await saveFarm({ harvest_days: days.length ? days : null }, 'Only an admin or the farm manager may change it');
       toast(days.length ? 'Harvests on ' + days.map(d => DAYS[d - 1][1]).join(' and ') : 'Harvests on any working day', 'ok');
-      busy(saveHd, false, 'Save');
-    } catch (e) { busy(saveHd, false, 'Save'); toast(e.message, 'bad'); }
+      busy(saveHd, false, 'Save the harvest days');
+    } catch (e) { busy(saveHd, false, 'Save the harvest days'); toast(e.message, 'bad'); }
   };
   if (may) hdRow.append(saveHd);
   card.append(hdRow);
@@ -323,8 +333,8 @@ function weekCard(may) {
 // closures. Nothing is planned on them: the work moves to the next working day.
 const ymdOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const holidayRange = () => {
-  const d = new Date(); const from = ymdOf(d); d.setDate(d.getDate() + 365);
-  return { p_from: from, p_to: ymdOf(d) };
+  const d = farmDate();   // the farm's day, not this computer's
+  return { p_from: ymdOf(d), p_to: ymdOf(addDays(d, 365)) };
 };
 const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -643,7 +653,7 @@ function editZone(z) {
       toast(`${name.value.trim()} saved · ${r.positions} positions · `
         + `${Number(r.places).toLocaleString()} places`, 'ok');
       d.close();
-      await load();
+      await load(true);
     } catch (e) { busy(save, false, 'Save the zone'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);

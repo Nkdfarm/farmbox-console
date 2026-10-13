@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
-         mondayOf, subFamilyTag, farmDate } from './ui.js';
+         mondayOf, subFamilyTag, farmDate, systemLabel } from './ui.js';
 
 const PERIOD_KEY = 'fbc_harvest_period';
 const PERIODS = [['week', 'This week'], ['month', 'This month'], ['quarter', '3 months'], ['year', 'This year']];
@@ -32,14 +32,16 @@ export async function renderHarvest(container, currentFarm) {
   await load();
 }
 
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108).
+// fresh, after a cut recorded here: the page stays as it is until the answer redraws it — it used to go blank
+// behind a reading bar and come back at its top (review 13 Oct 2026)
+async function load(fresh = false) {
   const here = mount;
   await openFast([['harvest_overview', { p_farm: farm.id, ...harvestRange() }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the harvests…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
+    stillHere: () => here.isConnected && mount === here, fresh,
   });
 }
 
@@ -59,8 +61,7 @@ function paint() {
   const rec = data.may_record ? el('button', 'btn btn-primary', 'Record a cut') : null;
   if (rec) rec.onclick = () => recordCut(null);
   mount.append(pageHead(null,
-    `${shortDate(data.from)} – ${shortDate(data.to)}. The weight is typed on the phone in the harvest task; ` +
-    'this is what came in, what is still standing, and what the finished batches taught the planner.', seg, rec));
+    `${shortDate(data.from)} – ${shortDate(data.to)}. Weights are typed on the phone in the harvest task.`, seg, rec));
 
   // ── the numbers ──
   const tiles = el('div', 'tiles');
@@ -133,11 +134,12 @@ function paint() {
   const yields = data.yields || [];
   if (yields.length) {
     mount.append(cardWith('Yields learned', 'from finished batches — what the planner now uses (§10.7), beside the figure it started from', table([
-      { key: 'crop', label: 'Crop', fmt: (v, r) => `${v} · ${r.system_type}` },
+      { key: 'crop', label: 'Crop', fmt: (v, r) => `${v} · ${systemLabel(r.system_type)}` },
       { key: 'batches', label: 'Finished', align: 'right' },
       { key: 'kg_per_batch', label: 'Per batch', align: 'right', fmt: v => kg(v) },
       { key: 'kg_per_plant', label: 'Per plant', align: 'right', fmt: v => v != null ? `${num(v, 3)} kg` : '—' },
-      { key: 'yield_per_position', label: 'Planner uses', align: 'right', fmt: (v, r) => v != null ? `${num(v, 2)} ${r.unit || ''}/position${r.yield_manual != null ? ' · typed' : ''}` : '—' },
+      // the figure is kilograms a plant (crop_system_compat), whatever the column is called and whatever the crop is sold by (review 13 Oct 2026)
+      { key: 'yield_per_position', label: 'Planner uses', align: 'right', fmt: (v, r) => v != null ? `${num(v, 3)} kg/plant${r.yield_manual != null ? ' · typed' : ''}` : '—' },
     ], yields)));
   }
 }
@@ -174,7 +176,7 @@ function recordCut(batch) {
     try {
       await rpc('record_harvest', { p: { crop_plan_id: pick.value, qty: v, unit: 'kg', final: final.value === 'true',
                                          waste_qty: parseFloat(waste.value) || null, date: date.value || null } });
-      d.close(); toast(`${kg(v)} recorded`, 'ok'); await load();
+      d.close(); toast(`${kg(v)} recorded`, 'ok'); await load(true);
     } catch (e) { busy(save, false, 'Record'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, save);

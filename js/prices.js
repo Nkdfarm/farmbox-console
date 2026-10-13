@@ -16,7 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
-         toast, busy, num, shortDate } from './ui.js';
+         toast, busy, num, shortDate, curSign } from './ui.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -110,7 +110,7 @@ function paint() {
                        num(v, 2) + (gap ? ` (${gap > 0 ? '+' : ''}${gap}%)` : ''));
           s.title = 'Average of your last 90 days of observations';
           return s; } },
-    ], data.book, { empty: 'No prices — seed the price book first.' })));
+    ], data.book, { empty: 'No prices for this market yet.' })));
 
   const obs = card('What this farm has actually seen');
   obs.append(table([
@@ -134,11 +134,12 @@ function marketCard() {
     last ? `Collected ${shortDate(String(last).slice(0, 10))}` : 'Not collected yet'));
 
   const intro = el('div', 'hint mk-intro',
-    'Wholesale rand per kg at Cape Town Market, one figure per species, collected by itself every ' +
-    'Monday at 13:30 — or now, with Scan. Weighted by the kilos sold where the market reports them; ' +
-    'otherwise the median of the day’s class 1 lines, with the low–high spread across grades and packaging under it. ' +
-    'Johannesburg beside it, where the market reports kilos sold. ' +
-    'Buyers’ prices before the agent’s commission, so for comparison: the planner keeps using the book and your own prices.');
+    'Wholesale rand per kg, one figure per species, collected every Monday 13:30 or with Scan. ' +
+    'For comparison only: the planner keeps the book and your own prices.');
+  // how the figure is made, for whoever asks: on hover, no longer five lines above the table
+  intro.title = 'Weighted by the kilos sold where the market reports them; otherwise the median of the day’s class 1 lines, ' +
+    'with the low–high spread across grades and packaging under it. Johannesburg beside it, where the market reports kilos sold. ' +
+    'Buyers’ prices, before the agent’s commission.';
   c.append(intro);
 
   const rows = (trends.species || []).map(s => ({ ...s }));
@@ -180,7 +181,7 @@ function marketCard() {
                   `${pct > 0 ? '▲ +' : pct < 0 ? '▼ ' : ''}${pct}%`); } },
     { key: 'weeks', label: '12 weeks', fmt: w => sparkline(w || []) },
     { key: 'season', label: 'Season now', align: 'right', fmt: s => seasonCell(s) },
-  ], rows, { empty: 'No species set up — apply the market migration.' }));
+  ], rows, { empty: 'No market species for this market yet.' }));
   return c;
 }
 
@@ -253,7 +254,34 @@ function record() {
   const d = drawer('Record a price', 'What you actually sold it for');
   const crop = selectBox(data.book.map(b => [b.crop_id, b.crop]));
   const price = input({ type: 'number', step: '0.01', required: true });
-  const unit = selectBox([['kg', 'per kg'], ['piece', 'per piece'], ['punnet', 'per punnet']], 'kg');
+  // A price is kept per kilogram: the planner, the book's "Your own" column and the orders all read the figure as
+  // per kg whatever unit stands beside it, so R 12 a punnet used to count as R 12 a kg (review 13 Oct 2026). A price
+  // typed per piece, bunch or punnet is turned into per kg with the weight the crop gives one unit (Crop library ›
+  // Grams per unit); the menu offers that unit only for a crop that has the weight, and the window says what is saved.
+  const unit = selectBox([['kg', 'per kg']], 'kg');
+  const PER = { piece: 'per piece', bunch: 'per bunch', punnet: 'per punnet' };
+  const ONE = { piece: 'A piece', bunch: 'A bunch', punnet: 'A punnet' };
+  const R = curSign({ currency: data.currency });
+  const saved = el('div', 'hint');
+  const rowOf = () => data.book.find(b => b.crop_id === crop.value) || {};
+  const grams = () => (unit.value === 'kg' ? null : Number(rowOf().grams_per_unit) || null);
+  const perKg = () => { const g = grams(); return g ? Math.round(Number(price.value) * 1000 / g * 100) / 100 : Number(price.value); };
+  const say = () => {
+    const g = grams(), b = rowOf();
+    saved.textContent = g
+      ? (Number(price.value) > 0 ? `${ONE[unit.value]} weighs ${num(g, 0)} g: saved as ${R} ${num(perKg(), 2)} per kg.`
+                                 : `${ONE[unit.value]} weighs ${num(g, 0)} g: the price is saved per kg.`)
+      : (PER[b.sell_unit] && !Number(b.grams_per_unit) ? `This crop has no "Grams per unit" yet (Crop library): per kg only.` : '');
+  };
+  const fillUnits = () => {
+    const b = rowOf(), was = unit.value;
+    unit.textContent = '';
+    [['kg', 'per kg'], ...(PER[b.sell_unit] && Number(b.grams_per_unit) > 0 ? [[b.sell_unit, PER[b.sell_unit]]] : [])]
+      .forEach(([v, label]) => { const o = el('option', null, label); o.value = v; unit.append(o); });
+    unit.value = [...unit.options].some(o => o.value === was) ? was : 'kg';
+    say();
+  };
+  crop.onchange = fillUnits; unit.onchange = say; price.oninput = say;
   const channel = selectBox([['direct', 'Direct to the consumer'], ['retail', 'To a retailer']],
                             data.channel);
   const when = input({ type: 'date' });
@@ -261,7 +289,9 @@ function record() {
 
   d.body.append(field('Crop', crop));
   d.body.append(field(`Price (${data.currency})`, price));
-  d.body.append(field('Per', unit));
+  const perF = field('Per', unit); perF.append(saved);
+  d.body.append(perF);
+  fillUnits();
   d.body.append(field('Sold to', channel));
   d.body.append(field('When', when, 'Today if left empty.'));
   d.body.append(field('Where it came from', source));
@@ -273,18 +303,21 @@ function record() {
   cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', 'Record');
   save.onclick = async () => {
-    if (!price.value) { toast('It needs a price', 'bad'); return; }
+    if (!(Number(price.value) > 0)) { toast('It needs a price above zero', 'bad'); return; }   // a 0 was kept, and the planner then priced the crop at nothing
     busy(save, true, 'Saving…');
     try {
       const on = when.value || null;
+      const g = grams(), kgPrice = perKg();
+      // what was typed stays readable beside the per-kg figure, in the Source column
+      const typed = g ? `${num(Number(price.value), 2)} ${PER[unit.value]} of ${num(g, 0)} g` : '';
       await rpc('record_market_price', { p: {
-        farm_id: farm.id, crop_id: crop.value, price: Number(price.value),
-        unit: unit.value, channel: channel.value, source: source.value.trim(),
+        farm_id: farm.id, crop_id: crop.value, price: kgPrice,
+        unit: 'kg', channel: channel.value, source: [source.value.trim() || (g ? 'own sale' : ''), typed].filter(Boolean).join(' · '),
         observed_at: on,
         month: on ? Number(on.slice(5, 7)) : null,
         year: on ? Number(on.slice(0, 4)) : null } });
       d.close();
-      toast('Recorded', 'ok');
+      toast(g ? `Recorded · ${R} ${num(kgPrice, 2)} per kg` : 'Recorded', 'ok');
       await load(true);
     } catch (e) { busy(save, false); toast(e.message, 'bad'); }
   };

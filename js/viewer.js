@@ -31,7 +31,7 @@ export const partLabel = p => ({ leaf: 'leaf', fruit: 'fruit', head: 'head', roo
 export async function fullPhotoUrl(path) {
   if (!path) return null;
   try {
-    const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+    const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
     return res?.signedURL ? URL_BASE + '/storage/v1' + res.signedURL : null;
   } catch { return null; }
 }
@@ -451,7 +451,8 @@ export function openViewer(ctx) {
           busy(add, true, '…');
           try {
             await rpc('add_case_point', { p_case: c.id, p_kind: photo.kind, p_ref: photo.id, p_severity: Number(sev.value), p_count: null, p_note: null });
-            busy(add, false, 'Added ✓'); toast('Added to the case — it is on its curve', 'ok'); ctx.onChange?.(photo);
+            busy(add, false); add.textContent = 'Added ✓';   // busy() puts the first label back: the tick is written after it
+            toast('Added to the case — it is on its curve', 'ok'); ctx.onChange?.(photo);
           } catch (e) { busy(add, false, 'Add to this case'); toast(e.message, 'bad'); }
         };
         row.append(sev, add);

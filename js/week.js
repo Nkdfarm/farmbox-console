@@ -85,7 +85,8 @@ export async function renderWeek(container, currentFarm) {
   }
   farm = currentFarm;
   mount = container;
-  if (!week) { day = today(); week = mondayOf(day); month = firstOfMonth(day); }
+  // the first time, and again when the day on screen was "today" on an earlier day (a console left open overnight)
+  { const t = today(); if (!week || (setOn && setOn !== t && day === setOn)) { day = t; week = mondayOf(t); month = firstOfMonth(t); } setOn = t; }
   await load();
   // who is doing what stays current (0.7.182): the weeks on screen are read again every minute while the board is in
   // view and nobody is in the middle of something (a window open, Assign manually, a drag); openFast redraws only on a change
@@ -361,6 +362,7 @@ function paint() {
   paintBody();
 }
 let peopleCol = null;
+let setOn = null;            // the farm's day when the board was last opened on today
 
 // ── the people column: faces, hours over the possible, and the two ways to assign ──
 function paintPeople() {
@@ -388,6 +390,8 @@ function paintPeople() {
   const list = [...people.values()].sort((a, b) => (place(a) === place(b) ? 0 : place(a) - place(b))
     || (a.employment === 'casual') - (b.employment === 'casual') || a.name.localeCompare(b.name));
   list.forEach(p => { p.assigned = onScreen.filter(t => (t.workers || []).some(w => w.id === p.id)).reduce((a, t) => a + Number(t.minutes || 0), 0); });
+  // the spotlight is on a face: when that face is no longer here (off the task pages, switched off, away that week) it goes
+  if (spotlight && !list.some(p => p.id === spotlight)) spotlight = null;
 
   const may = mayPlanNow();
   const head = el('div', 'tk-people-head');
@@ -435,7 +439,8 @@ function paintPeople() {
     acts.append(ok, no);
     peopleCol.append(acts);
   }
-  const unit = span === 'day' ? 'today' : span === 'month' ? 'this month' : 'this week';
+  const unit = span === 'day' ? (day === today() ? 'today' : 'that day') : span === 'month' ? 'in the month'
+             : (week === mondayOf(today()) ? 'this week' : 'that week');
   peopleCol.append(el('div', 'tk-people-sub', `Hours ${unit}: assigned / possible`));
   if (!list.length) peopleCol.append(el('div', 'empty', 'Nobody is rostered in this period.'));
   list.forEach(p => {
@@ -523,6 +528,7 @@ const clearMarks = () => mount?.querySelectorAll('.drop-before, .drop-after, .ov
 
 // the column in its new order at once, then kept; the people not on screen this week stay after, in their own order
 async function saveOrder(ids) {
+  loadGen++;                                   // a refresh in flight is not to paint the order as it was
   const rest = (data?.board_order || []).filter(id => !ids.includes(id));
   for (const w of weeks.values()) if (w) w.board_order = [...ids, ...rest];
   paintPeople();
@@ -584,6 +590,14 @@ function takesPerson(node, t) {
 }
 
 async function autoAssign(btn, from, to) {
+  // one click used to replace every name chosen by hand in the range on screen — a month in Month view — and to
+  // reach back to the days already over. It asks first now, as the same button on Team does, and starts today.
+  const t0 = today();
+  if (to < t0) { toast('These days are over: nothing to assign'); return; }
+  if (from < t0) from = t0;
+  if (!await confirmDrawer('Assign automatically?',
+    `The names on the open tasks of ${from === to ? shortDay(from) : shortDay(from) + ' – ' + shortDay(to)} are replaced by the planner's — also the ones chosen by hand. Tasks already started keep their people.`,
+    'Assign')) return;
   busy(btn, true, 'Assigning…');
   try {
     const r = await rpc('auto_assign', { p_farm: farm.id, p_from: from, p_to: to });
@@ -638,7 +652,7 @@ function filterBar() {
   };
   sel('status', 'Status', STATUS);
   if (units().length > 1) sel('unit', 'Unit', units().map(u => [u.id, u.name]));
-  sel('family', 'Type', uniq(t => t.family).map(x => [x, x]));
+  sel('family', 'Family', uniq(t => t.family).map(x => [x, x]));
   sel('category', 'Sub-family', uniq(t => t.category).map(x => [x, x]));
   sel('crop', 'Crop', [...new Set(tasks.flatMap(t => t.crops?.length ? t.crops : [t.crop]).filter(Boolean))].sort().map(x => [x, x]));
   const people = new Map();
@@ -686,7 +700,7 @@ function navBar() {
   const fwd = el('button', 'btn btn-sm', '›'); fwd.setAttribute('aria-label', 'Later');
   const move = n => {
     if (span === 'day') { day = shift(day, n); week = mondayOf(day); }
-    else if (span === 'month') { month = shiftMonth(month, n); week = mondayOf(month); }
+    else if (span === 'month') { month = shiftMonth(month, n); const t = today(); day = t.slice(0, 7) === month.slice(0, 7) ? t : month; week = mondayOf(day); }
     else { week = shift(week, 7 * n); day = week; }
     load();
   };
@@ -1028,7 +1042,7 @@ function openTask(t) {
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
   if (t.withholding_until && t.status !== 'done') d.body.append(el('div', 'note bad', `Do not harvest before ${longDate(t.withholding_until)} — a treatment on this crop is in its withholding period. Move this task, or check the case in Scouting.`));
   if (unitOf(t)) { const um = unitMark(t, true); const w = el('span'); w.append(um, ' ' + unitOf(t).name); fact('Unit', w); }
-  fact('Kind', subFamilyTag(t.category || t.family));
+  fact('Sub-family', subFamilyTag(t.category || t.family));
   fact('Family', t.family);
   if (t.crop) fact('Crop', t.crop);
   fact('When', SLOT_WORD[slotOf(t)] + (slotOf(t) === 'any' ? ' · drawn in the ' + SLOT_WORD[bandOf(t)].toLowerCase() : ''));
@@ -1131,7 +1145,7 @@ function openHub(t) {
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k)); const val = el('span', 'fact-v'); if (v instanceof Node) val.append(v); else val.textContent = v ?? '—'; f.append(val); facts.append(f); };
   if (unitOf(t)) { const um = unitMark(t, true); const w = el('span'); w.append(um, ' ' + unitOf(t).name); fact('Unit', w); }
-  fact('Kind', subFamilyTag(t.category || t.family));
+  fact('Sub-family', subFamilyTag(t.category || t.family));
   const doneN = t.all.filter(m => m.status === 'done').length;
   fact('Zones', `${t.all.length} · one task a zone · ${doneN} done`);
   fact('Takes', hrs(t.all.reduce((a, m) => a + Number(m.minutes || 0), 0)) + ' h');

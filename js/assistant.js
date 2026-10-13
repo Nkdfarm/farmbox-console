@@ -158,7 +158,7 @@ async function send(text) {
   paint();
   busyRow.hidden = false; sendBtn.disabled = true; sending = true;
   try {
-    const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent });
+    const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
     c.notes = [];

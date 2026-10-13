@@ -91,8 +91,9 @@ function paint() {
                                `${v}% of ${r.tasks_28d}`) },
       { key: 'overdue', label: 'Overdue', align: 'right', fmt: v =>
           v ? el('span', 'down', String(v)) : '—' },
-      { key: 'critical_issues', label: 'Critical', align: 'right', fmt: (v, r) =>
-          v ? el('span', 'pill bad', String(v)) : (r.open_issues || '—') },
+      // one column, two figures: the critical ones in red, else the open ones — so the head says Issues and the pill its kind
+      { key: 'critical_issues', label: 'Issues', align: 'right', fmt: (v, r) =>
+          v ? el('span', 'pill bad', `${v} critical`) : (r.open_issues || '—') },
       { key: 'plan_next_week', label: 'Next week', fmt: v =>
           el('span', 'pill' + (v === 'validated' || v === 'locked' ? ' ok'
                              : v === 'draft' ? ' warn' : ' bad'),
@@ -162,7 +163,10 @@ async function commission() {
 }
 
 function done(r) {
-  const d = drawer(r.name + ' is commissioned', `${r.code} · from model ${r.model}`);
+  // closed any way (✕, Escape, outside, Later): the new unit is in the switcher and in the list (review 13 Oct 2026)
+  let opening = false;
+  const d = drawer(r.name + ' is commissioned', `${r.code} · from model ${r.model}`,
+    { onClose: async () => { if (opening) return; try { if (reloadFarms) await reloadFarms(); } catch { /* the list below still reads */ } load(); } });
   const facts = el('div', 'facts');
   [['Zones', r.zones], ['Systems', r.systems], ['Positions', r.positions],
    ['Areas', r.areas], ['Currency', r.currency], ['Country', r.country]]
@@ -182,6 +186,7 @@ function done(r) {
 
   const ok = el('button', 'btn btn-primary', 'Open it');
   ok.onclick = async () => {
+    opening = true;
     d.close();
     // the switcher has never heard of this farm yet
     if (reloadFarms) await reloadFarms();
@@ -189,7 +194,7 @@ function done(r) {
     if (onPick) onPick(r.farm_id);
   };
   const later = el('button', 'btn', 'Later');
-  later.onclick = () => { d.close(); load(); };
+  later.onclick = d.close;
   d.footer.append(later, ok);
 }
 

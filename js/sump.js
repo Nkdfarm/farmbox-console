@@ -14,7 +14,7 @@
 // paper tracker's. Nothing here sets a limit: they are the unit's own, in Connections.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, drawer, toast, busy, input, field, farmInstant } from './ui.js';
+import { el, num, drawer, toast, busy, input, field, farmInstant, farmToday } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const METRICS = [
@@ -90,7 +90,8 @@ function paintBlock(box, farm, h) {
     const diff = b ? Number(t.water_temp) - Number(b.water_temp) : 0;
     const arrow = !b ? '' : diff > 0.3 ? '▲' : diff < -0.3 ? '▼' : '–';
     const chip = el('span', 'sp-temp ' + toneOf(t.water_temp, h.limits?.water_temp));
-    chip.append(el('span', 'hint', String(t.day) === String(h.day) ? 'Water today' : `Water ${shortDay(t.day)}`), el('b', null, `${num(t.water_temp, 1)} °C`));
+    // "today" is the farm's today, not the day of the report on screen (review 13 Oct 2026)
+    chip.append(el('span', 'hint', String(t.day) === farmToday() ? 'Water today' : `Water ${shortDay(t.day)}`), el('b', null, `${num(t.water_temp, 1)} °C`));
     if (arrow) chip.append(el('span', 'sp-arrow', arrow));
     chip.title = `Water ${num(t.water_temp, 1)} °C on ${shortDay(t.day)} ${hhmm(t.at)}` + (b ? ` — ${num(b.water_temp, 1)} °C on ${shortDay(b.day)} (${diff >= 0 ? '+' : '−'}${num(Math.abs(diff), 1)})` : ' — the first reading') + '. Click for the curve.';
     head.append(el('span', 'spacer'), chip);
@@ -118,7 +119,8 @@ function paintBlock(box, farm, h) {
   box.classList.add('sp-click');
   box.title = 'Open the sump: every reading, 30 to 365 days';
   box.tabIndex = 0; box.setAttribute('role', 'button');
-  const open = () => openSump(farm, { sump: s.id, day: h.day });
+  // a reading typed or taken out in the window is read into this block again (review 13 Oct 2026: it kept the old figures)
+  const open = () => openSump(farm, { sump: s.id, day: h.day, onChange: () => { if (!box.isConnected) return; delete box.dataset.loaded; box.load?.(); } });
   box.onclick = open;
   box.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
 }
@@ -144,7 +146,7 @@ export function sumpBlock(farm, z, day, call = rpc) {
 }
 
 // the window
-export function openSump(farm, { sump, day = null } = {}) {
+export function openSump(farm, { sump, day = null, onChange = null } = {}) {
   let days = 30, cur = sump, h = null;
   const d = drawer('Sump', 'EC, pH and water temperature over time');
   d.box.classList.add('sump-drawer');
@@ -195,7 +197,7 @@ export function openSump(farm, { sump, day = null } = {}) {
         const last = el('td');
         if (h.may_write && r.source !== 'checklist') {
           const x = el('button', 'btn btn-ghost btn-sm', '✕'); x.title = 'Take this reading out';
-          x.onclick = async () => { try { await rpc('save_sump_reading', { p: { sump_id: h.sump.id, id: r.id, remove: true } }); read(); } catch (e) { toast(e.message, 'bad'); } };
+          x.onclick = async () => { try { await rpc('save_sump_reading', { p: { sump_id: h.sump.id, id: r.id, remove: true } }); read(); onChange?.(); } catch (e) { toast(e.message, 'bad'); } };
           last.append(x);
         }
         tr.append(last);
@@ -215,7 +217,7 @@ export function openSump(farm, { sump, day = null } = {}) {
         busy(add, true, 'Saving…');
         try {
           await rpc('save_sump_reading', { p: { sump_id: h.sump.id, at: at.value ? farmInstant(at.value) : null, ec: ec.value, ph: ph.value, water_temp: tc.value } });
-          toast('Reading saved'); read();
+          toast('Reading saved', 'ok'); read(); onChange?.();
         } catch (e) { busy(add, false, 'Add a reading'); toast(e.message, 'bad'); }
       };
       d.footer.append(form, add);

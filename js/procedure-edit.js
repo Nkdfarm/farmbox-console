@@ -7,7 +7,7 @@
 // onto it; if not, only the details are written.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList, scheduleText } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList, scheduleText, farmDate, addDays } from './ui.js';
 import { familyOptions, subFamiliesOf } from './families.js';
 
 // Repeats (0094): three choices. On a schedule = a routine with its days and every n weeks;
@@ -154,7 +154,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
   d.body.append(
     dl,
     grid('grid3', field('Title', title), field('Family', family),
-         field('Sub-family', category, 'From Settings › Task families — the same list People uses.')),
+         field('Sub-family', category, 'From Settings › Task families — the same list Team uses.')),
     grid('grid2', field('Repeats', freq), field('One task for', target)),
     sched.node,
     ...(secs ? [secs.node] : []),
@@ -379,7 +379,8 @@ function schedulePicker(p, farm, freq) {
   let hols = new Map();                       // closed days ahead: ymd → name
   const ymdOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const monday = d => { const x = new Date(d); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
-  const anchor = p.repeat_anchor ? monday(p.repeat_anchor + 'T12:00:00') : monday(new Date());
+  // "today" is the farm's day in the three places below, not this computer's (review 13 Oct 2026)
+  const anchor = p.repeat_anchor ? monday(p.repeat_anchor + 'T12:00:00') : monday(farmDate());
   const iso = d => ((d.getDay() + 6) % 7) + 1;
   const farmName = farm?.name || 'this FarmBox';
 
@@ -429,7 +430,7 @@ function schedulePicker(p, farm, freq) {
     holB.setAttribute('aria-pressed', String(onHol));
     unit.textContent = n() === 1 ? 'week' : 'weeks';
     const out = [];
-    const d = new Date(); d.setHours(12, 0, 0, 0);
+    const d = farmDate(); d.setHours(12, 0, 0, 0);
     for (let i = 0; i < 400 && out.length < 3; i++, d.setDate(d.getDate() + 1)) {
       const due = dueFor(d);
       if (!due) continue;
@@ -451,7 +452,7 @@ function schedulePicker(p, farm, freq) {
   paint();
   // this farm's holidays, for the dates under the buttons
   if (farm?.id) {
-    const from = new Date(), to = new Date(); to.setDate(to.getDate() + 420);
+    const from = farmDate(), to = addDays(from, 420);
     rpc('farm_holidays', { p_farm: farm.id, p_from: ymdOf(from), p_to: ymdOf(to) })
       .then(r => { hols = new Map((r.holidays || []).filter(h => h.closed).map(h => [h.day, h.name])); paint(); })
       .catch(() => {});

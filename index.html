@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20261012n">
+  <link rel="stylesheet" href="styles.css?v=20261013a">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png?v=5" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=5">
@@ -82,7 +82,6 @@
         <button class="btn btn-ghost btn-icon" id="signout" data-icon="logout"
                 aria-label="Sign out" title="Sign out"></button>
       </div>
-      <div id="version" class="rail-version"></div>
     </div>
   </nav>
 
@@ -93,7 +92,7 @@
         <select id="farmPick" aria-label="Which FarmBox"></select>
       </div>
       <div class="grow"></div>
-      <span class="pill" id="envPill">Supabase</span>
+      <span class="pill" id="envPill" hidden></span>
       <div class="zoom" id="zoom" role="group" aria-label="Zoom"></div>
       <button class="pill net" id="net" type="button" aria-live="polite"></button>
       <span class="top-version" id="topVersion" title="Naked Heart version — Settings › Version log"></span>
@@ -108,7 +107,7 @@
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20261012n"></script>
+<script type="module" src="js/app.js?v=20261013a"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

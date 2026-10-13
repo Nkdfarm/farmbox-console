@@ -63,7 +63,7 @@ import { greenhouseKit } from './greenhouse.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK = { red: 3, orange: 2, green: 1 };
 const worst = list => list.reduce((a, d) => (RANK[d] || 0) > (RANK[a] || 0) ? d : a, null);
-const DOT_WORD = { red: 'Severe, or a trap over the threshold', orange: 'A case open, or a trap on watch', green: 'Improving under treatment, or resolved recently' };
+const DOT_WORD = { red: 'Severe, or a trap over the limit', orange: 'A case open, or a trap on watch', green: 'Improving under treatment, or resolved recently' };
 const dotEl = d => { const s = el('span', 'dot' + (d ? ' ' + d : ' none')); if (d) s.title = DOT_WORD[d]; return s; };
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
@@ -75,6 +75,7 @@ const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digi
 let farm = null, mount = null, over = null, cases = null, dates = [], catalog = null;
 let aiReadyKnown = undefined;                            // from the last day read (scouting_day_light.ai_ready), for the trap map's viewer
 let cropFilter = null, zoneFilter = null, showClosed = false, moreDone = false;
+let datesFarm = null;                                    // the unit `dates` belongs to
 let tmap = null, kit = null, opinions = [], robot = null;
 let gh = null, ghFarm = null;                                                        // the whole greenhouse (0224–0225, greenhouse.js): a kit per unit, its panel on top of the page
 let extras = [], people = [], coverage = [];                                         // the unit's extra scoutings (0206): who, the day, the time, what each sent
@@ -198,6 +199,9 @@ function panelCall(dstr) {
 export async function renderScouting(container, currentFarm) {
   if (farm?.id !== currentFarm.id) {
     dayData.clear(); cropFilter = null;
+    // what was read beside the page belongs to the unit just left: its pills must not sit on this unit's days while
+    // the answers are on their way, nor its opened days open here (review 13 Oct 2026)
+    extras = []; people = []; coverage = []; openDays.clear();
     try { zoneFilter = localStorage.getItem('fbc_pd_zone_' + currentFarm.id) || null; } catch (e) { zoneFilter = null; }
   }
   farm = currentFarm; mount = container;
@@ -217,16 +221,23 @@ async function load(fresh = false) {
     ['robot_scouting', { ...a, p_days: 90 }],
   ], {
     show: ([o, c, d, cat, tm, op, rb]) => {
-      over = o; cases = c; dates = d; catalog = cat; tmap = tm; opinions = op || []; robot = rb || null;
+      over = o; cases = c; catalog = cat; tmap = tm; opinions = op || []; robot = rb || null;
+      // the days brought by "Show older reports" stay when the page is read again (review 13 Oct 2026: after a tag or a
+      // photo removed in an older report, that report left the page)
+      const tail = datesFarm === farm.id && d.length ? dates.filter(x => String(x.day) < String(d[d.length - 1].day)) : [];
+      dates = d.concat(tail); datesFarm = farm.id;
       kit = tmap ? trapKit({ farm, data: tmap, reload, catalog: () => catalog || [], aiReady: () => aiReadyKnown }) : null;
       useFarm(farm, catalog);
-      moreDone = dates.length < 21;
+      if (!tail.length) moreDone = d.length < 21;
       dayData.clear(); panelReads.clear(); pendings.clear(); dayRows.clear(); thumbsLive.clear(); thumbsKept.clear();
       // the whole greenhouse: the AI's report and the notes, read beside the page; its panel is the top of it (0.7.237)
       if (!gh || ghFarm !== farm.id) {
+        // the kit of the unit just left is let go first: it stops listening and painting (review 13 Oct 2026)
+        gh?.dispose?.();
         ghFarm = farm.id;
+        const mine = farm.id;
         gh = greenhouseKit({ farm, today: () => over?.today, scouted: () => (dates || []).map(d => d.day),
-                             relist: () => { if (mount && mount.isConnected) paint(); }, openRef: openGhRef });
+                             relist: () => { if (farm?.id === mine && mount && mount.isConnected) paint(); }, openRef: openGhRef });
       }
       paint();
       readExtras(here);
@@ -286,6 +297,7 @@ async function readExtras(here) {
   const landCov = x => {
     if (!Array.isArray(x) || !here.isConnected || mount !== here || JSON.stringify(x) === JSON.stringify(coverage)) return;
     coverage = x;
+    if (zoneFilter) return;          // one zone's report carries no pills of the whole unit (review 13 Oct 2026)
     mount.querySelectorAll('details.pd-day').forEach(det => {
       const f = det.querySelector('.pd-day-facts'); if (!f) return;
       const fresh = sectionPills(det.dataset.day, det._summary);
@@ -381,8 +393,8 @@ function paint() {
   removedBtn.title = 'The photos taken off the reports in the last 30 days; a manager can put one back';
   removedBtn.onclick = openRemoved;
   mount.append(pageHead('Scouting',
-    'The daily scouting by date, zone by zone: plant health first, with the trap curves and the zone\'s trap map, then the traps and the growth photos. ' +
-    'A dot says the worst thing inside: red severe or over the threshold, orange open or on watch, green improving or resolved.',
+    'The whole greenhouse first, then each scouting day by zone. ' +
+    'A dot marks the worst thing inside: red severe or over the limit, orange open or on watch, green improving or resolved.',
     scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(farm, reload), openBtn));
 
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
@@ -837,7 +849,7 @@ function removeX(p) {
     if (!ok) return;
     try {
       await rpc('remove_photo', { p_kind: trap ? 'trap' : 'observation', p_id: p.id, p_reason: null });
-      toast('Photo removed — Removed photos… puts it back');
+      toast('Photo removed — Removed photos… puts it back', 'ok');
       // the page stays as it is (0.7.204, owner 2 Oct 2026: "when we delete a pic the page has to stay open, the refresh
       // after deleting is too confusing"): only the photo leaves — its card, the day's kept answer, the counts on its zone
       const card = x.closest('.pd-trap, .sc-fig'), band = x.closest('.pd-zone-band');
@@ -885,7 +897,7 @@ async function openRemoved() {
         const b = el('button', 'btn btn-sm', 'Put back');
         b.onclick = async () => {
           busy(b, true, 'Putting back…');
-          try { await rpc('restore_photo', { p_id: x.id }); toast('Photo back in its report'); await paintList(); reload(); }
+          try { await rpc('restore_photo', { p_id: x.id }); toast('Photo back in its report', 'ok'); await paintList(); reload(); }
           catch (e) { busy(b, false, 'Put back'); toast(String(e.message || e).replace(/^\d+ /, ''), 'bad'); }
         };
         row.append(b);
@@ -1271,7 +1283,7 @@ function trapsBlock(z, day, traps) {
   const codes = [...new Set(traps.map(p => p.code))];
   const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
   const sum = el('summary');
-  sum.append(dotEl(worst(traps.map(p => p.dot))), el('b', null, 'Traps'),
+  sum.append(dotEl(worst(traps.map(p => p.dot))), el('b', null, 'Trap photos'),   // "Traps" is the map's fold just above
              el('span', 'hint', traps.length ? `${codes.length} trap${codes.length === 1 ? '' : 's'} · ${traps.length} photo${traps.length === 1 ? '' : 's'}` : 'none read that day'));
   if (toCheck) sum.append(el('span', 'pill warn', `${toCheck} to look at again`));
   det.append(sum);

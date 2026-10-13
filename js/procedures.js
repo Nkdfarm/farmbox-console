@@ -31,14 +31,16 @@ export async function renderProcedures(container, currentFarm, library = null) {
   await load();
 }
 
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108).
+// fresh, after an edit: the list stays as it is until the answer redraws it — it used to go blank behind a reading
+// bar and come back at its top (review 13 Oct 2026)
+async function load(fresh = false) {
   const here = mount;
   await openFast([['procedures', { p_farm: farm.id }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the procedures…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
+    stillHere: () => here.isConnected && mount === here, fresh,
   });
 }
 
@@ -67,8 +69,7 @@ function paint() {
   // the section's tab names the library; the page says what is in it
   mount.append(pageHead(lib && !showAll ? null : 'Every procedure',
     (lib && !showAll ? lib.blurb + ' ' : '') +
-    `${all.length} in force. Open one and press Edit to change it; a changed checklist ` +
-    'becomes a new approved version, and the phone runs that one from the next task.',
+    `${all.length} procedure${all.length === 1 ? '' : 's'}. Open one to read or edit it.`,
     search, widen));
 
   // Repeats: the same three choices as the editor, with how many of each
@@ -120,7 +121,7 @@ function paint() {
         return s; } },
   ], shown, {
     onRow: r => openProcedure(r),
-    empty: filter.q ? 'No procedure matches that.' : 'No procedure in this library yet.',
+    empty: filter.q || filter.family || repeats ? 'No procedure matches that.' : 'No procedure in this library yet.',
   }));
 }
 
@@ -208,7 +209,7 @@ async function openProcedure(row) {
     edit.onclick = () => {
       d.close();
       const cats = [...new Set((data?.procedures || []).map(x => x.category).filter(Boolean))].sort();
-      editProcedure(p, cats, load, data.procedures, farm);
+      editProcedure(p, cats, () => load(true), data.procedures, farm);
     };
     d.footer.append(edit);
   } else {

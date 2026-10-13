@@ -14,7 +14,8 @@ import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemType
 
 const CATEGORIES = [['leafy', 'Leafy'], ['mixed_leafy', 'Mixed leafy'], ['herbs', 'Herbs'],
                     ['microgreens', 'Microgreens'], ['fruiting_vines', 'Fruiting vines'], ['fruiting_bush', 'Fruiting bush']];
-const STATUS = [['approved', 'Approved'], ['draft', 'Draft'], ['archived', 'Archived']];
+// archiving is the row's "Archive…" (archive_crop: the date, the reason, its proposals taken off the planner) — not a status to pick here
+const STATUS = [['approved', 'Approved'], ['draft', 'Draft']];
 const SELL = [['kg', 'By the kg'], ['piece', 'Each'], ['bunch', 'Bunch'], ['punnet', 'Punnet']];
 const PHASES = [['germination', 'Germination'], ['nursery', 'Nursery'], ['transplant', 'Transplant'],
                 ['vegetative', 'Vegetative'], ['flowering', 'Flowering'],
@@ -135,7 +136,7 @@ export async function editCrop(c, onSaved, farm) {
   paintSysHint(c.media);
 
   d.body.append(
-    field('Picture', picBox, 'Shown on the Crop database like a face. A grouped task covers several crops, so the task cards carry none.'), pick,
+    field('Picture', picBox, 'Shown on the Crop library like a face. A grouped task covers several crops, so the task cards carry none.'), pick,
     grid('grid3', field('Name', name), field('Variety', variety), field('Category', category)),
     field('Medium', media), sysHint,
     grid('grid3', field('Sold by', sell), gramsF, field('Status', status)),

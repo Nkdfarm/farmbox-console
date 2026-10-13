@@ -23,6 +23,9 @@ let farm = null, data = null, mount = null;
 export async function renderDashboard(container, currentFarm) {
   farm = currentFarm; mount = container;
   cal.anchor = farmDate();          // the view is remembered, the period is not
+  // …and read where it is kept: the two-unit "Both" view runs a second copy of this module with its own `cal`, and
+  // Settings › "Crop calendar opens on" only reached the first (review 13 Oct 2026)
+  { const v = pref.get(CAL_KEY); if (VIEWS.some(x => x[0] === v)) cal.view = v; }
   await load();
 }
 
@@ -430,11 +433,14 @@ function totals(res, w) {
     t += r.transplants || 0;
     s += r.sowings || 0;
   });
-  if (!h && !t && !s) return 'nothing sown, transplanted or harvested';
+  // seedlings arriving from a nursery: the days carry no count of them, the events do
+  const n = (res.events || []).filter(x => x.kind === 'seedlings' && String(x.date).slice(0, 10) >= a && String(x.date).slice(0, 10) <= b).length;
+  if (!h && !t && !s && !n) return 'nothing sown, transplanted or harvested';
   const bits = [];
   if (h) bits.push(`${num(kg)} kg from ${h} harvest${h === 1 ? '' : 's'}`);
   if (t) bits.push(`${t} transplant${t === 1 ? '' : 's'}`);
   if (s) bits.push(`${s} sowing${s === 1 ? '' : 's'}`);
+  if (n) bits.push(`${n} seedling deliver${n === 1 ? 'y' : 'ies'}`);
   return bits.join(' · ');
 }
 
@@ -511,6 +517,8 @@ function monthView(res, w, parts) {
     if (info.harvests) cell.append(el('span', 'mc harvest', `${info.harvests} · ${num(info.harvest_kg)} kg`));
     if (info.transplants) cell.append(el('span', 'mc transplant', `${info.transplants} in`));
     if (info.sowings) cell.append(el('span', 'mc sow', `${info.sowings} sown`));
+    const nursery = (events.get(key) || []).filter(x => x.kind === 'seedlings').length;
+    if (nursery) cell.append(el('span', 'mc seedlings', `${nursery} seedlings in`));
     const names = (events.get(key) || []).map(x => `${x.crop} · ${eventDetail(x)}`);
     cell.title = [
       d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),

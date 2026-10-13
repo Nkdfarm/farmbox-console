@@ -144,7 +144,7 @@ function paint() {
       const ok = el('button', 'btn btn-sm btn-accent', `Validate ${selected.size ? 'selected ' + selected.size : proposed.length + ' on screen'}`);
       ok.title = 'Validates the proposals in the dates on screen. Choose a longer span (6 months, Year) to include the ones further ahead.';
       ok.onclick = () => validate(ok, selected.size ? [...selected] : proposed.map(b => b.id));
-      const no = el('button', 'btn btn-sm', selected.size ? `Remove selected ${selected.size}` : 'Discard proposals');
+      const no = el('button', 'btn btn-sm', selected.size ? `Remove selected ${selected.size}` : `Discard ${proposed.length} on screen`);
       no.onclick = () => discard(selected.size ? [...selected] : proposed.map(b => b.id));
       act.append(ok, no);
     } else if (selected.size) {
@@ -463,6 +463,17 @@ function dropTarget(track, sys, p, from, px) {
   });
 }
 
+// The click that ends a drag is not a click (review 13 Oct 2026). The browser sends it to whatever holds both the
+// place pressed and the place let go: a bar moved along its own row, or its edge pulled past the bar, ended with a
+// click on the row and "plan a batch here" opened over the move. The bar used to keep a flag for it instead; let go
+// anywhere but on the bar, the flag stayed up and swallowed the next real click on that bar. That click is sent in
+// the same turn as the pointerup, so the eater is taken off on the next tick whether a click came or not.
+function eatClick() {
+  const eat = e => { e.stopPropagation(); e.preventDefault(); };
+  document.addEventListener('click', eat, true);
+  setTimeout(() => document.removeEventListener('click', eat, true), 0);
+}
+
 // ── a bar under the pointer: click, Shift-click, or drag to move ─────────────
 function pressable(box, b, sys, p, from, px) {
   box.addEventListener('pointerdown', e => {
@@ -493,7 +504,7 @@ function pressable(box, b, sys, p, from, px) {
       document.removeEventListener('pointerup', up);
       box.classList.remove('dragging'); document.body.classList.remove('tl-dragging'); unmarkRows(); clearGhost();
       if (!moving) return;
-      box.dataset.dragged = '1';
+      eatClick();
       if (!target) return;
       if (target.prob) { toast(target.prob, 'bad'); return; }
       if (target.pos === b.position_id && ds(day) === b.transplant_date) return;
@@ -508,7 +519,6 @@ function pressable(box, b, sys, p, from, px) {
     document.addEventListener('pointerup', up);
   });
   box.addEventListener('click', e => {
-    if (box.dataset.dragged) { delete box.dataset.dragged; return; }
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       if (!data.may_plan || b.status === 'harvested' || b.status === 'active') return;
       selected.has(b.id) ? selected.delete(b.id) : selected.add(b.id);
@@ -540,7 +550,7 @@ function resizable(handle, box, b, px) {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
       tip.remove();
-      box.dataset.dragged = '1';
+      eatClick();
       if (!dd) { box.style.width = w0 + 'px'; return; }
       try {
         await rpc('resize_batch', { p_plan: b.id, p_harvest_end: ds(he0 + dd) });
@@ -1129,7 +1139,7 @@ function openSteadyOptions(ids, groupId) {
     timer = setTimeout(async () => {
       const my = ++seq;
       prev.replaceChildren(loading('Working out the rhythm…'));
-      try { const r = await rpc('steady_preview', args()); if (my === seq) drawSteadyPreview(prev, r); }
+      try { const r = await rpc('steady_preview', args(), { quiet: true }); if (my === seq) drawSteadyPreview(prev, r); }
       catch (e) { if (my === seq) prev.replaceChildren(el('div', 'note bad', e.message)); }
     }, 300);
   };
@@ -1138,7 +1148,7 @@ function openSteadyOptions(ids, groupId) {
     busy(sug, true, 'Trying the splits…');
     const my = ++seq;
     try {
-      const r = await rpc('steady_suggest', args());
+      const r = await rpc('steady_suggest', args(), { quiet: true });
       (r.suggested || []).forEach(s => { const row = rows.find(x => x.sys.id === s.system_id); if (row) row.pos.value = String(s.n); });
       if (my === seq) drawSteadyPreview(prev, r);
       busy(sug, false, 'Suggest positions');
@@ -1233,14 +1243,20 @@ function openCancelValidated() {
   const go = el('button', 'btn btn-danger', 'Cancel the batches');
   d.footer.append(cancel, el('div', 'spacer'), go);
 
-  let dry = null;
+  let dry = null, countSeq = 0;
   const sysOf = v => v === 'all' ? null : (data.systems || []).filter(x => x.steady_group_id === v).map(x => x.id);
   const groupsOf = v => v === 'all' ? groups : groups.filter(g => g.id === v);
   const count = async () => {
+    // only the answer for what is chosen now counts: the whole unit's count is the slow one, and when it came back
+    // after a group had been picked the button cancelled the whole unit (review 13 Oct 2026)
+    const my = ++countSeq;
+    dry = null;
     info.replaceChildren(loading('Counting…'));
     go.disabled = true;
     try {
-      dry = await rpc('cancel_validated', { p_farm: farm.id, p_systems: sysOf(scope.value), p_dry: true });
+      const r = await rpc('cancel_validated', { p_farm: farm.id, p_systems: sysOf(scope.value), p_dry: true }, { quiet: true });
+      if (my !== countSeq) return;
+      dry = r;
       const lines = el('ul', 'tl-clear-list');
       lines.append(el('li', null, `${dry.to_cancel} validated batch${dry.to_cancel === 1 ? '' : 'es'} — cancelled`));
       if (dry.kept_ordered) lines.append(el('li', null, `${dry.kept_ordered} with seedlings already ordered — kept`));
@@ -1252,7 +1268,7 @@ function openCancelValidated() {
       rl.style.display = gs.length ? '' : 'none';
       go.disabled = !dry.to_cancel && !(replan.checked && gs.length);
       go.textContent = dry.to_cancel ? `Cancel ${dry.to_cancel} batch${dry.to_cancel === 1 ? '' : 'es'}` : 'Plan the groups again';
-    } catch (e) { info.replaceChildren(el('div', 'note bad', e.message)); }
+    } catch (e) { if (my === countSeq) info.replaceChildren(el('div', 'note bad', e.message)); }
   };
   scope.onchange = count;
   replan.onchange = count;

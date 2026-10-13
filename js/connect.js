@@ -81,8 +81,7 @@ function paintFarmnet(mount, farm, d, hours) {
     seg.append(b);
   });
   const status = el('span', 'hint', d.devices ? `${d.devices} device${d.devices === 1 ? '' : 's'} · last data ${ago(d.last_seen_at)}` : '');
-  mount.append(pageHead(null, 'Climate, water, irrigation and slab readings from FarmNet and the sensors, zone by zone, judged against the limits. ' +
-    'Read only: the platform never changes a setpoint on FarmNet.', status, seg));
+  mount.append(pageHead(null, 'Readings from FarmNet and the sensors, zone by zone, against the limits. Read only.', status, seg));
 
   const latest = d.latest || [];
   if (!latest.length && !(d.irrigation || []).length) {
@@ -240,8 +239,7 @@ function paintHeatmap(mount, farm, d, back) {
     b.onclick = () => { pref.set('fbc_hm_span', String(n)); renderHeatmap(mount, farm); };
     seg.append(b);
   });
-  mount.append(pageHead(null, 'Where time goes, from the fixed cameras: minutes of people per area and hour, against the task minutes planned there. ' +
-    'Counts only — the cameras never say who (POPIA; staff are told the cameras count presence).', el('span', 'hint', d.cameras ? `${d.cameras} camera${d.cameras === 1 ? '' : 's'} · last ${ago(d.last_seen_at)}` : ''), seg));
+  mount.append(pageHead(null, 'Minutes of people per area and hour from the cameras, against the task minutes planned. Counts only, never who.', el('span', 'hint', d.cameras ? `${d.cameras} camera${d.cameras === 1 ? '' : 's'} · last ${ago(d.last_seen_at)}` : ''), seg));
   const areas = d.areas || [];
   if (!areas.length) { mount.append(notConnected('camera presence', 'the "presence" list: people minutes per area and 15-minute slot')); return; }
 
@@ -298,8 +296,7 @@ export async function renderGrowth(mount, farm) {
 }
 function paintGrowth(mount, farm, d) {
   mount.textContent = '';
-  mount.append(pageHead(null, 'What the fixed cameras see of each batch — stage, canopy, height, days to harvest and kg — against the plan. ' +
-    'An estimate is a proposal: Apply turns it into a phase observation that moves the batch\'s harvest and its tasks; Dismiss drops it.',
+  mount.append(pageHead(null, 'What the cameras see of each batch against the plan. Apply moves the batch\'s harvest and tasks; Dismiss drops it.',
     el('span', 'hint', d.cameras ? `${d.cameras} camera${d.cameras === 1 ? '' : 's'} · last ${ago(d.last_seen_at)}` : '')));
   const rows = d.latest || [];
   if (!rows.length) { mount.append(notConnected('growth estimates', 'the "growth" list, one estimate per position')); return; }
@@ -430,8 +427,7 @@ function paintDevices(mount, farm, d) {
   mount.textContent = '';
   const add = d.may_edit ? el('button', 'btn btn-primary', 'Add a device') : null;
   if (add) add.onclick = () => editDevice(mount, farm, d, null);
-  mount.append(pageHead(null, 'Everything that sends data: FarmNet and other controllers, sensors, gateways and fixed cameras. Each has its own key; ' +
-    'data only comes in — nothing here sends a command to a device.', add));
+  mount.append(pageHead(null, 'Everything that sends data, each with its own key. Nothing here sends a command to a device.', add));
 
   const card = el('div', 'card');
   const devs = d.devices || [];
@@ -521,14 +517,19 @@ function editDevice(mount, farm, d, v) {
   const area = selectBox([['', '—'], ...(d.areas || []).map(a => [a.id, a.name])], v?.area_id || '');
   const ext = el('input', 'input'); ext.value = v?.external_id || ''; ext.placeholder = 'the id FarmNet gives it';
   const notes = el('textarea', 'input'); notes.value = v?.notes || '';
+  // Save used to send "on" every time, so editing the name of a device that was switched off switched it on again
+  // and its key worked again (review 13 Oct 2026). The tick says which, and is the way to switch one back on.
+  const on = el('input'); on.type = 'checkbox'; on.checked = v ? v.active !== false : true;
+  const onL = el('label', 'row'); onL.append(on, el('span', null, 'Switched on'));
   dr.body.append(field('Kind', kind), field('Make', vendor), field('Name', name), field('Code', code, 'short, unique on this farm'),
                  field('Zone', zone), field('Bay', sys, 'for a camera looking at one bay'), field('Area', area, 'for a camera counting people in an area'),
                  field('External id', ext), field('Notes', notes));
+  if (v) dr.body.append(field('State', onL, 'Switched off: its key is refused and nothing it sends is kept.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = dr.close;
   if (v) {
-    const rm = el('button', 'btn btn-ghost tl-clear', 'Remove');
+    const rm = el('button', 'btn btn-danger', 'Remove');
     rm.onclick = async () => {
-      if (!await confirmDrawer(`Remove ${v.name}?`, 'A device that already sent data is switched off and keeps its history; its key stops working.', 'Remove')) return;
+      if (!await confirmDrawer(`Remove ${v.name}?`, 'A device that already sent data is switched off and keeps its history; its key stops working.', 'Remove', true)) return;
       try { const r = await rpc('remove_device', { p_device: v.id }); toast(r.removed ? 'Removed' : 'Switched off — its data stays', 'ok'); dr.close(); renderDevices(mount, farm); }
       catch (e) { toast(e.message, 'bad'); }
     };
@@ -539,7 +540,7 @@ function editDevice(mount, farm, d, v) {
     busy(go, true, 'Saving…');
     try {
       await rpc('save_device', { p_farm: farm.id, p: { id: v?.id || null, kind: kind.value, vendor: vendor.value, name: name.value, code: code.value,
-        zone_id: zone.value || null, system_id: sys.value || null, area_id: area.value || null, external_id: ext.value, notes: notes.value, active: true } });
+        zone_id: zone.value || null, system_id: sys.value || null, area_id: area.value || null, external_id: ext.value, notes: notes.value, active: v ? on.checked : true } });
       dr.close(); renderDevices(mount, farm);
     } catch (e) { busy(go, false, 'Save'); toast(e.message, 'bad'); }
   };
@@ -556,7 +557,7 @@ async function newKey(mount, farm, v) {
     const copy = el('button', 'btn btn-primary', 'Copy');
     copy.onclick = async () => { try { await navigator.clipboard.writeText(r.key); toast('Copied', 'ok'); } catch { toast('Select the key and copy it', ''); } };
     dr.body.append(box, el('p', 'hint', 'Send it in the X-Device-Key header of every POST to the ingest endpoint. Only its last four characters are kept in sight here.'));
-    const done = el('button', 'btn', 'Done'); done.onclick = () => dr.close();
+    const done = el('button', 'btn', 'Close'); done.onclick = () => dr.close();
     dr.footer.append(copy, el('div', 'spacer'), done);
   } catch (e) { toast(e.message, 'bad'); }
 }

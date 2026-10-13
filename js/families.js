@@ -40,7 +40,7 @@ export function familiesRow() {
   const paint = () => {
     const f = LIST.families.filter(x => x.active);
     const n = f.reduce((a, x) => a + (x.subfamilies || []).filter(s => s.active).length, 0);
-    sum.textContent = `${f.length} families · ${n} sub-families — what procedures, tasks and People are sorted by.`;
+    sum.textContent = `${f.length} families · ${n} sub-families — what procedures, tasks and the Team page are sorted by.`;
   };
   loadFamilies().then(paint);
   return r;

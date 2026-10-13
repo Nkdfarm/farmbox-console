@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
-         toast, busy, shortDate } from './ui.js';
+         toast, busy, shortDate, ymd, addDays, farmDate } from './ui.js';
 
 const TYPES = [['pump', 'Pump'], ['filter', 'Filter'], ['dosing_unit', 'Dosing unit'],
                ['fan', 'Fan'], ['light', 'Light'], ['tank', 'Tank'],
@@ -198,7 +198,7 @@ function editAsset(a) {
 let maintProcs = null, maintProcsFarm = null;   // the Maintenance procedures a routine may run, read once per farm
 async function editRule(asset, r) {
   const d = drawer((r ? 'Routine' : 'New routine') + ' on ' + asset.name, 'What has to be done, and how often');
-  if (!maintProcs || maintProcsFarm !== farm.id) {
+  if (!maintProcs?.length || maintProcsFarm !== farm.id) {
     maintProcsFarm = farm.id;
     try {
       const all = await rpc('procedures', { p_farm: farm.id });
@@ -252,8 +252,5 @@ async function editRule(asset, r) {
   d.footer.append(cancel, save);
 }
 
-function isoIn(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// counted from the farm's day, not the browser's
+function isoIn(days) { return ymd(addDays(farmDate(), days)); }

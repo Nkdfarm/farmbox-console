@@ -11,7 +11,7 @@
 // the cost structure. For the unit's Admin, the Farm manager and the office.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday, curSign, shortDate } from './ui.js';
 
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const PERIODS = [['month', 'This month'], ['quarter', 'Last 3 months'], ['year', 'This year'], ['12m', 'Last 12 months']];
@@ -43,7 +43,7 @@ async function load(fresh = false) {
     stillHere: () => here.isConnected && mount === here, fresh,
   });
 }
-const cur = () => data?.currency || 'ZAR';
+const cur = () => curSign({ currency: data?.currency || farm?.currency });   // "R", as on Orders and Customers
 const money = n => `${cur()} ${Math.round(Number(n || 0)).toLocaleString()}`;
 const perKg = n => n == null ? '—' : `${cur()} ${Number(n).toFixed(2)}`;
 const monthName = s => new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
@@ -59,8 +59,7 @@ function paint() {
   });
   const add = data.may_edit ? el('button', 'btn btn-primary', 'Add a cost') : null;
   if (add) add.onclick = () => editCost(null);
-  mount.append(pageHead(null, 'Profit and loss: what was delivered against what it cost — materials used, hours clocked, costs entered — and, per crop, ' +
-    'the cost and the price of a kilogram. Estimates until an accountant sets the cost structure.', seg, add));
+  mount.append(pageHead(null, 'Profit and loss, and the cost and price of a kilogram per crop. Estimates until an accountant sets the cost structure.', seg, add));
 
   const t = data.totals || {};
   const direct = Number(t.materials) + Number(t.labour) + Number(t.direct_entries);
@@ -159,7 +158,7 @@ function paint() {
       const tr = el('tr');
       const act = el('td');
       if (data.may_edit) { const b = el('button', 'btn btn-sm btn-ghost', 'Edit'); b.onclick = () => editCost(e); act.append(b); }
-      tr.append(el('td', null, String(e.day)), el('td', null, (CATS.find(c => c[0] === e.category) || [e.category, e.category])[1]), el('td', 'hint', e.kind),
+      tr.append(el('td', null, shortDate(e.day)), el('td', null, (CATS.find(c => c[0] === e.category) || [e.category, e.category])[1]), el('td', 'hint', e.kind),
                 el('td', null, [e.description, e.supplier, e.batch ? `batch ${e.batch}` : null].filter(Boolean).join(' · ') || '—'), el('td', 'num', money(e.amount)), act);
       b4.append(tr);
     });
@@ -181,9 +180,9 @@ function editCost(e) {
   d.body.append(g, g2, field('What', desc), field('Paid to', sup));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   if (e) {
-    const rm = el('button', 'btn btn-ghost tl-clear', 'Remove');
+    const rm = el('button', 'btn btn-danger', 'Remove');
     rm.onclick = async () => {
-      if (!await confirmDrawer('Remove this cost?', `${e.day} · ${money(e.amount)}`, 'Remove')) return;
+      if (!await confirmDrawer('Remove this cost?', `${shortDate(e.day)} · ${money(e.amount)}`, 'Remove', true)) return;
       try { await rpc('remove_cost', { p_id: e.id }); d.close(); load(true); } catch (x) { toast(x.message, 'bad'); }
     };
     d.footer.append(rm);
@@ -194,7 +193,11 @@ function editCost(e) {
     try {
       await rpc('save_cost', { p_farm: farm.id, p: { id: e?.id || null, day: day.value, category: cat.value, kind: kind.value, amount: amount.value,
         description: desc.value, supplier: sup.value, crop_plan_id: e?.crop_plan_id || null, zone_id: e?.zone_id || null } });   // an edit kept the zone it had
-      d.close(); load(true);
+      d.close();
+      // the list shows the period on screen only: a cost dated outside it is saved and not in sight (review 13 Oct 2026)
+      const r = moneyRange();
+      if (day.value && (day.value < r.p_from || day.value > r.p_to)) toast('Saved — its day is outside the period on screen', 'ok');
+      load(true);
     } catch (x) { busy(go, false, 'Save'); toast(x.message, 'bad'); }
   };
   d.footer.append(cancel, el('div', 'spacer'), go);

@@ -33,6 +33,7 @@ import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant } from './assistant.js';
+import { liveOpen } from './live.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
 import { openSettings, applyTheme, startPage } from './settings.js';
@@ -267,9 +268,11 @@ $('signinForm').addEventListener('submit', async e => {
 
 // the assistant's conversations stay with the person who had them (they may hold Money or People answers)
 function forgetConversations() {
-  forgetAssistant();
+  // the kept copies first: with the panel open, forgetAssistant() repaints at once and read the conversation just
+  // forgotten back from the storage — it stayed on screen for the next person (review 13 Oct 2026)
   try { Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_') && k !== 'fbc_ai_open').forEach(k => localStorage.removeItem(k)); }
   catch { /* storage off: nothing kept either */ }
+  forgetAssistant();
 }
 // the next person on this tab starts from nothing (review 3 Oct 2026): with `booted` still true from
 // the last person, a start that failed on the network was never retried and a reconnect drew the
@@ -277,6 +280,7 @@ function forgetConversations() {
 function resetState() {
   booted = false; farm = null; farms = []; choices = []; myRoles = []; setMyRoles([]);
   startError = null; startRetried = false; bootBar = null;
+  liveOpen(null);
   const pick = $('farmPick'); if (pick) pick.textContent = '';
 }
 function doSignOut() {
@@ -553,13 +557,17 @@ async function paintPestDot() {
   a.querySelector('.rail-dot')?.remove();
   if (d) {
     const s = el('span', 'rail-dot ' + d);
-    s.title = { red: 'A severe case, or a trap over the threshold', orange: 'A case open, or a trap on watch', green: 'Improving, or resolved recently' }[d];
+    s.title = { red: 'A severe case, or a trap over the limit', orange: 'A case open, or a trap on watch', green: 'Improving, or resolved recently' }[d];
     a.append(s);
   }
 }
 
 async function route() {
   setFarmTz(farm?.timezone);                 // every page's "today" is the farm's (ui.js farmToday)
+  // the site's live channel, on every page (review 13 Oct 2026): it used to open only once the Tasks board had been
+  // drawn, so a change made on Team or the Crop planner before that told no phone, and after a switch of FarmBox the
+  // console went on speaking on the channel of the site it had left
+  liveOpen(booted && farm ? farm.id : null);
   paintPestDot();
   const { sec, tab } = currentRoute();
   const wanted = `#/${sec}/${tab[0]}`;
@@ -654,8 +662,6 @@ async function startOnce() {
     await Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
-    const v = document.getElementById('version');
-    if (v) v.textContent = 'v' + VERSION;
     const tv = document.getElementById('topVersion');
     if (tv) tv.textContent = 'v' + VERSION;
     bootBar.set(55, 'Reading your FarmBoxes…');
@@ -677,7 +683,9 @@ async function startOnce() {
     // form, not sit in an empty shell with a red toast.
     // A request that never reached the server is a lost signal, not a dead
     // session, and must not throw away a good one.
-    if (err.status >= 400 && err.status < 500) {
+    // …and only those two: a 400, 404 or 409 from one of the reads above is a fault to show, not a session to throw
+    // away (review 13 Oct 2026). A refresh the server refused arrives here as a 401 (api.js doRefresh).
+    if (err.status === 401 || err.status === 403) {
       signOut();
       showSignin(err.status === 403
         ? 'That account no longer exists. Sign in again.'

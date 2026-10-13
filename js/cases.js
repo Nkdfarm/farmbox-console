@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -192,7 +192,10 @@ function programCard(p, det, changed) {
     const edit = el('button', 'btn btn-sm', 'Change…'); edit.onclick = () => programForm(det, p, changed);
     if (fromLibrary) edit.hidden = true;   // the hand-typed form would rewrite a library program's applications
     const stop = el('button', 'btn btn-sm btn-ghost', 'Stop');
-    stop.onclick = async () => { busy(stop, true, '…'); try { await rpc('stop_program', { p_program: p.id }); toast('Stopped — the applications not done are gone', 'ok'); changed(); } catch (e) { busy(stop, false, 'Stop'); toast(e.message, 'bad'); } };
+    // asked first (review 13 Oct 2026): one press took the applications still to come, and their tasks, off the plan
+    stop.onclick = async () => {
+      if (!await confirmDrawer('Stop this program?', 'The applications not done yet are removed, with their tasks. What was applied stays on the calendar.', 'Stop the program', true)) return;
+      busy(stop, true, '…'); try { await rpc('stop_program', { p_program: p.id }); toast('Stopped — the applications not done are gone', 'ok'); changed(); } catch (e) { busy(stop, false, 'Stop'); toast(e.message, 'bad'); } };
     acts.append(edit, stop);
     card.append(acts);
   }

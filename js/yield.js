@@ -40,8 +40,7 @@ function paint(mount, farm, d) {
     b.onclick = () => { pref.set('fbc_yield_period', v); renderYield(mount, farm); };
     seg.append(b);
   });
-  mount.append(pageHead(null, 'What was harvested against what the plan expected, week by week, per crop and per zone — with the waste, the kilograms per m² ' +
-    'of the batches that finished, and those batches from best to worst.', seg));
+  mount.append(pageHead(null, 'Harvested against the plan, up to today.', seg));
   const t = d.totals || {};
   const tiles = el('div', 'tiles yd-tiles');
   const tile = (v, l, s, tone) => { const x = el('div', 'tile' + (tone ? ' ' + tone : '')); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); x.append(b); return x; };

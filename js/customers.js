@@ -40,10 +40,12 @@ function paint() {
   if (add) add.onclick = () => editCustomer(null);
   const inact = el('button', 'btn btn-sm btn-ghost', showInactive ? 'Hide the inactive' : 'Show the inactive');
   inact.onclick = () => { showInactive = !showInactive; load(true); };
-  mount.append(pageHead(null, 'Who the farm sells to: direct clients with a basket subscription, super users who sell to their own circle, restaurants, ' +
-    'retailers, communities and market agents. One book for sister units; orders pick their customer from it.', inact, add));
+  mount.append(pageHead(null, 'Who the farm sells to — one book for sister units; orders pick their customer from it.', inact, add));
 
   const all = data.customers || [];
+  // the kind chosen on another farm, or before its last customer went: its chip is not drawn here, so the list was empty
+  // with no chip lit (review 13 Oct 2026). The choice itself is kept for the farm that has that kind.
+  if (kindFilter && !all.some(c => c.kind === kindFilter)) kindFilter = '';
   const sub = data.subscriptions || {};
   const tiles = el('div', 'tiles cu-tiles');
   const tile = (v, l, s) => { const t = el('div', 'tile'); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); t.append(b); return t; };

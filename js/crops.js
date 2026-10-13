@@ -7,7 +7,8 @@
 // does any task exist.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
-import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref } from './ui.js';
+import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref,
+         parseYmd, farmDate } from './ui.js';
 import { renderTimeline } from './timeline.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
@@ -17,7 +18,8 @@ const fmt = d => d ? new Date(d + 'T00:00:00')
   .toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
 const money = (n, cur) => n == null ? '—'
   : `${cur} ${Math.round(Number(n)).toLocaleString()}`;
-const daysTo = d => d ? Math.round((new Date(d + 'T00:00:00') - new Date().setHours(0,0,0,0)) / 86400000) : null;
+// from the farm's day, not this computer's midnight (review 13 Oct 2026)
+const daysTo = d => d ? Math.round((parseYmd(d) - farmDate()) / 86400000) : null;
 
 // Timeline (0.7.113, the default) or the tile map of before.
 // The planner's top bar is one frame for both (0.7.120): the view's own controls on its left,
@@ -67,16 +69,20 @@ export async function renderCrops(container, currentFarm) {
   await showView();
 }
 
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108).
+// fresh, after a change: the map stays as it is until the answer redraws it — it used to go blank behind a reading
+// bar and come back at its top (review 13 Oct 2026)
+async function load(fresh = false) {
   const here = mount;
   await openFast([['crop_map', { p_farm: farm.id }]], {
     show: ([d]) => { map = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Drawing the farm…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
     stillHere: () => here.isConnected && mount === here && view() === 'map',   // not after a switch to the Timeline
+    fresh,
   });
 }
+const reload = () => load(true);
 
 const allBatches = () => (map.systems || [])
   .flatMap(s => (s.positions || []).flatMap(p => (p.batches || []).map(b => ({ ...b, pos: p, sys: s }))));
@@ -179,7 +185,7 @@ function proposalCard(proposed, cur, may) {
         + `growing or validated is touched.`, 'Discard', true)) return;
       try {
         await rpcInChunks('cancel_crop_plan', proposed.map(b => b.id));
-        toast('Proposal discarded', 'ok'); await load();
+        toast('Proposal discarded', 'ok'); await reload();
       } catch (e) { toast(e.message, 'bad'); }
     };
     const ok = el('button', 'btn btn-primary', 'Validate all ' + proposed.length);
@@ -189,8 +195,8 @@ function proposalCard(proposed, cur, may) {
         const r = mergeValidated(await rpcInChunks('validate_crop_plan', proposed.map(b => b.id), 'p_ids', 100,
           (n, all) => { if (all > 100) busy(ok, true, `Validating ${n} of ${all}…`); }));
         toast(`${r.validated} batches, ${r.tasks_created} tasks created`, 'ok');
-        await load();
-      } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); load(); }
+        await reload();
+      } catch (e) { busy(ok, false, 'Validate'); toast(e.message, 'bad'); reload(); }
     };
     row.append(drop, el('div', 'spacer', ''), ok);
     card.append(row);
@@ -301,7 +307,7 @@ function openPosition(p, s, cur) {
           toast(other === 'external'
             ? (r.order_by ? `Seedlings to order by ${fmt(r.order_by)}${r.late ? ' — late' : ''} · delivery ${fmt(r.delivery)}` : 'External nursery')
             : 'Sown in our nursery', r.late ? 'bad' : 'ok');
-          await load();
+          await reload();
         } catch (e) { busy(sw, false, sw.textContent); toast(e.message, 'bad'); }
       };
       const r = el('div', 'set-row'); r.append(el('span'), sw); facts.append(r);
@@ -317,7 +323,7 @@ function openPosition(p, s, cur) {
         busy(go, true, 'Saving…');
         try {
           const r = await rpc('set_batch_dates', { p_plan: b.id, p_transplant: when.value });
-          d.close(); toast(`Dated · harvest from ${fmt(r.harvest_start)} · ${r.tasks} tasks`, 'ok'); await load();
+          d.close(); toast(`Dated · harvest from ${fmt(r.harvest_start)} · ${r.tasks} tasks`, 'ok'); await reload();
         } catch (e) { busy(go, false, 'Set dates'); toast(e.message, 'bad'); }
       };
       const r = el('div', 'set-row'); r.append(el('span', null, 'Transplanted on'));
@@ -357,7 +363,7 @@ function openPosition(p, s, cur) {
                                                  p_transplant: when.value || null });
           if (nurs.value() && r?.id && r.nursery !== nurs.value())
             await rpc('set_batch_nursery', { p_plan: r.id, p_nursery: nurs.value() });
-          d.close(); toast('Proposed', 'ok'); await load();
+          d.close(); toast('Proposed', 'ok'); await reload();
         } catch (e) { busy(go, false, 'Propose it'); toast(e.message, 'bad'); }
       };
       d.body.append(go);
@@ -375,7 +381,7 @@ function openPosition(p, s, cur) {
         d.close();
         try {
           await rpc('cancel_crop_plan', { p_ids: cancellable.map(b => b.id) });
-          toast('Removed', 'ok'); await load();
+          toast('Removed', 'ok'); await reload();
         } catch (e) { toast(e.message, 'bad'); }
       };
       d.footer.append(rm);
@@ -399,6 +405,6 @@ async function propose(button, scope, label) {
           : r.nothing_fits ? `${r.nothing_fits} free, but no approved crop fits ${r.scope}`
           : `Nothing to plan — ${r.scope} is full past the horizon`,
           r.proposed ? 'ok' : r.nothing_fits ? 'bad' : '');
-    await load();
+    await reload();
   } catch (e) { busy(button, false, back); toast(e.message, 'bad'); }
 }

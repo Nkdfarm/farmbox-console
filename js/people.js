@@ -41,7 +41,8 @@ let afterSave = async () => {};
 
 // The Team page (Tasks › Team, 0.7.222) is where the people are listed; it opens these windows and hands over
 // the farm, the people and what to do after a change. What somebody is responsible for is set there, not here.
-const take = ctx => { farm = ctx.farm; people = ctx.people || []; afterSave = ctx.done || (async () => {}); };
+let me = null;       // the worker row of whoever is signed in, when the page knows it
+const take = ctx => { farm = ctx.farm; people = ctx.people || []; afterSave = ctx.done || (async () => {}); me = ctx.me || null; };
 export function editPerson(ctx, p) { take(ctx); openPerson(p); }
 export function personActions(ctx, p) { take(ctx); openActions(p); }
 
@@ -134,7 +135,7 @@ function openPerson(p) {
     field('LinkedIn profile link', linkedin),
     photo.node,
     slots,
-    (() => { const f = field('Role', role); f.append(roleHint); return f; })(),
+    (() => { const f = field('Job', role); f.append(roleHint); return f; })(),
     (() => {
       const g = el('div', 'grid2');
       g.append(field('E-mail', email), field('Phone', phone));
@@ -158,7 +159,7 @@ function openPerson(p) {
 
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
-  const save = el('button', 'btn btn-primary', isNew ? 'Add person' : 'Save changes');
+  const save = el('button', 'btn btn-primary', isNew ? 'Add person' : 'Save');
   save.onclick = async () => {
     const body = {
       farm_id: farm.id,
@@ -173,6 +174,8 @@ function openPerson(p) {
       working_days: [...chosen].sort((a, b) => a - b),
       hours_per_day: Number(hours.value) || 8,
       employment: employment.value,
+      // as they are: without it the database reads "active" and somebody switched off came back on at any edit (review 13 Oct 2026)
+      active: p?.active ?? true,
     };
     if (!body.name) { toast('A name is needed', 'bad'); name.focus(); return; }
     if (!body.working_days.length) { toast('Pick at least one working day', 'bad'); return; }
@@ -186,6 +189,15 @@ function openPerson(p) {
       toast('The password needs at least 10 characters', 'bad'); pw.focus(); return;
     }
 
+    // the address somebody signs in with belongs to their account: this form cannot change it, and used to say "Saved"
+    if (!isNew && p.has_login && (body.email || '') !== (p.email || '')) {
+      email.value = p.email || '';
+      // not "remove the login and give a new one": for somebody who has worked that deletes the account their name is
+      // read through (0231)
+      toast('The sign-in address cannot be changed here. Only for somebody who has not worked yet: ⋯ › Remove the login, then give a new one. For anybody else, leave it: removing the login takes their name off the work they did', 'bad');
+      return;
+    }
+
     busy(save, true, isNew ? 'Adding…' : 'Saving…');
     try {
       if (wantsAccount && (isNew || !p.has_login)) {
@@ -193,7 +205,8 @@ function openPerson(p) {
         const made = await fn('admin-user', { action: 'create', ...body, password: pw.value.trim() });
         // admin-user writes the account and the roster row; the profile
         // (surname, LinkedIn, picture) goes through save_person like any edit.
-        await rpc('save_person', { p: { ...body, worker_id: made.worker_id } });
+        // a login given to somebody switched off brings them back, as admin-user just did: the profile must not undo it
+        await rpc('save_person', { p: { ...body, active: true, worker_id: made.worker_id } });
       } else {
         await rpc('save_person', { p: body });
         if (wantsAccount) {
@@ -205,7 +218,7 @@ function openPerson(p) {
       toast(isNew ? `${body.name} added` : 'Saved', 'ok');
       await afterSave();
     } catch (e) {
-      busy(save, false, isNew ? 'Add person' : 'Save changes');
+      busy(save, false, isNew ? 'Add person' : 'Save');
       toast(e.message, 'bad');
     }
   };
@@ -331,8 +344,10 @@ async function shrink(blob) {
 
 // ── the row menu ───────────────────────────────────────────────────────────
 function openActions(p) {
-  const d = drawer(p.name, roleLabel(p.role) + (p.active ? '' : ' · inactive'));
+  const d = drawer(p.name, roleLabel(p.role) + (p.active ? '' : ' · switched off'));
   const list = el('div', 'resp');
+  // your own line: you could ban or delete your own account and be locked out with nobody told (review 13 Oct 2026)
+  const self = !!me && p.worker_id === me;
 
   const item = (label, hint, cls, run) => {
     const b = el('button', 'btn ' + (cls || ''), label);
@@ -349,7 +364,7 @@ function openActions(p) {
       d.close();
       await resetPassword(p);
     });
-    item('Remove the login', 'Keeps them on the roster and in the history; they can no longer sign in.',
+    if (!self) item('Remove the login', 'Keeps them on the roster and in the history; they can no longer sign in.',
          '', async () => {
       d.close();
       if (!await confirmDrawer('Remove the login?',
@@ -363,14 +378,16 @@ function openActions(p) {
     });
   }
 
-  if (p.active) {
-    item('Make inactive', 'They keep their history but drop out of next week’s plan.', 'btn-danger',
+  if (p.active && self) {
+    list.append(el('div', 'note', 'This is you: another admin switches you off or removes you.'));
+  } else if (p.active) {
+    item('Switch off', 'For somebody away for a while: they keep their history, drop out of the plan and cannot sign in. Bring back undoes it.', 'btn-danger',
       async () => {
         d.close();
-        if (!await confirmDrawer('Make inactive?',
+        if (!await confirmDrawer('Switch off?',
           `${p.name} will not appear in the labour plan and cannot sign in. ` +
-          `Everything they have done stays.`, 'Make inactive', true)) return;
-        await act({ action: 'disable', worker_id: p.worker_id }, `${p.name} is now inactive`);
+          `Everything they have done stays.`, 'Switch off', true)) return;
+        await act({ action: 'disable', worker_id: p.worker_id }, `${p.name} is switched off`);
       });
   } else {
     item('Bring back', 'They return to the roster and can sign in again.', '', async () => {
@@ -382,13 +399,13 @@ function openActions(p) {
   if (p.open_tasks) {
     list.append(el('div', 'note',
       `${p.open_tasks} open task${p.open_tasks === 1 ? '' : 's'} are assigned to ${p.name}. ` +
-      `Making them inactive leaves those tasks for the next plan to reassign.`));
+      `Switching them off leaves those tasks for the next plan to reassign.`));
   }
 
   // Out of the team for good (0.7.246, FarmBox 0230; owner 12 Oct 2026: "add the possibility to remove a user from the
   // team"). What it does depends on what the person has on record, so that is asked first and said before anything
   // happens: somebody who never worked is erased; somebody who did is switched off, and what they did keeps their name.
-  item('Remove from the team', 'For somebody who has left, or was added by mistake.', 'btn-danger', async () => {
+  if (!self) item('Remove from the team', 'For somebody who has left, or was added by mistake.', 'btn-danger', async () => {
     d.close();
     let h;
     try { h = await rpc('person_history', { p_worker: p.worker_id }); }

@@ -56,7 +56,7 @@ async function load(fresh = false) {
 }
 const reload = () => { preview = null; return load(true); };
 // what the profile window needs from this page
-const ctx = () => ({ farm, people, team: true, done: reload });
+const ctx = () => ({ farm, people, team: true, done: reload, me: T?.me });
 const profile = id => people.find(x => x.worker_id === id);
 
 // family_tree is one row per family / sub-family pair
@@ -71,7 +71,9 @@ function families() {
 
 // a family nobody is responsible for (the family as a whole, or each of its sub-families)
 function gaps() {
-  const held = new Set((T.keys || []).filter(k => (k.order || []).length).map(k => k.family + '|' + (k.category || '')));
+  // somebody off the task pages is never given the work (0229): a family only they hold is nobody's
+  const off = new Set((T.people || []).filter(p => p.off_tasks).map(p => p.worker_id));
+  const held = new Set((T.keys || []).filter(k => (k.order || []).some(o => !off.has(o.worker_id))).map(k => k.family + '|' + (k.category || '')));
   const out = [];
   for (const f of families()) {
     if (held.has(f.name + '|')) continue;
@@ -106,8 +108,7 @@ function paint() {
   const jobs = may ? el('button', 'btn', 'Jobs…') : null;
   if (jobs) jobs.onclick = openJobs;
   mount.append(pageHead(null,
-    may ? 'The people, what each is responsible for, and who comes first. For every family the people are numbered: ' +
-          'the plan gives the work to number 1 until their day is full, then to number 2. Click a label to change its number.'
+    may ? 'Who is responsible for what, in order: the plan gives work to number 1 until their day is full, then to number 2. Click a label to renumber.'
         : 'What you are responsible for, and your place for each kind of work.',
     seg, jobs, add));
 
@@ -553,7 +554,7 @@ function openGlobal(p, n) {
 
 // ── a replacement ───────────────────────────────────────────────────────────
 function openReplace(p) {
-  const others = (T.people || []).filter(x => x.active && x.worker_id !== p.worker_id);
+  const others = (T.people || []).filter(x => x.active && !x.off_tasks && x.worker_id !== p.worker_id);
   const d = drawer(`Replace ${p.name}`, 'Somebody else takes over everything they are responsible for, at the same numbers');
   if (!others.length) {
     d.body.append(el('div', 'note', 'There is nobody else on the team yet. Add the new person first (＋ Add person), then come back.'));
@@ -581,7 +582,7 @@ function openReplace(p) {
     note,
     el('div', 'sec-title team-sec', `What ${first(p.name)} holds`), what,
     el('div', 'sec-title team-sec', 'Their tasks'), trow, field('From', from, 'A task already started, or with a report, stays with the person who has it.'),
-    el('div', 'hint team-hint', `${p.name} stays on the team until you switch them off (⋯ › Make inactive).`));
+    el('div', 'hint team-hint', `${p.name} stays on the team until you switch them off (⋯ › Switch off).`));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Replace');
   go.onclick = async () => {
@@ -653,7 +654,7 @@ function openJobs() {
     d.body.append(b);
   });
   d.body.append(el('div', 'hint team-hint',
-    'Across jobs the order is: Farm manager, Farm assistant, Agronomist, Technician, Worker, Office, Admin — then the place in the job. A number set by hand on a label wins over both.'));
+    'Across jobs the order is: Farm manager, Farm assistant, Agronomist, Technician, Worker, Student, Office, Admin — then the place in the job. A number set by hand on a label wins over both.'));
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;
   d.footer.append(close);
 }
@@ -730,7 +731,7 @@ function planCard() {
   const tryb = el('button', 'btn', preview ? 'Preview again' : 'Preview the plan');
   tryb.onclick = async () => {
     busy(tryb, true, 'Trying…');
-    try { preview = await rpc('team_preview', { p_farm: farm.id, ...r }); paint(); }
+    try { preview = await rpc('team_preview', { p_farm: farm.id, ...r }, { quiet: true }); paint(); }
     catch (e) { busy(tryb, false); toast(e.message, 'bad'); }
   };
   row.append(tryb);

@@ -13,7 +13,7 @@
 // Since 0.7.224 (0218) a file can also be deleted for good — from storage, after a confirmation.
 // ═════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, confirmDrawer } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer, farmToday } from './ui.js';
 
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
@@ -32,7 +32,7 @@ async function signAll(paths, farmId) {
   const out = new Map();
   if (!paths.length) return out;
   try {
-    const res = await api('/storage/v1/object/sign/evidence', { method: 'POST', body: JSON.stringify({ expiresIn: 3600, paths }) });
+    const res = await api('/storage/v1/object/sign/evidence', { method: 'POST', body: JSON.stringify({ expiresIn: 3600, paths }), quiet: true });
     (res || []).forEach(x => { if (x?.signedURL && x.path) out.set(x.path, URL_BASE + '/storage/v1' + x.signedURL); });
   } catch { /* the rows say "no preview" */ }
   return out;
@@ -64,13 +64,25 @@ const select = (options, value) => {
   return s;
 };
 
-// the button for the page's head: it counts by itself, and opens the window
+// the button for the page's head: it counts by itself, and opens the window.
+// The page is drawn again many times a minute (a filter, a fresh answer) and makes a new button each time: the count
+// is kept a unit, asked once a minute at most or after a change in the window, and written on the button that is on
+// the page (review 13 Oct 2026: every draw sent its own read, and each button started without its number).
+const counted = new Map();          // farm id → { n, at, timer, off, show }
 export function unfiledButton(farm, onChange) {
   const b = el('button', 'btn', 'Unfiled photos…');
   b.title = 'Scouting photos that reached storage without a report (a phone closed, a task cancelled) and plant photos without a zone: file them by hand or discard them';
-  const count = n => { b.textContent = n > 0 ? `Unfiled photos (${n})…` : 'Unfiled photos…'; b.classList.toggle('btn-accent', n > 0); };
-  const recount = () => rpc('unfiled_photos', { p_farm: farm.id }).then(r => { if (b.isConnected) count(Number(r?.count) || 0); }).catch(() => { b.hidden = true; });
-  setTimeout(recount, 1500);                 // beside the page, never in its way; a database before 0217 has no button
+  const st = counted.get(farm.id) || counted.set(farm.id, { n: 0, at: 0, timer: null, off: false, show: null }).get(farm.id);
+  st.show = () => {
+    b.hidden = st.off;
+    b.textContent = st.n > 0 ? `Unfiled photos (${st.n})…` : 'Unfiled photos…'; b.classList.toggle('btn-accent', st.n > 0);
+  };
+  st.show();
+  const recount = () => rpc('unfiled_photos', { p_farm: farm.id })
+    .then(r => { st.n = Number(r?.count) || 0; st.at = Date.now(); st.off = false; st.show(); })
+    .catch(() => { st.off = true; st.show(); });
+  // beside the page, never in its way; a database before 0217 has no button
+  if (!st.timer && Date.now() - st.at > 60000) st.timer = setTimeout(() => { st.timer = null; recount(); }, 1500);
   b.onclick = () => openUnfiled(farm, () => { recount(); onChange?.(); });
   return b;
 }
@@ -95,18 +107,27 @@ function openUnfiled(farm, onChange) {
       'Filing puts it in the report of the day and zone you choose. Discarding only takes it off this list; Delete removes the file for good.'));
     if (!r.may_file) d.body.append(el('div', 'hint', 'A manager or the agronomist files or discards a photo.'));
 
-    const live = files.filter(f => !f.discarded), plant = live.filter(f => f.kind === 'scout');
+    const live = files.filter(f => !f.discarded);
+    // The buttons for all leave alone a photo whose task is still open: somebody may be scouting now, and the report
+    // then brings the photo by itself — deleted, it would be missing from that report; filed, it would be there under
+    // another zone (review 13 Oct 2026). Such a photo keeps its own File and Delete… on its row. Only while the task's
+    // day is not over: a task never finished stays open for ever, and its photos are the ones this window is for.
+    const today = farmToday();
+    const stillOpen = f => !!f.waiting && (!f.task_day || String(f.task_day).slice(0, 10) >= today);
+    const sure = live.filter(f => !stillOpen(f)), plant = sure.filter(f => f.kind === 'scout'), held = live.length - sure.length;
+    const heldText = held ? `${held} left out: ${held === 1 ? 'its' : 'their'} task is still open` : '';
     // ── for all: one zone and section, then every plant photo of the list ──
-    if (r.may_file && live.length > 1) {
+    if (r.may_file && sure.length > 1) {
       const bar = el('div', 'uf-all');
       bar.append(el('b', null, 'All at once'));
-      const delAll = el('button', 'btn btn-sm btn-danger', `Delete all ${live.length}…`);
+      const delAll = el('button', 'btn btn-sm btn-danger', `Delete all ${sure.length}…`);
       delAll.onclick = async () => {
-        if (!await confirmDrawer('Delete these photos?', `${live.length} photos that are in no report will be deleted from storage for good. This cannot be undone.`, `Delete ${live.length} photos`, true)) return;
+        if (!await confirmDrawer('Delete these photos?', `${sure.length} photos that are in no report will be deleted from storage for good. This cannot be undone.`
+          + (held ? ` ${held === 1 ? 'One photo is' : held + ' photos are'} left out: ${held === 1 ? 'its' : 'their'} task is still open.` : ''), `Delete ${sure.length} photos`, true)) return;
         busy(delAll, true, 'Deleting…');
         let ok = 0, bad = 0;
-        for (const f of live) { try { await deleteFile(farm, f.path); ok++; } catch { bad++; } }
-        toast(`${ok} photo${ok === 1 ? '' : 's'} deleted${bad ? ` · ${bad} could not be` : ''}`, bad ? 'bad' : undefined);
+        for (const f of sure) { try { await deleteFile(farm, f.path); ok++; } catch { bad++; } }
+        toast([`${ok} photo${ok === 1 ? '' : 's'} deleted`, bad ? `${bad} could not be` : null, heldText || null].filter(Boolean).join(' · '), bad ? 'bad' : 'ok');
         done(); await paintList();
       };
       if (plant.length > 1) {
@@ -123,13 +144,16 @@ function openUnfiled(farm, onChange) {
             ok++;
           } catch { bad++; }
         }
-        toast(`${ok} photo${ok === 1 ? '' : 's'} filed${bad ? ` · ${bad} could not be` : ''}`, bad ? 'bad' : undefined);
+        toast([`${ok} photo${ok === 1 ? '' : 's'} filed`, bad ? `${bad} could not be` : null, heldText || null].filter(Boolean).join(' · '), bad ? 'bad' : 'ok');
         done(); await paintList();
       };
       bar.append(z, s, go);
       }
       bar.append(delAll);
+      if (held) bar.append(el('span', 'hint', heldText));
       d.body.append(bar);
+    } else if (r.may_file && live.length > 1 && held) {
+      d.body.append(el('div', 'hint', `No "All at once" here: ${held} of the ${live.length} photos ${held === 1 ? 'belongs' : 'belong'} to a task that is still open.`));
     }
 
     // ── files with no record ──
@@ -161,7 +185,7 @@ function openUnfiled(farm, onChange) {
             busy(go, true, 'Filing…');
             try {
               const a = await rpc('file_photo', { p: { farm_id: farm.id, path: f.path, unit_id: z.value, section: s.value, day: day.value, photo_data: await smallCopy(url) } });
-              toast(`Filed in ${a.zone} · ${shortDay(a.day)}`);
+              toast(`Filed in ${a.zone} · ${shortDay(a.day)}`, 'ok');
               done(); await paintList();
             } catch (e) { busy(go, false, 'File'); toast(errText(e), 'bad'); }
           };
@@ -190,7 +214,7 @@ function openUnfiled(farm, onChange) {
         del.onclick = async () => {
           if (!await confirmDrawer('Delete this photo?', 'The file will be deleted from storage for good. This cannot be undone.', 'Delete', true)) return;
           busy(del, true, '…');
-          try { await deleteFile(farm, f.path); toast('Photo deleted'); done(); await paintList(); }
+          try { await deleteFile(farm, f.path); toast('Photo deleted', 'ok'); done(); await paintList(); }
           catch (e) { busy(del, false, 'Delete…'); toast(errText(e), 'bad'); }
         };
         acts.append(del);
@@ -218,7 +242,7 @@ function openUnfiled(farm, onChange) {
           go.onclick = async () => {
             if (!z.value) { toast('Choose the zone', 'bad'); return; }
             busy(go, true, '…');
-            try { const a = await rpc('place_photo', { p_id: o.id, p_unit: z.value }); toast(`Now in ${a.zone} · ${shortDay(a.day)}`); done(); await paintList(); }
+            try { const a = await rpc('place_photo', { p_id: o.id, p_unit: z.value }); toast(`Now in ${a.zone} · ${shortDay(a.day)}`, 'ok'); done(); await paintList(); }
             catch (e) { busy(go, false, 'Set the zone'); toast(errText(e), 'bad'); }
           };
           const no = el('button', 'btn btn-sm', 'Remove');

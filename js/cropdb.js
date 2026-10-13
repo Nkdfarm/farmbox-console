@@ -36,16 +36,19 @@ export async function renderCropDb(container, currentFarm) {
   await load();
 }
 
-// last time's copy at once, the server's answer behind it (openFast, 0.7.108)
-async function load() {
+// last time's copy at once, the server's answer behind it (openFast, 0.7.108).
+// fresh, after a save: the list stays as it is until the answer redraws it — it used to go blank behind a reading
+// bar and come back at its top, the crop just changed out of sight (review 13 Oct 2026)
+async function load(fresh = false) {
   const here = mount;
   await openFast([['crop_library', { p_farm: farm.id }]], {
     show: ([d]) => { data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the crop library…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
-    stillHere: () => here.isConnected && mount === here,
+    stillHere: () => here.isConnected && mount === here, fresh,
   });
 }
+const reload = () => load(true);
 
 async function procedureList() {
   if (procs) return procs;
@@ -80,20 +83,19 @@ function paint() {
   if (plan) plan.onclick = () => openPlan(null);
 
   const archived = data.archived || [];
-  const arch = el('button', 'btn', `Archive${archived.length ? ` (${archived.length})` : ''}`);
+  const arch = el('button', 'btn', `Archived${archived.length ? ` (${archived.length})` : ''}`);   // a list to open, not something that archives
   arch.title = 'Crops taken out of the library. They keep their history and can come back.';
   arch.onclick = () => openArchive();
 
   mount.append(pageHead(null,
-    'Open a crop to see its cycle and the procedure a batch runs on every phase. ' +
-    'A procedure link opens its checklist; every procedure is on Grow › Procedures.', search, arch, plan));
+    'Open a crop for its cycle and the procedures on each phase.', search, arch, plan));
 
   // the counts, then Crops | Procedures
   const nPh = all.reduce((n, c) => n + (Number(c.phases) || 0), 0);
   const nLk = all.reduce((n, c) => n + (Number(c.links) || 0), 0);
   const kpi = el('div', 'cropdb-kpi');
-  [[all.length, 'crops'], [new Set(all.map(c => c.category)).size, 'families'], [nPh, 'phases'],
-   [nLk, 'phase→procedure links'], [(data.procedures || []).length, 'procedures']]
+  [[all.length, 'crops'], [new Set(all.map(c => c.category)).size, 'categories'], [nPh, 'phases'],
+   [nLk, 'procedures on phases'], [(data.procedures || []).length, 'procedures']]
     .forEach(([n, w]) => { const k = el('span'); k.append(el('b', null, String(n)), ' ' + w); kpi.append(k); });
   mount.append(kpi);
 
@@ -266,7 +268,7 @@ function cropRow(c) {
         } });
         toast(`Phases saved · ${r.procedures} procedure link${r.procedures === 1 ? '' : 's'}` +
               (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
-        await load();
+        await reload();
       } catch (e) { busy(btn, false, 'Save phases'); toast(e.message, 'bad'); }
     }
   }
@@ -384,8 +386,8 @@ async function openPlan(full) {
       toast(`${v.validated} batch${v.validated === 1 ? '' : 'es'} planned · ${v.tasks_created} task${v.tasks_created === 1 ? '' : 's'} created` +
             (clash ? ` · ${clash} not validated: another batch holds the position then` : '') +
             (refused.length ? ` · ${refused.length} refused — ${refused.join('; ')}` : ''), refused.length || clash ? 'bad' : 'ok');
-      await load();
-    } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); await load(); }
+      await reload();
+    } catch (e) { busy(go, false, 'Create the batches'); toast(e.message, 'bad'); await reload(); }
   };
   d.footer.append(cancel, go);
 }
@@ -488,7 +490,7 @@ async function openCrop(row) {
   d.footer.append(close);
   if (c.may_edit) {
     const edit = el('button', 'btn btn-primary', 'Edit');
-    edit.onclick = () => { d.close(); editCrop(c, load, farm); };
+    edit.onclick = () => { d.close(); editCrop(c, reload, farm); };
     d.footer.append(edit);
   } else {
     d.footer.prepend(el('span', 'hint', 'Only the franchisor edits a standard crop.'));
@@ -499,7 +501,7 @@ async function openCrop(row) {
 // A crop leaves the library with a reason and keeps everything that points at
 // it — batches, harvests, prices. Restore brings it back with the status it had.
 function archiveCrop(c) {
-  const d = drawer('Archive ' + c.name, 'It leaves the Crop database and the planner; nothing about it is deleted.');
+  const d = drawer('Archive ' + c.name, 'It leaves the Crop library and the planner; nothing about it is deleted.');
   const reason = input({ placeholder: 'Why (optional)' });
   d.body.append(field('Reason', reason));
   const cancel = el('button', 'btn', 'Cancel');
@@ -511,7 +513,7 @@ function archiveCrop(c) {
       const r = await rpc('archive_crop', { p_crop: c.id, p_reason: reason.value.trim() || null });
       d.close();
       toast(`${c.name} archived` + (r.batches ? ` · ${r.batches} live batch${r.batches === 1 ? '' : 'es'} finish as planned` : ''), 'ok');
-      await load();
+      await reload();
     } catch (e) { busy(ok, false, 'Archive'); toast(e.message, 'bad'); }
   };
   d.footer.append(cancel, ok);
@@ -541,7 +543,7 @@ function openArchive() {
             const x = await rpc('restore_crop', { p_crop: v });
             toast(`${r.name} is back (${x.status})`, 'ok');
             d.close();
-            await load();
+            await reload();
           } catch (err) { busy(b, false, 'Restore'); toast(err.message, 'bad'); }
         };
         return b; } },

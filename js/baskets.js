@@ -50,7 +50,9 @@ export async function renderBaskets(container, currentFarm) {
 async function load(fresh = false) {
   const here = mount;
   await openFast([['basket_plan', basketArgs(farm.id, offset)]], {
-    show: ([d]) => { data = d; if (clients == null || fresh) clients = d.clients; paint(); },
+    // the figure in the field is kept while it is being typed, and replaced when the server's own changed —
+    // somebody else, or a sister unit, set it meanwhile (review 13 Oct 2026)
+    show: ([d]) => { if (clients == null || fresh || d.clients !== data?.clients) clients = d.clients; data = d; paint(); },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the harvest days…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
     stillHere: () => here.isConnected && mount === here, fresh,
@@ -117,8 +119,7 @@ function paint() {
   prop.title = 'Batches the planner proposed and nobody has validated yet, drawn lighter';
 
   mount.append(pageHead(null,
-    'The harvest of each harvest day, crop by crop — weighed on the days behind, forecast on the days ahead — and the basket each ' +
-    'direct client gets when the day is shared equally. Click a day for its basket.', cl));
+    'Each harvest day crop by crop — weighed behind, forecast ahead — and one client\'s basket. Click a day.', cl));
   const bar = el('div', 'bk-bar');
   bar.append(now, back, fwd, el('b', 'bk-range', `${dayNum(data.from)} – ${dayNum(data.to)}`), el('div', 'spacer'), prop, seg);
   const units = data.units || [];
@@ -161,11 +162,13 @@ function shopCard() {
       if (s.key_set && !await confirmDrawer('A new shop key?', 'The key the app uses now stops working at once.', 'Make a new key')) return;
       try {
         const r = await rpc('shop_new_key', { p_farm: farm.id });
-        const d = drawer('The shop key', 'Shown once — give it to whoever builds the selling app');
+        // closed any way (✕, Escape, outside): the card shows the new key's last four, and the button says "New key" —
+        // it used to stay on "Make a key", and a second press replaced the key without asking (review 13 Oct 2026)
+        const d = drawer('The shop key', 'Shown once — give it to whoever builds the selling app', { onClose: () => load(true) });
         d.body.append(el('pre', 'cx-code cx-key', r.key));
         const copy = el('button', 'btn btn-primary', 'Copy');
         copy.onclick = async () => { try { await navigator.clipboard.writeText(r.key); toast('Copied', 'ok'); } catch { toast('Select it and copy', ''); } };
-        const done = el('button', 'btn', 'Done'); done.onclick = () => { d.close(); load(true); };
+        const done = el('button', 'btn', 'Close'); done.onclick = d.close;
         d.footer.append(copy, el('div', 'spacer'), done);
       } catch (e) { toast(e.message, 'bad'); }
     };

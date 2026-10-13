@@ -70,6 +70,10 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   let known = false;               // the database has 0224
   const data = new Map();          // day → greenhouse_day
   const tried = new Map();         // day → when it was last asked for, so a read that fails is not asked in a loop
+  const failed = new Map();        // day → why its last read failed: the panel says so and offers "Try again"
+  const asked = new Map(), landed = new Map();   // day → the number of its last read sent, and of the last one applied
+  const sending = new Map();       // day → { text, id } of a note sent whose answer has not come
+  let gone = false;                // the page made another kit (dispose): nothing of this one paints any more
   const typing = new Map();        // day → what is being typed in "add a note" (the panel is drawn again under the writer)
   const wide = new Set();          // the long notes a person opened
   let focusDay = null;
@@ -80,6 +84,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
 
   const now = () => String(today() || iso(new Date()));
   const a = () => ({ p_farm: farm.id, p_days: 120 });
+  const list = () => { if (!gone) relist(); };
   const take = rows => { days = new Map((rows || []).map(r => [String(r.day), r])); known = true; };
 
   // the day shown when nobody chose: today once it holds a report or a note, the last report before that, today when
@@ -96,12 +101,12 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   async function readDays() {
     const before = JSON.stringify([...days]);
     try { const copy = await cachedRpc('greenhouse_days', a()); if (copy) take(copy); } catch { /* no copy */ }
-    if (JSON.stringify([...days]) !== before) { relist(); draw(); }
+    if (JSON.stringify([...days]) !== before) { list(); draw(); }
     try {
       const fresh = await rpc('greenhouse_days', a());
       const was = JSON.stringify([...days]);
       take(fresh);
-      if (JSON.stringify([...days]) !== was) { relist(); draw(); }
+      if (JSON.stringify([...days]) !== was) { list(); draw(); }
     } catch { /* a database without the function, or no connection: the page goes on without the panel's figures */ }
   }
   // the page read again (a change made here or on another device): the list, and the day on show. What was read of
@@ -117,16 +122,32 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   async function readDay(day, { fresh = false } = {}) {
     const k = String(day), args = { p_farm: farm.id, p_day: k };
     const was = JSON.stringify(data.get(k) || null);
+    // two reads of a day can be on their way at once (the page read again while a note is being added): the answer
+    // of the one sent first is dropped when the later one is already on screen (review 13 Oct 2026: the older answer
+    // came last and took the new note off the panel)
+    const my = (asked.get(k) || 0) + 1;
+    asked.set(k, my);
     tried.set(k, Date.now());
     if (!fresh && !data.has(k)) {
-      try { const copy = await cachedRpc('greenhouse_day', args); if (copy) { data.set(k, copy); if (k === current()) draw(); } } catch { /* no copy */ }
+      try { const copy = await cachedRpc('greenhouse_day', args); if (copy && !data.has(k)) { data.set(k, copy); if (k === current()) draw(); } } catch { /* no copy */ }
     }
     try {
       const d = await rpc('greenhouse_day', args);
       known = true;
+      if ((landed.get(k) || 0) > my) return;
+      landed.set(k, my);
+      failed.delete(k);
       data.set(k, d);
       if (JSON.stringify(d) !== was && k === current()) draw();
-    } catch (e) { if (fresh) throw e; }
+    } catch (e) {
+      // said on the panel, with "Try again" (review 13 Oct 2026: a read that failed left "Reading…" for ever). Only a
+      // day with nothing to show is drawn again, and the failure counts as its last try, so it is not asked in a loop.
+      if ((landed.get(k) || 0) < my) {
+        failed.set(k, clean(e)); tried.set(k, Date.now());
+        if (!data.has(k) && k === current()) draw();
+      }
+      if (fresh) throw e;
+    }
   }
 
   // after a change made here: the day and the list again, and the panel drawn anew even when the answer is the same
@@ -281,9 +302,14 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
       const text = box.value.trim();
       if (!text) return;
       busy(send, true, 'Adding…');
+      // the same words sent again keep their id: when the first answer was lost on the way, the database still
+      // holds one note, not two (review 13 Oct 2026)
+      const again = sending.get(k);
+      const id = again?.text === text ? again.id : 'web-' + crypto.randomUUID();
+      sending.set(k, { text, id });
       try {
-        await rpc('submit_scout_note', { p: { farm_id: farm.id, client_id: 'web-' + crypto.randomUUID(), day: k, text, source: 'console', app: 'heart' } });
-        typing.delete(k); focusDay = null;
+        await rpc('submit_scout_note', { p: { farm_id: farm.id, client_id: id, day: k, text, source: 'console', app: 'heart' } });
+        typing.delete(k); sending.delete(k); focusDay = null;
         toast('Note added', 'ok');
         await after(k);
       } catch (e) { busy(send, false, 'Add the note'); toast(clean(e), 'bad'); }
@@ -367,7 +393,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     if (calMonth) nav.append(calendar(k));
     head.append(nav);
     if (k !== t) {
-      const go = el('button', 'linkish', 'Today'); go.type = 'button'; go.onclick = () => { sel = t === auto() ? null : t; calMonth = null; draw(); };
+      const go = el('button', 'linkish', 'Today'); go.type = 'button'; go.onclick = () => select(t);   // as any other day: shown at once, and asked again
       head.append(go);
       if (!sel) head.append(el('span', 'hint', 'no report today yet: this is the last one'));
     }
@@ -376,6 +402,16 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     for (let i = 13; i >= 0; i--) { const day = shift(t, -i); strip.append(cell(day, k, String(at(day).getDate()))); }
     head.append(strip);
     return head;
+  }
+
+  // a day that could not be read: why, and a way to ask again
+  function failLine(k) {
+    const line = el('div', 'hint');
+    line.append(`Could not read this day: ${failed.get(k)}. `);
+    const again = el('button', 'linkish', 'Try again'); again.type = 'button';
+    again.onclick = () => { failed.delete(k); tried.delete(k); draw(); };
+    line.append(again);
+    return line;
   }
 
   // ── the AI's report, first ──
@@ -408,13 +444,13 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     box.append(line);
 
     if (!lite) {
-      box.append(el('div', 'hint', !d ? (known ? 'Reading…' : 'Reading the report…') : d.ai_ready === false
+      box.append(!d && failed.has(k) ? failLine(k) : el('div', 'hint', !d ? (known ? 'Reading…' : 'Reading the report…') : d.ai_ready === false
         ? 'No report: paste an Anthropic API key in Settings › Integrations first.'
         : `No report for ${k === now() ? 'today' : shortDay(k)} yet. It is written by itself once the day's scouting is complete, where the automatic AI scan is on — or on a press. It reads every zone, the notes and the days before. It proposes; you decide.`));
       return box;
     }
     box.append(el('b', 'pd-gh-headline', lite.headline || ''));
-    if (!op) { box.append(el('div', 'hint', 'Reading the rest…')); return box; }
+    if (!op) { box.append(!d && failed.has(k) ? failLine(k) : el('div', 'hint', 'Reading the rest…')); return box; }
 
     const cols = el('div', 'pd-ghp-cols');
     const col = (title, list) => { const c = el('div', 'pd-ghp-col'); c.append(el('div', 'pd-hlabel', title), list); cols.append(c); };
@@ -560,11 +596,27 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   // a note above it that opens the note itself. The text is shown only while it was written from the notes as they
   // read now; until then, and when it could not be written without losing something, the notes stand as they are.
   const waits = new Map();         // day → how often the page looked again for a text being written
+  // The text takes a few seconds: the day is read again after five, six times at most. One timer a day, which arms
+  // itself again while the text is still being written (review 13 Oct 2026: a timer was set each time the panel was
+  // drawn, so the six looks were spent in the first second and a text that came later never showed).
+  const timers = new Map();        // day → the look that is waiting
+  function look(k) {
+    if (gone || timers.has(k)) return;
+    const n = waits.get(k) || 0;
+    if (n >= 6) return;
+    waits.set(k, n + 1);
+    timers.set(k, setTimeout(async () => {
+      if (!gone && current() === k) await readDay(k, { fresh: true }).catch(() => {});
+      timers.delete(k);
+      const d = data.get(k), st = d?.digest?.status;
+      if (current() === k && d?.digest_wanted && (d.notes || []).length && (st === 'queued' || st === 'claimed')) look(k);
+    }, 5000));
+  }
   function said(k, d) {
     const x = days.get(k) || null;
     const box = el('div', 'pd-ghp-notes');
     if (!d) {
-      box.append(el('div', 'pd-hlabel', x?.notes ? `Team reports · ${x.notes}` : 'Team reports'), el('div', 'hint', 'Reading…'));
+      box.append(el('div', 'pd-hlabel', x?.notes ? `Team reports · ${x.notes}` : 'Team reports'), el('div', 'hint', failed.has(k) ? 'Not read.' : 'Reading…'));
       return box;
     }
     const notes = d.notes || [], dg = d.digest || null;
@@ -590,8 +642,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
       const st = dg?.status, line = el('div', 'hint');
       if (st === 'queued' || st === 'claimed') {
         line.textContent = 'The AI is writing these as one text…';
-        const n = waits.get(k) || 0;                      // it takes a few seconds: look again, six times at most
-        if (n < 6) { waits.set(k, n + 1); setTimeout(() => { if (current() === k) readDay(k, { fresh: true }).catch(() => {}); }, 5000); }
+        look(k);
       } else if (st === 'no_key') line.textContent = 'Not written as one text: no Groq key in Settings › Integrations.';
       else {
         line.append(st === 'failed' ? `Not written as one text${dg?.error ? ' — ' + dg.error : ''}. ` : 'Not written as one text yet. ');
@@ -615,6 +666,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   }
 
   function draw() {
+    if (gone) return;
     const k = current(), d = data.get(k) || null;
     node.textContent = '';
     node.append(headRow(k), report(k, d), said(k, d));
@@ -625,9 +677,19 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   const shut = e => { if (calMonth && node.isConnected && !(e.type === 'keydown' && e.key !== 'Escape')) { calMonth = null; draw(); } };
   document.addEventListener('click', shut);
   document.addEventListener('keydown', shut);
+  // the page makes a kit a unit: the one it leaves stops listening, looking again and painting (review 13 Oct 2026:
+  // every kit left two listeners on the document, and its late answers drew the page of the unit just left)
+  function dispose() {
+    gone = true;
+    document.removeEventListener('click', shut);
+    document.removeEventListener('keydown', shut);
+    timers.forEach(t => clearTimeout(t)); timers.clear();
+  }
 
-  // the panel, for the page to place: the same node every time, so what is being typed and played stays
-  function panel() { draw(); return node; }
+  // the panel, for the page to place: the same node every time, so what is being typed and played stays. While a
+  // voice note plays it is not drawn again: that would take the player away mid-sentence (review 13 Oct 2026)
+  const playing = () => [...node.querySelectorAll('audio')].some(p => !p.paused && !p.ended);
+  function panel() { if (node.childNodes.length && playing()) refocus(); else draw(); return node; }
 
-  return { readDays, refresh, pills, panel, select, ready: () => known };
+  return { readDays, refresh, pills, panel, select, ready: () => known, dispose };
 }

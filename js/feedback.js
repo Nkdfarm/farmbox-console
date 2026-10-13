@@ -134,7 +134,7 @@ function paint() {
 
 // a signed URL (one hour) for a file in the private evidence bucket
 async function signed(path) {
-  const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  const res = await api('/storage/v1/object/sign/evidence/' + path, { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
   return res?.signedURL ? URL_BASE + '/storage/v1' + res.signedURL : null;
 }
 

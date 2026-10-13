@@ -10,11 +10,12 @@
 // taken as it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, toast, busy, cropAvatar, pref } from './ui.js';
+import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal } from './ui.js';
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
-const ago = s => { if (!s) return 'never'; const d = Math.floor((Date.now() - new Date(s).getTime()) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
+// counted in the farm's days, not in blocks of 24 hours: a look at four yesterday afternoon read "today" all the next morning (review 13 Oct 2026)
+const ago = s => { if (!s) return 'never'; const d = Math.round((farmDate() - parseYmd(farmLocal(s))) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
 const PHASES = [['germination', 'Germination'], ['nursery', 'Nursery'], ['transplant', 'Transplant'], ['vegetative', 'Vegetative'],
                 ['flowering', 'Flowering'], ['harvest_window', 'Harvesting'], ['cleanup', 'Clean-up']];
 
@@ -41,10 +42,9 @@ function paint() {
   const tog = el('button', 'btn btn-sm btn-ghost', onlyDue ? `Show all ${all.length}` : `Only the ${due.length} due`);
   tog.onclick = () => { pref.set('fbc_forecast_due', onlyDue ? 'all' : null); paint(); };
   const days = (data.review_days || []).map(d => DAY[d]).join(' and ');
-  mount.append(pageHead(null, `Every ${days}: where each batch really is — its phase, the days to harvest and the kg it will give. ` +
-    '"As planned" confirms; another number of days moves its harvest, later dates and tasks; another kg changes what the baskets and orders count on.', tog));
+  mount.append(pageHead(null, `${days ? `Every ${days}: confirm` : 'Confirm'} each batch, or correct its days to harvest and its kg.`, tog));
   const rows = onlyDue ? due : all;
-  if (!all.length) { mount.append(el('div', 'empty', 'No batch is growing or validated.')); return; }
+  if (!all.length) { mount.append(el('div', 'empty', 'No batch is growing or validated. Validate a proposal on Grow › Crop planner first.')); return; }
   if (!rows.length) { mount.append(el('div', 'empty', `Every batch was looked at in the last three days. ${all.length} growing.`)); return; }
   let zone = null, card = null;
   rows.forEach(b => {
@@ -62,14 +62,23 @@ function row(b) {
   const plan = el('div', 'fc-plan');
   const dated = b.harvest_start != null && b.days_to_harvest != null;
   plan.append(el('span', null, `plan: ${dated ? (b.planned_phase?.name || '—') : '—'}`),
-              el('span', 'hint', dated ? `harvest ${nice(b.harvest_start)} · ${b.days_to_harvest} d · ${Math.round(Number(b.expected_kg || 0))} kg` : 'no dates yet — set them on the Crop planner, or give the days to harvest here'));
+              el('span', 'hint', dated ? `harvest ${nice(b.harvest_start)} · ${Number(b.days_to_harvest) < 0 ? -Number(b.days_to_harvest) + ' d ago' : b.days_to_harvest + ' d'} · ${Math.round(Number(b.expected_kg || 0))} kg` : 'no dates yet — set them on the Crop planner, or give the days to harvest here'));
   const may = data.may_review;
   const phase = document.createElement('select'); phase.className = 'input';
   PHASES.forEach(([v, l]) => { const o = el('option', null, l); o.value = v; phase.append(o); });
   phase.value = b.current_phase || b.planned_phase?.phase_type || 'vegetative';
-  const days = el('input', 'input'); days.type = 'number'; days.min = '0'; days.max = '365'; days.value = dated ? Math.max(0, Number(b.days_to_harvest)) : '';
+  const days = el('input', 'input'); days.type = 'number'; days.min = '0'; days.max = '365'; days.value = dated && Number(b.days_to_harvest) >= 0 ? Number(b.days_to_harvest) : '';
   const kg = el('input', 'input'); kg.type = 'number'; kg.min = '0'; kg.step = '0.5'; kg.value = Math.round(Number(b.expected_kg || 0) * 10) / 10;
   const kgShown = kg.value;          // compared with what was shown, not the unrounded figure (each Save rewrote it)
+  // Days sent to the database MOVE the harvest to today + days and make a validated batch "growing" (the phase
+  // observation's trigger). So they are not sent when nothing is being said about them: a batch already being
+  // harvested (its days are negative — "As planned" used to push its harvest to today, and its end and tasks with
+  // it, at every review), and a batch still only validated whose days were left as shown. A date that has passed
+  // leaves the field empty, not 0: the list cannot tell a batch being cut from one that is late, and 0 typed there
+  // has to mean "harvest today" (it was read as "left as shown" and moved nothing).
+  const daysShown = days.value;
+  if (dated && daysShown === '') { days.placeholder = '—'; days.title = 'The date has passed. Leave it empty to keep it; a number moves the harvest to today + that many days (0 = today)'; }
+  const noMove = dated && (Number(b.days_to_harvest) < 0 || b.status === 'validated');
   [phase, days, kg].forEach(x => { x.disabled = !may; });
   const f = el('div', 'fc-fields');
   const lab = (t, x) => { const w = el('label', 'fc-f'); w.append(el('span', 'hint', t), x); return w; };
@@ -79,9 +88,9 @@ function row(b) {
   if (may) {
     const same = el('button', 'btn btn-sm', 'As planned');
     same.title = 'Confirm: it is where the plan says';
-    same.onclick = () => save(same, b, b.planned_phase?.phase_type || phase.value, Number(b.days_to_harvest), null);
+    same.onclick = () => save(same, b, b.planned_phase?.phase_type || phase.value, noMove ? null : Number(b.days_to_harvest), null);
     const go = el('button', 'btn btn-sm btn-primary', 'Save');
-    go.onclick = () => { if (days.value === '') { toast('How many days to harvest?', 'bad'); return; } save(go, b, phase.value, Number(days.value), kg.value !== '' && kg.value !== kgShown ? Number(kg.value) : null); };
+    go.onclick = () => { if (days.value === '' && !(noMove && daysShown === '')) { toast('How many days to harvest?', 'bad'); return; } save(go, b, phase.value, noMove && days.value === daysShown ? null : Number(days.value), kg.value !== '' && kg.value !== kgShown ? Number(kg.value) : null); };
     if (dated) acts.append(same);
     acts.append(go);
     if (b.camera) {
@@ -98,7 +107,7 @@ function row(b) {
 async function save(button, b, phase, days, kg) {
   busy(button, true, 'Saving…');
   try {
-    const r = await rpc('review_batch', { p_plan: b.plan_id, p_phase: phase, p_days_to_harvest: Math.max(0, Math.round(days)), p_expected_kg: kg, p_note: null });
+    const r = await rpc('review_batch', { p_plan: b.plan_id, p_phase: phase, p_days_to_harvest: days == null ? null : Math.max(0, Math.round(days)), p_expected_kg: kg, p_note: null });
     toast(`${b.crop} · ${b.position}: harvest ${nice(r.harvest_start)}${kg != null ? ` · ${kg} kg` : ''}`, 'ok');
     load(true);
   } catch (e) { busy(button, false); toast(e.message, 'bad'); }

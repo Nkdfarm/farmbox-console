@@ -32,12 +32,17 @@ function open() {
   ws.onerror = () => { try { ws?.close(); } catch { /* nothing to close */ } };
 }
 
-// watch a site (its home unit's id): `moved` is called, at most once a second or so, when somebody changed something
-export function liveWatch(siteId, moved) {
+// the channel of a site (its home unit's id), whatever page is open: app.js opens it at every page, so that a change
+// made anywhere is said to the others — and on the right site after a switch of FarmBox. No site: closed.
+export function liveOpen(siteId) {
   const t = siteId ? 'realtime:fb-live-' + siteId : null;
-  onMoved = moved;
-  if (t === topic && ws) return;
+  if (t === topic && (ws || !t)) return;
   close(); topic = t; open();
+}
+// watch it: `moved` is called, at most once a second or so, when somebody changed something
+export function liveWatch(siteId, moved) {
+  onMoved = moved;
+  liveOpen(siteId);
 }
 // say that something changed here (any write of this console does, through api.js)
 export function liveSay() {

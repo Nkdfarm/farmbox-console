@@ -12,8 +12,8 @@
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, toast, num, shortDate, farmDate } from './ui.js';
 
-const RANGES = [[27, 'Last 4 weeks'], [6, 'Last week'], [90, 'Last quarter'],
-                [364, 'Last year']];
+const RANGES = [[6, 'Last week'], [27, 'Last 4 weeks'], [90, 'Last quarter'],
+                [364, 'Last year']];   // shortest first; the page still opens on four weeks
 
 let farm = null, data = null, mount = null, days = 27;
 

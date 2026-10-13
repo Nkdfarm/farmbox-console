@@ -68,6 +68,15 @@ function refresh() {
 }
 async function doRefresh() {
   if (!session?.refresh_token) throw new ApiError('signed out', 401);
+  // another tab of the same person may have refreshed already: a refresh token works once, so asking with the old
+  // one is refused, and a refused refresh signs this tab out (review 13 Oct 2026). Take what that tab stored.
+  try {
+    const kept = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (kept?.refresh_token && kept.refresh_token !== session.refresh_token && kept.user?.id && kept.user.id === session.user?.id) {
+      session = kept;
+      if (kept.expires_at > Date.now() + 60_000) return session;
+    }
+  } catch { /* no storage: this tab's own token */ }
   let s;
   try {
     s = await raw('/auth/v1/token?grant_type=refresh_token', {
@@ -121,8 +130,8 @@ const READ_RPCS = new Set([
   'family_tree', 'farm_market', 'farm_models', 'farm_network', 'harvest_overview',
   'issues', 'ipm', 'labour_week', 'maintenance', 'market_trends', 'people', 'team_setup', 'price_table', 'procedure',
   'procedures', 'purchasing', 'seedling_orders', 'reports', 'system_catalog', 'integration_status', 'task_families',
-  'farm_holidays', 'scouting_day', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'crop_pests', 'scouting_dates', 'pest_dot', 'basket_plan',
-  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'crop_validations', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view', 'robot_scouting', 'task_feedback_list', 'task_feedback_state', 'sump_history', 'zone_growth', 'removed_photos', 'ai_cost', 'ai_model_setting', 'ai_scan_state', 'ai_found', 'photo_chat', 'ipm_library', 'zone_treatments', 'scouting_day_light', 'scouting_thumbs', 'zone_panels', 'extra_scoutings', 'crop_tracking', 'scouting_people', 'scouting_coverage', 'unfiled_photos', 'greenhouse_days', 'greenhouse_day', 'person_history',
+  'farm_holidays', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'scouting_dates', 'pest_dot', 'basket_plan',
+  'customers', 'yield_dashboard', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view', 'robot_scouting', 'task_feedback_list', 'task_feedback_state', 'sump_history', 'zone_growth', 'removed_photos', 'ai_cost', 'ai_model_setting', 'ai_scan_state', 'ai_found', 'photo_chat', 'ipm_library', 'zone_treatments', 'scouting_day_light', 'scouting_thumbs', 'zone_panels', 'extra_scoutings', 'crop_tracking', 'scouting_people', 'scouting_coverage', 'unfiled_photos', 'greenhouse_days', 'greenhouse_day', 'person_history',
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
 
@@ -273,7 +282,7 @@ async function api0(path, opts = {}) {
   try {
     const body = await live(path, opts);
     setOnline(true);
-    if (read) { if (session === s0) remember(key, body); }
+    if (read) { if (session && session.user?.id === s0.user?.id) remember(key, body); }   // the same person: a token refreshed meanwhile is a new object, not a new person
     // quiet (0.7.235): a call that changes nothing on the farm — the camera's pass — is not a change to tell the others
     // about, and must not make this tab distrust the copies it kept
     else if (!opts.quiet) { lastWrite = Date.now(); try { dispatchEvent(new Event('fbc:wrote')); } catch { /* no window */ } }   // live.js tells the others
@@ -301,8 +310,11 @@ async function api0(path, opts = {}) {
 // the API's 8 s. The first try warms it, so the second answers. Writes are never repeated.
 const timedOut = e => /statement timeout|57014/i.test(String(e?.message || ''));
 const pause = ms => new Promise(r => setTimeout(r, ms));
-export const rpc = (name, args) => {
-  const go = () => api('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}) });
+// `more` goes to api(): { quiet: true } for a function that only works something out and writes nothing — a preview,
+// a dry run — yet is not a read to keep a copy of (review 13 Oct 2026: six previews counted as changes, so every
+// keystroke in their forms made the tab distrust its kept copies and every other device of the site read again)
+export const rpc = (name, args, more) => {
+  const go = () => api('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(args ?? {}), ...more });
   if (!READ_RPCS.has(name)) return go();
   return go().catch(e => (timedOut(e) ? pause(1200).then(go) : Promise.reject(e)))
              .catch(e => (timedOut(e) ? pause(2500).then(go) : Promise.reject(e)));

@@ -14,12 +14,11 @@
 // the first cut count too. The batches still being picked have a table of their
 // own: before, a crop in production was in no table until its last cut.
 // ═══════════════════════════════════════════════════════════════════════════
-import { openFast } from './api.js';
-import { loading, el, pageHead, cropAvatar, pref, farmDate } from './ui.js';
+import { openFast, rpc } from './api.js';
+import { loading, el, pageHead, cropAvatar, pref, farmDate, drawer, confirmDrawer, field, input, selectBox, toast, busy } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
 const CROP_KEY = 'fbc_yield_crop';
-const UNIT_KEY = 'fbc_yield_unit';                  // the chart in kg or in kg/m² a year
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
@@ -36,10 +35,11 @@ export function yieldRange() {
   return { p_from: ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - days + 1)), p_to: ymd(t) };
 }
 
-export async function renderYield(mount, farm) {
+export async function renderYield(mount, farm, fresh = false) {
   const here = mount;
   const crop = pref.get(CROP_KEY) || null;
   await openFast([['yield_dashboard', { p_farm: farm.id, ...yieldRange(), ...(crop ? { p_crop: crop } : {}) }]], {
+    fresh,
     show: ([d]) => {
       // a crop kept from another period or FarmBox that has nothing here: back to all of them, read again
       if (crop && !(d.crops || []).some(c => c.crop_id === crop)) { pref.set(CROP_KEY, ''); renderYield(mount, farm); return; }
@@ -90,32 +90,27 @@ function paint(mount, farm, d) {
   const tile = (v, l, s, tone, title) => { const x = el('div', 'tile' + (tone ? ' ' + tone : '')); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); if (title) x.title = title; x.append(b); return x; };
   const p = pctOf(t.harvested, t.planned_to_date);
   tiles.append(tile(kg(t.harvested), chosen ? `${chosen.crop} harvested` : 'Harvested', `${t.cuts || 0} cut${Number(t.cuts) === 1 ? '' : 's'}`),
-               tile(t.projected_kg_m2_year == null ? '—' : perM2(t.projected_kg_m2_year), 'kg per m² a year, on course',
-                    t.batches_running ? `${t.batches_running} batch${t.batches_running === 1 ? '' : 'es'} still picking` : 'from the batches cut in the period',
-                    '', YEAR_HINT),
+               tile(t.all_kg_m2_year == null ? perM2(t.projected_kg_m2_year) : perM2(t.all_kg_m2_year), 'kg per m² a year, all inclusive',
+                    [t.planned_kg_m2_year != null ? `expected ${perM2(t.planned_kg_m2_year)}` : null,
+                     t.projected_kg_m2_year != null ? `per batch ${perM2(t.projected_kg_m2_year)}` : null].filter(Boolean).join(' · ') || 'from the batches cut in the period',
+                    '', 'All inclusive: every bay from its first transplant to today, the weeks it stood empty between two crops included. Per batch: ' + YEAR_HINT),
                tile(kg(t.planned_to_date), 'Planned so far', `${kg(t.planned)} over the whole period`),
                tile(p == null ? '—' : `${p}%`, 'Of plan so far', null, p != null && p < 80 ? 'bad' : ''),
                tile(Number(t.harvested) ? `${Math.round(100 * Number(t.waste || 0) / (Number(t.harvested) + Number(t.waste || 0)))}%` : '—', 'Waste', kg(t.waste)),
                tile(t.kg_m2 == null ? '—' : `${Number(t.kg_m2).toFixed(1)}`, 'kg per m²', `${t.batches_finished || 0} finished batches`));
   mount.append(tiles);
 
-  // the chart: its step follows the period (a week up to three months, two weeks up to six, a month for a year), and it
-  // shows either the kilograms of each step or the course for a year reckoned up to each step's end (0.7.256, owner:
-  // "3 months by week, 6 months by 2 weeks, 12 months by months … change the y unit from total kg or projected yield")
+  // the chart: its step follows the period (a week up to three months, two weeks up to six, a month for a year). The bars
+  // are the kilograms of each step; over them two lines on their own scale, kg per m² a year reckoned to each step's end:
+  // all inclusive (every bay from its first transplant, the weeks it stood empty between two crops included) and what
+  // the plan expected (owner 15 Oct 2026: "put a line over the boxes for the projected yield per year overall (all
+  // inclusive)", "put the lines from the expected and realised"). A click on a bar opens the cuts that make it.
   const steps = d.buckets || (d.weeks || []).map(w => ({ from: w.w, to: w.w, planned: w.planned, harvested: w.harvested, waste: w.waste }));
   const step = d.step || 'week';
-  const unit = pref.get(UNIT_KEY) === 'year' ? 'year' : 'kg';
   const card = el('div', 'card card-pad');
   const head = el('div', 'yd-chart-head');
   const STEP_TITLE = { week: 'Week by week', '2weeks': 'Every two weeks', month: 'Month by month' };
-  head.append(el('div', 'sec-title', (STEP_TITLE[step] || 'Week by week') + (chosen ? ` · ${chosen.crop}` : '')), el('div', 'spacer'));
-  const useg = el('div', 'seg');
-  [['kg', 'kg harvested'], ['year', 'kg/m² a year']].forEach(([v, label]) => {
-    const btn = el('button', 'seg-btn', label); btn.type = 'button'; btn.setAttribute('aria-pressed', String(v === unit));
-    btn.onclick = () => { if (v !== unit) { pref.set(UNIT_KEY, v); paint(mount, farm, d); } };
-    useg.append(btn);
-  });
-  head.append(useg);
+  head.append(el('div', 'sec-title', (STEP_TITLE[step] || 'Week by week') + (chosen ? ` · ${chosen.crop}` : '')));
   card.append(head);
 
   // a month is named by its name, with its year on the first one and on January (a year's view shows the same month twice)
@@ -126,44 +121,87 @@ function paint(mount, farm, d) {
   };
   const span = s => step === 'month'
     ? new Date(String(s.from).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    : s.from === s.to ? `week of ${nice(s.from)}` : `${nice(s.from)} – ${nice(s.to)}`;
-  const val = s => unit === 'year' ? (s.projected_kg_m2_year == null ? null : Number(s.projected_kg_m2_year))
-                                   : Math.max(Number(s.planned || 0), Number(s.harvested || 0) + Number(s.waste || 0));
-  const top = Math.max(...steps.map(val).filter(v => v != null), 0);
+    : s.from === s.to ? nice(s.from) : `${nice(s.from)} – ${nice(s.to)}`;
+  const kgOf = s => Math.max(Number(s.planned || 0), Number(s.harvested || 0) + Number(s.waste || 0));
+  const num = v => v == null ? null : Number(v);
+  const top = Math.max(...steps.map(kgOf), 0);
   const max = niceMax(top);
-  const plot = el('div', 'yd-plot');
-  const axis = el('div', 'yd-axis');
-  [max, max / 2, 0].forEach(v => axis.append(el('span', null, fmt1(v))));
-  const chart = el('div', 'yd-chart');
-  const lines = el('div', 'yd-gridlines'); lines.append(el('i'), el('i'), el('i'));
-  chart.append(lines);
-  steps.forEach((s, i) => {
-    const col = el('div', 'yd-col' + (String(s.from) > String(d.today) ? ' ahead' : ''));
-    const bars = el('div', 'yd-bars');
-    if (unit === 'year') {
-      const v = val(s);
-      const yb = el('i', 'year'); yb.style.height = (v == null ? 0 : 100 * v / max) + '%';
-      bars.append(yb);
-      if (v != null && steps.length <= 16) yb.append(el('span', 'yd-val', fmt1(v)));   // the figure on top of its bar
-      col.title = `${span(s)} · ${v == null ? 'nothing planted yet' : `on course for ${fmt1(v)} kg/m² a year`} · ${kg(s.harvested)} harvested in it`;
-    } else {
+  const yTop = Math.max(...steps.flatMap(s => [num(s.all_kg_m2_year), num(s.planned_kg_m2_year)]).filter(v => v != null), 0);
+  const ymax = niceMax(yTop);
+  const lines = yTop > 0;
+
+  if (!(top > 0) && !lines) {
+    card.append(el('div', 'hint', 'Nothing harvested or planned in this period.'));
+    mount.append(card);
+  } else {
+    const plot = el('div', 'yd-plot');
+    const axis = el('div', 'yd-axis');
+    [max, max / 2, 0].forEach(v => axis.append(el('span', null, fmt1(v))));
+    const raxis = el('div', 'yd-axis yd-axis-r');
+    if (lines) [ymax, ymax / 2, 0].forEach(v => raxis.append(el('span', null, fmt1(v))));
+    const chart = el('div', 'yd-chart');
+    const grid = el('div', 'yd-gridlines'); grid.append(el('i'), el('i'), el('i'));
+    chart.append(grid);
+    const cols = [];
+    steps.forEach((s, i) => {
+      const col = el('button', 'yd-col' + (String(s.from) > String(d.today) ? ' ahead' : ''));
+      col.type = 'button';
+      const bars = el('div', 'yd-bars');
       const pb = el('i', 'plan'); pb.style.height = (100 * s.planned / max) + '%';
       const hb = el('i', 'harv'); hb.style.height = (100 * s.harvested / max) + '%';
       const wb = el('i', 'waste'); wb.style.height = (100 * s.waste / max) + '%';
       const stack = el('span', 'yd-stack'); stack.append(wb, hb);
       bars.append(pb, stack);
-      col.title = `${span(s)} · planned ${kg(s.planned)} · harvested ${kg(s.harvested)}${Number(s.waste) ? ` · waste ${kg(s.waste)}` : ''}`;
-    }
-    col.append(bars, el('span', 'yd-lbl', stepLabel(s, i)));
-    chart.append(col);
-  });
-  plot.append(axis, chart);
-  // nothing to draw (a unit with no harvest in the period): say so instead of an empty frame with a scale of 0 to 1
-  if (!(top > 0)) { card.append(el('div', 'hint', unit === 'year' ? 'No batch with a harvest in this period: nothing to project yet.' : 'Nothing harvested or planned in this period.')); mount.append(card); }
-  else card.append(plot, el('div', 'hint', unit === 'year'
-    ? 'kg per m² a year, reckoned up to the end of each step: everything harvested since each batch took its place, over the time it has held it — the months before the first cut and the days since the last one count too, so the line starts low and climbs as the picking comes.'
-    : `kg ${step === 'month' ? 'per month' : step === '2weeks' ? 'per two weeks' : 'per week'}. Outline: planned · green: harvested · red: waste.`));
-  if (top > 0) mount.append(card);
+      const all = num(s.all_kg_m2_year), exp = num(s.planned_kg_m2_year);
+      col.title = [`${span(s)}: ${kg(s.harvested)} harvested` + (Number(s.planned) ? `, ${kg(s.planned)} planned` : '') + (Number(s.waste) ? `, ${kg(s.waste)} waste` : ''),
+                   all != null ? `${fmt1(all)} kg/m² a year all inclusive` : null, exp != null ? `${fmt1(exp)} expected` : null,
+                   'Click to see the harvests'].filter(Boolean).join(' · ');
+      col.onclick = () => openStep(farm, d, s, span(s), chosen, () => renderYield(mount, farm, true));
+      col.append(bars, el('span', 'yd-lbl', stepLabel(s, i)));
+      chart.append(col);
+      cols.push({ col, all, exp });
+    });
+    // the two lines: drawn once the columns have their places, again when the chart changes width
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'yd-lines'); svg.setAttribute('aria-hidden', 'true');
+    chart.append(svg);
+    const draw = () => {
+      if (!chart.isConnected || !lines) return;
+      const box = chart.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+      // the drawing is the chart's own size (its CSS fills it): sized to the scroll width it widened the chart it measured
+      const w = chart.clientWidth, h = gr.height, y0 = gr.top - box.top;
+      svg.setAttribute('viewBox', `0 0 ${w} ${chart.clientHeight}`);
+      const pt = (c, v) => { const r = c.col.getBoundingClientRect(); return [r.left - box.left + r.width / 2, y0 + h - h * v / ymax]; };
+      const path = key => {
+        const ps = cols.filter(c => c[key] != null).map(c => pt(c, c[key]));
+        return { d: ps.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' '), ps };
+      };
+      svg.textContent = '';
+      [['exp', 'yd-line-exp'], ['all', 'yd-line-all']].forEach(([key, cls]) => {
+        const { d: dd, ps } = path(key);
+        if (!ps.length) return;
+        const pl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pl.setAttribute('d', dd); pl.setAttribute('class', cls); svg.append(pl);
+        ps.forEach(p => { const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]); c.setAttribute('r', key === 'all' ? 3.5 : 2.5); c.setAttribute('class', cls); svg.append(c); });
+      });
+      // the last figure of the all-inclusive line, beside its last point
+      const last = [...cols].reverse().find(c => c.all != null);
+      if (last) { const [x, y] = pt(last, last.all); const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('x', x); t.setAttribute('y', y - 9); t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'yd-line-val'); t.textContent = fmt1(last.all); svg.append(t); }
+    };
+    if (window.ResizeObserver) new ResizeObserver(() => draw()).observe(chart);
+    requestAnimationFrame(draw);
+    setTimeout(draw, 60);                      // a window in the background draws no frame: the lines come all the same
+    plot.append(axis, chart, raxis);
+    const legend = el('div', 'yd-legend');
+    const key = (cls, text) => { const k = el('span', 'yd-key'); k.append(el('i', cls), document.createTextNode(text)); return k; };
+    legend.append(key('harv', `kg harvested ${step === 'month' ? 'a month' : step === '2weeks' ? 'every two weeks' : 'a week'} (left scale)`), key('plan', 'planned'),
+                  key('waste', 'waste'));
+    if (lines) legend.append(key('line-all', 'kg/m² a year, all inclusive (right scale)'), key('line-exp', 'expected'));
+    card.append(plot, legend, el('div', 'hint', 'kg/m² a year, all inclusive: everything harvested by the end of each step over each bay’s area and the whole time since its first transplant — the weeks before the first cut and those the bay stood empty between two crops included. The expected line reckons the plan the same way. Click a bar for its harvests.'));
+    mount.append(card);
+  }
 
   // the batches still being picked: what each gave so far and its course for the year
   const running = d.running || [];
@@ -241,4 +279,95 @@ function paint(mount, farm, d) {
     c.append(wrap);
     mount.append(c);
   }
+}
+
+// ── the harvests behind a bar ─────────────────────────────────────────────────
+// Every cut of the step: its day, the batch (lot code) and where, the kg, waste, who recorded it, from the phone's
+// harvest task or not. A manager corrects a weight, a day or the waste, takes a wrong cut out, or adds one that was
+// missed (owner 15 Oct 2026: "record harvest mainly by phone and eventually modified by computer").
+async function openStep(farm, d, s, title, chosen, reload) {
+  // the page reads its figures again once the window closes (✕, Escape, outside), if a harvest was corrected
+  const dr = drawer(`Harvests · ${title}`, chosen ? chosen.crop : 'All crops', { onClose: () => { if (changed) reload(); } });
+  dr.body.append(loading('Reading the harvests…'));
+  let changed = false;
+  const done = () => { changed = true; paintCuts(); };
+  const from = String(s.from).slice(0, 10), to = String(s.to).slice(0, 10);
+  let data = null;
+  async function paintCuts() {
+    try { data = await rpc('step_harvests', { p_farm: farm.id, p_from: from, p_to: to, ...(chosen ? { p_crop: chosen.crop_id } : {}) }); }
+    catch (e) { dr.body.textContent = ''; dr.body.append(el('div', 'note bad', e.message)); return; }
+    dr.body.textContent = '';
+    const cuts = data.cuts || [];
+    const total = cuts.reduce((a, c) => a + Number(c.kg || 0), 0);
+    dr.body.append(el('div', 'hint', cuts.length ? `${cuts.length} harvest${cuts.length === 1 ? '' : 's'} · ${kg(total)}` : 'No harvest recorded in this step.'));
+    const list = el('div', 'yd-cuts');
+    cuts.forEach(c => {
+      const row = el('div', 'yd-cut');
+      const what = el('div', 'yd-cut-what');
+      what.append(cropAvatar({ name: c.crop, category: c.category, photo_url: c.photo_url }, 'xs'),
+                  el('b', null, nice(c.date)), el('span', null, c.crop),
+                  el('span', 'hint', [c.zone, c.position, c.lot ? `lot ${c.lot}` : null].filter(Boolean).join(' · ')));
+      const fig = el('div', 'yd-cut-kg', `${Number(c.kg).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` + (Number(c.waste) ? ` · waste ${fmt1(c.waste)} kg` : ''));
+      const who = el('div', 'hint', (c.from_phone ? 'from the phone' : 'typed or imported') + (c.by ? ` · ${c.by}` : ''));
+      row.append(what, fig, who);
+      if (data.may_edit) {
+        const fix = el('button', 'btn btn-sm', 'Correct…'); fix.type = 'button';
+        fix.onclick = () => correctCut(c, done);
+        row.append(fix);
+      }
+      list.append(row);
+    });
+    dr.body.append(list);
+    if (data.may_edit) {
+      const add = el('button', 'btn btn-sm', 'Add a harvest…'); add.type = 'button';
+      add.onclick = () => addCut(farm, d, chosen, from, to, done);
+      dr.body.append(add);
+    }
+  }
+  await paintCuts();
+}
+
+function correctCut(c, done) {
+  const dr = drawer('Correct a harvest', `${c.crop} · ${[c.zone, c.position, c.lot ? `lot ${c.lot}` : null].filter(Boolean).join(' · ')}`);
+  const kgIn = input({ type: 'number', step: '0.1', min: '0.1', value: c.kg });
+  const day = input({ type: 'date', value: String(c.date).slice(0, 10), max: ymd(farmDate()) });
+  const waste = input({ type: 'number', step: '0.1', min: '0', value: c.waste ?? '' });
+  dr.body.append(field('Total kg', kgIn), field('Day', day), field('Waste (kg)', waste, 'Left empty: none.'));
+  const rm = el('button', 'btn btn-danger', 'Take it out'); rm.type = 'button';
+  const save = el('button', 'btn btn-primary', 'Save'); save.type = 'button';
+  rm.onclick = async () => {
+    if (!await confirmDrawer('Take this harvest out?', `${fmt1(c.kg)} kg on ${nice(c.date)} leaves every total and figure. Use it for a harvest recorded twice or by mistake.`, 'Take it out', true)) return;
+    busy(rm, true, 'Taking out…');
+    try { await rpc('edit_harvest', { p: { id: c.id, remove: true } }); dr.close(); toast('Harvest taken out', 'ok'); done(); }
+    catch (e) { busy(rm, false, 'Take it out'); toast(e.message, 'bad'); }
+  };
+  save.onclick = async () => {
+    if (!(Number(kgIn.value) > 0)) { toast('It needs a weight above zero', 'bad'); return; }
+    busy(save, true, 'Saving…');
+    try {
+      await rpc('edit_harvest', { p: { id: c.id, qty: Number(kgIn.value), date: day.value, waste_qty: waste.value === '' ? null : Number(waste.value) } });
+      dr.close(); toast('Harvest corrected', 'ok'); done();
+    } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
+  };
+  dr.footer.append(rm, el('div', 'spacer'), save);
+}
+
+function addCut(farm, d, chosen, from, to, done) {
+  // the batches that can take it: those picking or cut in the period, of the crop on screen when one is
+  const batches = [...(d.running || [])].filter(b => !chosen || b.crop === chosen.crop);
+  const dr = drawer('Add a harvest', 'For a harvest that was not recorded on the phone');
+  if (!batches.length) { dr.body.append(el('div', 'hint', 'No batch in production in this period to add a harvest to.')); return; }
+  const pick = selectBox(batches.map(b => [b.plan_id, `${b.crop} · ${[b.zone, b.position].filter(Boolean).join(' · ')}`]), batches[0].plan_id);
+  const today = ymd(farmDate());
+  const day = input({ type: 'date', value: to < today ? to : today, max: today });
+  const kgIn = input({ type: 'number', step: '0.1', min: '0.1' });
+  dr.body.append(field('Batch', pick), field('Day', day), field('Total kg', kgIn));
+  const save = el('button', 'btn btn-primary', 'Add'); save.type = 'button';
+  save.onclick = async () => {
+    if (!(Number(kgIn.value) > 0)) { toast('It needs a weight above zero', 'bad'); return; }
+    busy(save, true, 'Adding…');
+    try { await rpc('record_harvest', { p: { crop_plan_id: pick.value, qty: Number(kgIn.value), date: day.value } }); dr.close(); toast('Harvest added', 'ok'); done(); }
+    catch (e) { busy(save, false, 'Add'); toast(e.message, 'bad'); }
+  };
+  dr.footer.append(el('div', 'spacer'), save);
 }

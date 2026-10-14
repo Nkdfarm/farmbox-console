@@ -1733,6 +1733,32 @@ table.table tr.off td { opacity: .5; }
 .yd-gridlines { position: absolute; left: 0; right: 0; top: 20px; bottom: 19px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
 .yd-gridlines i { display: block; border-top: 1px dashed var(--divider); }
 .yd-bars i.year { position: relative; display: block; width: 56%; background: var(--accent); border-radius: 3px 3px 0 0; }
+/* the yield chart's two lines over the bars, the right scale, the legend, a bar is a button (0.7.258) */
+.yd-col { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 6px; }
+.yd-col:hover { background: var(--chip); }
+.yd-col:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.yd-axis-r { text-align: left; }
+.yd-lines { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.yd-lines path { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.yd-lines path.yd-line-all { stroke: var(--accent); }
+.yd-lines path.yd-line-exp { stroke: var(--text-muted); stroke-dasharray: 5 4; stroke-width: 2; }
+.yd-lines circle.yd-line-all { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+.yd-lines circle.yd-line-exp { fill: var(--text-muted); }
+.yd-line-val { fill: var(--accent); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.yd-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
+.yd-key { display: inline-flex; align-items: center; gap: 6px; }
+.yd-key i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; }
+.yd-key i.harv { background: var(--success, #2e7d32); }
+.yd-key i.plan { border: 1.5px solid var(--text-muted); }
+.yd-key i.waste { background: var(--error); }
+.yd-key i.line-all { height: 3px; background: var(--accent); border-radius: 2px; width: 18px; }
+.yd-key i.line-exp { height: 0; border-top: 2px dashed var(--text-muted); width: 18px; border-radius: 0; }
+.yd-cuts { display: flex; flex-direction: column; gap: 6px; margin: var(--space-2) 0 var(--space-3); }
+.yd-cut { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 10px;
+  border: 1px solid var(--divider); border-radius: 10px; }
+.yd-cut-what { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.yd-cut-kg { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.yd-cut > .btn { grid-column: 2; justify-self: end; }
 .yd-val { position: absolute; bottom: 100%; left: -14px; right: -14px; padding-bottom: 2px; white-space: nowrap; text-align: center; font-size: var(--text-xs); color: var(--text-muted);
   font-variant-numeric: tabular-nums; pointer-events: none; }
 

@@ -1,19 +1,30 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Dashboard › Yield (migration 0133, console 0.7.145)
+// Dashboard › Yield (migration 0133, console 0.7.145; one crop at a time and the
+// year's course, migration 0235)
 //
 // Planned against harvested, week by week, per crop and per zone; waste; kg per
 // m² of the batches that finished; the finished batches from best to worst
 // against what they were expected to give. "Planned so far" is the plan up to
 // today, the fair thing to compare the scale with.
+//
+// A row of crops under the head picks one crop, or all of them (owner 14 Oct
+// 2026: "a crop selector/filter (easy to use) and a projected kg/sm per year").
+// "A year" is what a batch gave per m² over the days it has held its place —
+// from its transplant to its last cut — scaled to 365 days, so the weeks before
+// the first cut count too. The batches still being picked have a table of their
+// own: before, a crop in production was in no table until its last cut.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast } from './api.js';
 import { loading, el, pageHead, cropAvatar, pref, farmDate } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
+const CROP_KEY = 'fbc_yield_crop';
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
 const pctOf = (a, b) => Number(b) > 0 ? Math.round(100 * Number(a) / Number(b)) : null;
+const perM2 = v => v == null ? '—' : Number(v).toFixed(1);
+const YEAR_HINT = 'What it gave per m² from its transplant to its last cut, scaled to a year: the weeks before the first cut count too.';
 
 export function yieldRange() {
   const days = Number(pref.get('fbc_yield_period')) || 91;
@@ -23,8 +34,13 @@ export function yieldRange() {
 
 export async function renderYield(mount, farm) {
   const here = mount;
-  await openFast([['yield_dashboard', { p_farm: farm.id, ...yieldRange() }]], {
-    show: ([d]) => paint(mount, farm, d),
+  const crop = pref.get(CROP_KEY) || null;
+  await openFast([['yield_dashboard', { p_farm: farm.id, ...yieldRange(), ...(crop ? { p_crop: crop } : {}) }]], {
+    show: ([d]) => {
+      // a crop kept from another period or FarmBox that has nothing here: back to all of them, read again
+      if (crop && !(d.crops || []).some(c => c.crop_id === crop)) { pref.set(CROP_KEY, ''); renderYield(mount, farm); return; }
+      paint(mount, farm, d);
+    },
     waiting: () => { mount.textContent = ''; mount.append(loading('Reading the harvests…')); },
     failed: e => { mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); },
     stillHere: () => here.isConnected,
@@ -41,11 +57,38 @@ function paint(mount, farm, d) {
     seg.append(b);
   });
   mount.append(pageHead(null, 'Harvested against the plan, up to today.', seg));
+
+  // the crops of the period, one button each, the biggest first; "All crops" in front
+  const crops = d.crops || [];
+  const picked = d.crop || null;
+  const chosen = crops.find(c => c.crop_id === picked) || null;
+  if (crops.length) {
+    const row = el('div', 'yd-crops');
+    row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Which crop');
+    const pick = id => { pref.set(CROP_KEY, id || ''); renderYield(mount, farm); };
+    const all = el('button', 'yd-crop', 'All crops'); all.type = 'button';
+    all.setAttribute('aria-pressed', String(!picked)); all.onclick = () => { if (picked) pick(null); };
+    row.append(all);
+    crops.forEach(c => {
+      const b = el('button', 'yd-crop'); b.type = 'button';
+      b.append(cropAvatar({ name: c.crop, category: c.category, photo_url: c.photo_url }, 'xs'), el('span', null, c.crop),
+               el('span', 'yd-crop-kg', kg(c.harvested)));
+      b.title = `${c.crop}: ${kg(c.harvested)} harvested in the period` + (c.projected_kg_m2_year != null ? ` · on course for ${perM2(c.projected_kg_m2_year)} kg/m² a year` : '');
+      b.setAttribute('aria-pressed', String(c.crop_id === picked));
+      b.onclick = () => { if (c.crop_id !== picked) pick(c.crop_id); };
+      row.append(b);
+    });
+    mount.append(row);
+  }
+
   const t = d.totals || {};
   const tiles = el('div', 'tiles yd-tiles');
-  const tile = (v, l, s, tone) => { const x = el('div', 'tile' + (tone ? ' ' + tone : '')); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); x.append(b); return x; };
+  const tile = (v, l, s, tone, title) => { const x = el('div', 'tile' + (tone ? ' ' + tone : '')); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); if (title) x.title = title; x.append(b); return x; };
   const p = pctOf(t.harvested, t.planned_to_date);
-  tiles.append(tile(kg(t.harvested), 'Harvested', `${t.cuts || 0} cuts`),
+  tiles.append(tile(kg(t.harvested), chosen ? `${chosen.crop} harvested` : 'Harvested', `${t.cuts || 0} cut${Number(t.cuts) === 1 ? '' : 's'}`),
+               tile(t.projected_kg_m2_year == null ? '—' : perM2(t.projected_kg_m2_year), 'kg per m² a year, on course',
+                    t.batches_running ? `${t.batches_running} batch${t.batches_running === 1 ? '' : 'es'} still picking` : 'from the batches cut in the period',
+                    '', YEAR_HINT),
                tile(kg(t.planned_to_date), 'Planned so far', `${kg(t.planned)} over the whole period`),
                tile(p == null ? '—' : `${p}%`, 'Of plan so far', null, p != null && p < 80 ? 'bad' : ''),
                tile(Number(t.harvested) ? `${Math.round(100 * Number(t.waste || 0) / (Number(t.harvested) + Number(t.waste || 0)))}%` : '—', 'Waste', kg(t.waste)),
@@ -55,7 +98,7 @@ function paint(mount, farm, d) {
   // week by week: two bars, planned (outline) and harvested (solid), waste on top of harvested
   const weeks = d.weeks || [];
   const card = el('div', 'card card-pad');
-  card.append(el('div', 'sec-title', 'Week by week'));
+  card.append(el('div', 'sec-title', chosen ? `Week by week · ${chosen.crop}` : 'Week by week'));
   const max = Math.max(1, ...weeks.map(w => Math.max(Number(w.planned), Number(w.harvested) + Number(w.waste))));
   const chart = el('div', 'yd-chart');
   weeks.forEach(w => {
@@ -73,13 +116,36 @@ function paint(mount, farm, d) {
   card.append(chart, el('div', 'hint', 'Outline: planned · green: harvested · red: waste.'));
   mount.append(card);
 
+  // the batches still being picked: what each gave so far and its course for the year
+  const running = d.running || [];
+  if (running.length) {
+    const c = el('div', 'card card-pad');
+    c.append(el('div', 'sec-title', `In production · ${running.length}`));
+    const tb = el('table', 'table');
+    tb.innerHTML = '<thead><tr><th></th><th>Crop</th><th>Where</th><th>In since</th><th>First cut</th><th class="num">Cuts</th><th class="num">So far</th><th class="num">Last 4 weeks</th><th class="num">kg/m² so far</th><th class="num">kg/m² a year</th></tr></thead>';
+    const body = el('tbody');
+    running.forEach(r => {
+      const tr = el('tr');
+      const av = el('td'); av.append(cropAvatar({ name: r.crop, category: r.category, photo_url: r.photo_url }, 'xs'));
+      const year = el('td', 'num yd-year', perM2(r.projected_kg_m2_year)); year.title = YEAR_HINT;
+      tr.append(av, el('td', null, r.crop), el('td', 'hint', [r.zone, r.system !== r.zone ? r.system : null, r.position].filter(Boolean).join(' · ') + (r.m2 ? ` · ${Number(r.m2).toLocaleString()} m²` : '')),
+                el('td', 'hint', nice(r.started)), el('td', 'hint', nice(r.first_cut)), el('td', 'num', String(r.cuts || 0)),
+                el('td', 'num', kg(r.kg)), el('td', 'num', kg(r.kg_28)), el('td', 'num', perM2(r.kg_m2)), year);
+      body.append(tr);
+    });
+    tb.append(body);
+    const wrap = el('div', 'yd-scroll'); wrap.append(tb);
+    c.append(wrap, el('div', 'hint', 'kg/m² a year: ' + YEAR_HINT.charAt(0).toLowerCase() + YEAR_HINT.slice(1)));
+    mount.append(c);
+  }
+
   const grid = el('div', 'yd-grid');
   const table = (title, rows, nameOf) => {
     const c = el('div', 'card card-pad');
     c.append(el('div', 'sec-title', title));
     if (!rows.length) { c.append(el('div', 'hint', 'Nothing in this period.')); return c; }
     const t = el('table', 'table');
-    t.innerHTML = '<thead><tr><th></th><th class="num">Planned so far</th><th class="num">Harvested</th><th>Of plan</th><th class="num">kg/m²</th><th class="num">Waste</th></tr></thead>';
+    t.innerHTML = '<thead><tr><th></th><th class="num">Planned so far</th><th class="num">Harvested</th><th>Of plan</th><th class="num">kg/m²</th><th class="num">kg/m² a year</th><th class="num">Waste</th></tr></thead>';
     const tb = el('tbody');
     rows.forEach(r => {
       const tr = el('tr');
@@ -88,15 +154,19 @@ function paint(mount, farm, d) {
       const bar = el('td'); const b = el('div', 'yd-bar'); const f = el('i'); f.style.width = Math.min(100, p || 0) + '%';
       if (p != null && p < 80) b.classList.add('short');
       b.append(f); bar.append(b, el('span', 'hint', p == null ? '—' : `${p}%`));
+      const year = el('td', 'num', perM2(r.projected_kg_m2_year)); year.title = YEAR_HINT;
       tr.append(n, el('td', 'num', kg(r.planned_to_date)), el('td', 'num', kg(r.harvested)), bar,
-                el('td', 'num', r.kg_m2 == null ? '—' : Number(r.kg_m2).toFixed(1)), el('td', 'num', Number(r.waste) ? kg(r.waste) : '—'));
+                el('td', 'num', r.kg_m2 == null ? '—' : Number(r.kg_m2).toFixed(1)), year, el('td', 'num', Number(r.waste) ? kg(r.waste) : '—'));
       tb.append(tr);
     });
-    t.append(tb); c.append(t);
+    t.append(tb);
+    const wrap = el('div', 'yd-scroll'); wrap.append(t);
+    c.append(wrap);
     return c;
   };
-  grid.append(table('Per crop', d.crops || [], r => [cropAvatar({ name: r.crop, category: r.category, photo_url: r.photo_url }, 'xs'), el('span', null, r.crop)]),
-              table('Per zone', d.zones || [], r => [el('span', null, r.zone)]));
+  // with one crop picked, its line is the tiles above: the per-crop table is for comparing them all
+  if (!chosen) grid.append(table('Per crop', crops, r => [cropAvatar({ name: r.crop, category: r.category, photo_url: r.photo_url }, 'xs'), el('span', null, r.crop)]));
+  grid.append(table(chosen ? `Per zone · ${chosen.crop}` : 'Per zone', d.zones || [], r => [el('span', null, r.zone)]));
   mount.append(grid);
 
   const fin = d.finished || [];
@@ -117,7 +187,9 @@ function paint(mount, farm, d) {
                 el('td', 'num', r.kg_m2 == null ? '—' : Number(r.kg_m2).toFixed(1)), el('td', 'hint', nice(r.last_cut)));
       tb.append(tr);
     });
-    t.append(tb); c.append(t);
+    t.append(tb);
+    const wrap = el('div', 'yd-scroll'); wrap.append(t);
+    c.append(wrap);
     mount.append(c);
   }
 }

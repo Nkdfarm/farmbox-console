@@ -1690,7 +1690,7 @@ table.table tr.off td { opacity: .5; }
 .seed-head { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--text-muted); font-weight: 600; }
 
 /* ── Dashboard › Yield (0.7.145) ── */
-.yd-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.yd-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .yd-chart { display: flex; align-items: flex-end; gap: 4px; height: 220px; overflow-x: auto; padding-top: 8px; }
 .yd-col { flex: 1 0 26px; display: flex; flex-direction: column; align-items: center; height: 100%; }
 .yd-col.ahead { opacity: .55; }
@@ -1707,6 +1707,18 @@ table.table tr.off td { opacity: .5; }
 .yd-bar i { display: block; height: 100%; background: var(--success, #2e7d32); }
 .yd-bar.short i { background: var(--warning); }
 @media (max-width: 640px) { .yd-grid { grid-template-columns: 1fr; } }
+/* one crop at a time (0.7.255): a row of crops under the head, the one shown filled */
+.yd-crops { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--space-3); }
+.yd-crop { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 12px 4px 6px; border-radius: var(--radius-full);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.yd-crop:first-child { padding-left: 12px; }
+.yd-crop:hover { border-color: var(--accent); }
+.yd-crop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.yd-crop[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.yd-crop-kg { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.yd-crop[aria-pressed="true"] .yd-crop-kg { color: inherit; opacity: .8; }
+.yd-scroll { overflow-x: auto; }
+.yd-year { font-weight: 600; }
 
 /* ── Tasks › Hours (0.7.146) ── */
 .hr-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }

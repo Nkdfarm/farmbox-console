@@ -1,5 +1,5 @@
 {
-  "version": "0.7.254",
+  "version": "0.7.255",
   "released": "2026-10-14",
-  "note": "Batch labels with a lot code"
+  "note": "Yield: one crop at a time, and the kg per m² a year"
 }

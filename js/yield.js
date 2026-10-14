@@ -19,11 +19,15 @@ import { loading, el, pageHead, cropAvatar, pref, farmDate } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
 const CROP_KEY = 'fbc_yield_crop';
+const UNIT_KEY = 'fbc_yield_unit';                  // the chart in kg or in kg/m² a year
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
 const pctOf = (a, b) => Number(b) > 0 ? Math.round(100 * Number(a) / Number(b)) : null;
 const perM2 = v => v == null ? '—' : Number(v).toFixed(1);
+const fmt1 = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
+// a round top for the scale: 1, 2 or 5 times a power of ten, at least the highest bar
+const niceMax = v => { if (!(v > 0)) return 1; const p = 10 ** Math.floor(Math.log10(v)); return [1, 2, 2.5, 5, 10].map(f => f * p).find(x => x >= v); };
 const YEAR_HINT = 'What it gave per m² from its transplant to its last cut, scaled to a year: the weeks before the first cut count too.';
 
 export function yieldRange() {
@@ -95,25 +99,68 @@ function paint(mount, farm, d) {
                tile(t.kg_m2 == null ? '—' : `${Number(t.kg_m2).toFixed(1)}`, 'kg per m²', `${t.batches_finished || 0} finished batches`));
   mount.append(tiles);
 
-  // week by week: two bars, planned (outline) and harvested (solid), waste on top of harvested
-  const weeks = d.weeks || [];
+  // the chart: its step follows the period (a week up to three months, two weeks up to six, a month for a year), and it
+  // shows either the kilograms of each step or the course for a year reckoned up to each step's end (0.7.256, owner:
+  // "3 months by week, 6 months by 2 weeks, 12 months by months … change the y unit from total kg or projected yield")
+  const steps = d.buckets || (d.weeks || []).map(w => ({ from: w.w, to: w.w, planned: w.planned, harvested: w.harvested, waste: w.waste }));
+  const step = d.step || 'week';
+  const unit = pref.get(UNIT_KEY) === 'year' ? 'year' : 'kg';
   const card = el('div', 'card card-pad');
-  card.append(el('div', 'sec-title', chosen ? `Week by week · ${chosen.crop}` : 'Week by week'));
-  const max = Math.max(1, ...weeks.map(w => Math.max(Number(w.planned), Number(w.harvested) + Number(w.waste))));
+  const head = el('div', 'yd-chart-head');
+  const STEP_TITLE = { week: 'Week by week', '2weeks': 'Every two weeks', month: 'Month by month' };
+  head.append(el('div', 'sec-title', (STEP_TITLE[step] || 'Week by week') + (chosen ? ` · ${chosen.crop}` : '')), el('div', 'spacer'));
+  const useg = el('div', 'seg');
+  [['kg', 'kg harvested'], ['year', 'kg/m² a year']].forEach(([v, label]) => {
+    const btn = el('button', 'seg-btn', label); btn.type = 'button'; btn.setAttribute('aria-pressed', String(v === unit));
+    btn.onclick = () => { if (v !== unit) { pref.set(UNIT_KEY, v); paint(mount, farm, d); } };
+    useg.append(btn);
+  });
+  head.append(useg);
+  card.append(head);
+
+  // a month is named by its name, with its year on the first one and on January (a year's view shows the same month twice)
+  const stepLabel = (s, i) => {
+    if (step !== 'month') return nice(s.from);
+    const dt = new Date(String(s.from).slice(0, 10) + 'T12:00:00');
+    return dt.toLocaleDateString(undefined, i === 0 || dt.getMonth() === 0 ? { month: 'short', year: '2-digit' } : { month: 'short' });
+  };
+  const span = s => step === 'month'
+    ? new Date(String(s.from).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : s.from === s.to ? `week of ${nice(s.from)}` : `${nice(s.from)} – ${nice(s.to)}`;
+  const val = s => unit === 'year' ? (s.projected_kg_m2_year == null ? null : Number(s.projected_kg_m2_year))
+                                   : Math.max(Number(s.planned || 0), Number(s.harvested || 0) + Number(s.waste || 0));
+  const top = Math.max(...steps.map(val).filter(v => v != null), 0);
+  const max = niceMax(top);
+  const plot = el('div', 'yd-plot');
+  const axis = el('div', 'yd-axis');
+  [max, max / 2, 0].forEach(v => axis.append(el('span', null, unit === 'year' ? fmt1(v) : Math.round(v).toLocaleString())));
   const chart = el('div', 'yd-chart');
-  weeks.forEach(w => {
-    const col = el('div', 'yd-col' + (w.w > d.today ? ' ahead' : ''));
+  const lines = el('div', 'yd-gridlines'); lines.append(el('i'), el('i'), el('i'));
+  chart.append(lines);
+  steps.forEach((s, i) => {
+    const col = el('div', 'yd-col' + (String(s.from) > String(d.today) ? ' ahead' : ''));
     const bars = el('div', 'yd-bars');
-    const pb = el('i', 'plan'); pb.style.height = (100 * w.planned / max) + '%';
-    const hb = el('i', 'harv'); hb.style.height = (100 * w.harvested / max) + '%';
-    const wb = el('i', 'waste'); wb.style.height = (100 * w.waste / max) + '%';
-    const stack = el('span', 'yd-stack'); stack.append(wb, hb);
-    bars.append(pb, stack);
-    col.append(bars, el('span', 'yd-lbl', nice(w.w)));
-    col.title = `Week of ${nice(w.w)} · planned ${kg(w.planned)} · harvested ${kg(w.harvested)}${Number(w.waste) ? ` · waste ${kg(w.waste)}` : ''}`;
+    if (unit === 'year') {
+      const v = val(s);
+      const yb = el('i', 'year'); yb.style.height = (v == null ? 0 : 100 * v / max) + '%';
+      bars.append(yb);
+      if (v != null && steps.length <= 16) yb.append(el('span', 'yd-val', fmt1(v)));   // the figure on top of its bar
+      col.title = `${span(s)} · ${v == null ? 'nothing planted yet' : `on course for ${fmt1(v)} kg/m² a year`} · ${kg(s.harvested)} harvested in it`;
+    } else {
+      const pb = el('i', 'plan'); pb.style.height = (100 * s.planned / max) + '%';
+      const hb = el('i', 'harv'); hb.style.height = (100 * s.harvested / max) + '%';
+      const wb = el('i', 'waste'); wb.style.height = (100 * s.waste / max) + '%';
+      const stack = el('span', 'yd-stack'); stack.append(wb, hb);
+      bars.append(pb, stack);
+      col.title = `${span(s)} · planned ${kg(s.planned)} · harvested ${kg(s.harvested)}${Number(s.waste) ? ` · waste ${kg(s.waste)}` : ''}`;
+    }
+    col.append(bars, el('span', 'yd-lbl', stepLabel(s, i)));
     chart.append(col);
   });
-  card.append(chart, el('div', 'hint', 'Outline: planned · green: harvested · red: waste.'));
+  plot.append(axis, chart);
+  card.append(plot, el('div', 'hint', unit === 'year'
+    ? 'kg per m² a year, reckoned up to the end of each step: everything harvested since each batch took its place, over the time it has held it — the months before the first cut and the days since the last one count too, so the line starts low and climbs as the picking comes.'
+    : `kg ${step === 'month' ? 'per month' : step === '2weeks' ? 'per two weeks' : 'per week'}. Outline: planned · green: harvested · red: waste.`));
   mount.append(card);
 
   // the batches still being picked: what each gave so far and its course for the year

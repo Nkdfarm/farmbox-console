@@ -1,5 +1,5 @@
 {
-  "version": "0.7.255",
+  "version": "0.7.256",
   "released": "2026-10-14",
-  "note": "Yield: one crop at a time, and the kg per m² a year"
+  "note": "Yield: the chart steps with the period, in kg or in kg per m² a year"
 }

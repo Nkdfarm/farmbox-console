@@ -133,7 +133,7 @@ function paint(mount, farm, d) {
   const max = niceMax(top);
   const plot = el('div', 'yd-plot');
   const axis = el('div', 'yd-axis');
-  [max, max / 2, 0].forEach(v => axis.append(el('span', null, unit === 'year' ? fmt1(v) : Math.round(v).toLocaleString())));
+  [max, max / 2, 0].forEach(v => axis.append(el('span', null, fmt1(v))));
   const chart = el('div', 'yd-chart');
   const lines = el('div', 'yd-gridlines'); lines.append(el('i'), el('i'), el('i'));
   chart.append(lines);
@@ -158,10 +158,12 @@ function paint(mount, farm, d) {
     chart.append(col);
   });
   plot.append(axis, chart);
-  card.append(plot, el('div', 'hint', unit === 'year'
+  // nothing to draw (a unit with no harvest in the period): say so instead of an empty frame with a scale of 0 to 1
+  if (!(top > 0)) { card.append(el('div', 'hint', unit === 'year' ? 'No batch with a harvest in this period: nothing to project yet.' : 'Nothing harvested or planned in this period.')); mount.append(card); }
+  else card.append(plot, el('div', 'hint', unit === 'year'
     ? 'kg per m² a year, reckoned up to the end of each step: everything harvested since each batch took its place, over the time it has held it — the months before the first cut and the days since the last one count too, so the line starts low and climbs as the picking comes.'
     : `kg ${step === 'month' ? 'per month' : step === '2weeks' ? 'per two weeks' : 'per week'}. Outline: planned · green: harvested · red: waste.`));
-  mount.append(card);
+  if (top > 0) mount.append(card);
 
   // the batches still being picked: what each gave so far and its course for the year
   const running = d.running || [];

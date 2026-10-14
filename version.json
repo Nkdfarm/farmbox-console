@@ -1,5 +1,5 @@
 {
-  "version": "0.7.256",
+  "version": "0.7.257",
   "released": "2026-10-14",
-  "note": "Yield: the chart steps with the period, in kg or in kg per m² a year"
+  "note": "Yield: an empty chart says so"
 }

@@ -17,6 +17,7 @@
 // The database checks every drop again; the colours only say it in advance.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
+import { printLabels } from './labels.js';
 import { loading, el, drawer, field, input, selectBox, toast, busy, confirmDrawer, pref, cropAvatar, cropHue,
          systemLabel, mediumLabel, nurseryLine, farmDate } from './ui.js';
 
@@ -133,6 +134,10 @@ function paint() {
       st.onclick = () => startSteady(null);
       act.append(st);
     }
+    const lb = el('button', 'btn btn-sm', 'Labels…');
+    lb.title = 'Print the labels of the batches transplanted in a week, or of the bars selected';
+    lb.onclick = () => openLabels();
+    act.append(lb);
     const cv = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel validated…');
     cv.title = 'Cancel the validated batches of this unit or of a steady group — and plan the steady groups again';
     cv.onclick = () => openCancelValidated();
@@ -570,6 +575,8 @@ function openBatch(b, sys, p) {
   const facts = el('div', 'set-group');
   const row = (k, v) => { if (v == null || v === '') return; const r = el('div', 'set-row'); r.append(el('span', null, k), el('span', null, String(v))); facts.append(r); };
   row('State', { proposed: 'Proposed — not planted until validated', validated: 'Validated', active: 'Growing', harvested: 'Harvested' }[b.status] || b.status);
+  // the lot (0234): given when its label is printed or the plants are on the farm, never changed
+  if (b.status !== 'proposed') row('Lot', b.lot_code || 'given when its label is printed, or when it is planted');
   row('Batch', b.batch_code);
   if (b.succession) {
     const series = (data.batches || []).filter(x => x.succession === b.succession);
@@ -618,6 +625,12 @@ function openBatch(b, sys, p) {
 
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;
   d.footer.append(close, el('div', 'spacer'));
+  if (b.status !== 'proposed') {
+    const lab = el('button', 'btn', 'Print label');
+    lab.title = 'The label of the batch: its lot code, crop, table, dates and a QR that Naked Brain scans';
+    lab.onclick = async () => { const r = await printLabels([b.id]); if (r?.length && !b.lot_code) { d.close(); await reload(); } };
+    d.footer.append(lab);
+  }
   if (data.may_plan && b.succession) {
     const series = (data.batches || []).filter(x => x.succession === b.succession && x.status === 'proposed');
     if (series.length > 1) {
@@ -641,6 +654,34 @@ function openBatch(b, sys, p) {
     };
     d.footer.append(rm);
   }
+}
+
+// ── labels for a week's transplants (0234) ────────────────────────────────────
+function openLabels() {
+  const t = farmDate(), today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / DAY;
+  const monday = today - ((new Date(today * DAY).getUTCDay() + 6) % 7);
+  const real = b => b.status === 'validated' || b.status === 'active';
+  const inWeek = w => (data.batches || []).filter(b => real(b) && dn(b.stay_from) >= w && dn(b.stay_from) < w + 7);
+  const d = drawer('Batch labels', 'One label a batch, staked at its table: the lot code, the crop, the dates and a QR for Naked Brain');
+  const choices = [['This week', monday], ['Next week', monday + 7], ['The week after', monday + 14]];
+  const list = el('div', 'set-group');
+  choices.forEach(([name, w]) => {
+    const bs = inWeek(w);
+    const r = el('div', 'set-row');
+    const go = el('button', 'btn btn-sm', bs.length ? `Print ${bs.length}` : 'None');
+    go.disabled = !bs.length;
+    go.onclick = async () => { const res = await printLabels(bs.map(b => b.id)); if (res?.length) await reload(); };
+    r.append(el('span', null, `${name} · transplants ${nice(ds(w))} – ${nice(ds(w + 6))}`), go);
+    list.append(r);
+  });
+  const sel = (data.batches || []).filter(b => selected.has(b.id) && b.status !== 'proposed');
+  if (sel.length) {
+    const r = el('div', 'set-row'); const go = el('button', 'btn btn-sm', `Print ${sel.length}`);
+    go.onclick = async () => { const res = await printLabels(sel.map(b => b.id)); if (res?.length) await reload(); };
+    r.append(el('span', null, 'The bars selected'), go); list.append(r);
+  }
+  d.body.append(list, el('div', 'hint', 'Validated and growing batches only, from the dates on screen. A batch gets its lot code the first time its label is printed, if it had none; printing again gives the same code.'));
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close; d.footer.append(close);
 }
 
 // click on an empty day: pick a crop that fits

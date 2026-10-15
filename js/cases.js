@@ -183,7 +183,7 @@ function programCard(p, det, changed) {
     p.withholding_days ? `withholding ${p.withholding_days} days` : 'no withholding',
     p.harvest_after ? `harvest from ${day(p.harvest_after)}` : null].filter(Boolean).join(' · ')));
   const apps = el('div', 'vw-chips'); apps.style.marginTop = '6px';
-  (p.applications_list || []).forEach(a => apps.append(el('span', 'vw-tag ' + (a.status === 'done' ? 'beneficial' : ''),
+  (p.applications_list || []).forEach(a => apps.append(el('span', 'vw-tag ' + (a.status === 'done' ? 'r-green' : ''),
     `${a.n}: ${day(a.date)}${a.status === 'done' ? ' ✓' : a.status === 'skipped' ? ' skipped' : ''}`)));
   card.append(apps);
   if (p.note) card.append(el('div', 'hint', p.note));

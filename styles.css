@@ -1106,10 +1106,16 @@ tr.off { opacity: .6; }
 .vw-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .vw-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
   background: var(--surface-offset); color: var(--text); border: 1px solid var(--border); }
-.vw-tag.pest { background: rgba(251,191,36,0.14); color: var(--warning); }
-.vw-tag.disease { background: var(--error-bg); color: var(--error); }
-.vw-tag.disorder { background: var(--info-bg); color: var(--info); }
-.vw-tag.beneficial { background: var(--success-bg); color: var(--success); }
+/* one risk scale for the person's and the AI's chips (0.7.261): green no risk, yellow low, red high — no kind colours */
+.vw-tag.r-green { background: var(--success-bg); color: var(--success); border-color: transparent; }
+.vw-tag.r-yellow { background: rgba(251,191,36,0.14); color: var(--warning); border-color: transparent; }
+.vw-tag.r-red { background: var(--error-bg); color: var(--error); border-color: transparent; }
+.vw-tag.ai.r-green, .vw-tag.ai.r-yellow, .vw-tag.ai.r-red { border-color: currentColor; }
+/* the person's note: the same chip, their face inside on the left, the text kept whole (two lines on a report card) */
+.vw-tag.vw-note { max-width: 100%; padding: 2px 9px 2px 3px; border-radius: 12px; align-items: flex-start; font-weight: 500; }
+.vw-tag.vw-note .avatar.xs { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.vw-note-text { white-space: normal; line-height: 1.35; padding-top: 1px; }
+.vw-note-text.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .vw-tag.ai { border-style: dashed; }
 .vw-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
 

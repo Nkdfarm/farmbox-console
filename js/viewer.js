@@ -19,7 +19,7 @@
 //     openCases   async () → the open cases of the zone (rpc cases, filtered)
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
-import { el, toast, busy, num, selectBox } from './ui.js';
+import { el, toast, busy, num, selectBox, avatar } from './ui.js';
 import { newCase, openCase } from './cases.js';
 
 const when = ts => ts ? new Date(ts).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -42,24 +42,46 @@ export const photoTitle = p => p.kind === 'trap'
 
 // the tags on a photo, the person's and the AI's, as one list of chips
 // `short` (the report's cards, 0.7.214, owner 4 Oct 2026: "just the AI summary with 3 colours, the complete AI report
-// only when clicking"): an AI finding is its first words — "Powdery mildew · slight" — in its colour (pest amber,
-// disease red, disorder blue), the whole sentence on hover; the viewer shows everything.
+// only when clicking"): an AI finding is its first words — "Powdery mildew · slight" — in its risk colour (below),
+// the whole sentence on hover; the viewer shows everything.
 const shortName = s => { const t = String(s || '').split(/\s*[(,;:]|\s+[—–-]\s+/)[0].trim(); return t.length > 26 ? t.slice(0, 25).trimEnd() + '…' : t; };
+// One risk scale for every chip, the person's and the AI's (0.7.261, owner 15 Oct 2026: "yellow (low risk), red (risk
+// high) and green (no risks). remove the blue and grey"): until then a chip took the colour of its kind (pest amber,
+// disease red, disorder blue, beneficial green, none grey). Now: nothing or a beneficial green, slight yellow, clear or
+// severe red; the kind stays in the words. A tag without a severity is slight (tag_photo's default).
+export const RISK_WORD = { green: 'no risk', yellow: 'low risk', red: 'high risk' };
+export const riskOf = (severity, kind) => kind === 'beneficial' || Number(severity) === 0 ? 'green'
+  : Number(severity ?? 1) >= 2 ? 'red' : 'yellow';
+// the person's note as a chip of the same scale, their small face inside on the left (0239): the colour is theirs —
+// beside the AI's chips it shows where the two read the photo differently. A note filed by hand ("Recovered by …")
+// says nothing about the crop: it stays a line of text.
+export function noteChip(p, short = false) {
+  const text = String(p.note || '').trim();
+  // a list that does not carry the reading (a case, "The AI found something"), or a trap: the note stays text
+  if (!text || !('note_level' in p) || p.kind === 'trap' || (!p.note_level && /^Recovered by\b/.test(text))) return null;
+  const lvl = RISK_WORD[p.note_level] ? p.note_level : 'yellow';
+  const c = el('span', `vw-tag vw-note r-${lvl}`);
+  if (p.by || p.worker_id) c.append(avatar({ worker_id: p.worker_id || null, name: p.by || '' }, 'xs'));
+  c.append(el('span', 'vw-note-text' + (short ? ' clamp' : ''), text));
+  c.title = `${p.by ? p.by + ': ' : ''}${text} (${p.note_level ? RISK_WORD[lvl] : 'no risk chosen'})`;
+  return c;
+}
 export function tagChips(p, short = false) {
   const box = el('div', 'vw-chips');
-  (p.tags || []).forEach(t => box.append(el('span', 'vw-tag ' + (t.kind || ''), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
+  (p.tags || []).forEach(t => box.append(el('span', 'vw-tag r-' + riskOf(t.severity, t.kind), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
   if (p.kind === 'observation' && p.ai_status === 'done') {
     const f = p.ai?.findings || [];
-    if (!f.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai', 'AI: healthy'));
+    if (!f.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai r-green', 'AI: healthy'));
     f.forEach(x => {
       const full = `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`;
-      const c = el('span', 'vw-tag ai ' + (x.kind || ''), short ? `${shortName(x.name || x.code)}${x.severity != null ? ' · ' + SEV[x.severity] : ''}` : full);
+      const c = el('span', 'vw-tag ai r-' + riskOf(x.severity, x.kind), short ? `${shortName(x.name || x.code)}${x.severity != null ? ' · ' + SEV[x.severity] : ''}` : full);
       if (short) c.title = full;
       box.append(c);
     });
   }
+  // insects on a trap: a pest seen, low risk by itself — the trap's own figure against the limits says more
   if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species)) {
-    p.species.slice(0, 3).forEach(x => box.append(el('span', 'vw-tag ai', `AI: ${x.common || x.name} ${x.count ?? ''}`)));
+    p.species.slice(0, 3).forEach(x => box.append(el('span', 'vw-tag ai ' + (x.beneficial ? 'r-green' : 'r-yellow'), `AI: ${x.common || x.name} ${x.count ?? ''}`)));
   }
   return box;
 }
@@ -196,7 +218,9 @@ export function openViewer(ctx) {
     fact('Crop', photo.crop || '—');
     fact('Part', partLabel(photo.part));
   }
-  fact('Note', photo.note);
+  const nc = noteChip(photo);
+  if (nc) { const f = el('div', 'fact'), v = el('span', 'fact-v'); v.append(nc); f.append(el('span', 'fact-k', 'Note'), v); facts.append(f); }
+  else fact('Note', photo.note);
   panel.append(facts);
 
   // the person's tags
@@ -208,7 +232,7 @@ export function openViewer(ctx) {
     const tags = photo.tags || [];
     if (!tags.length) list.append(el('span', 'hint', 'No tag yet.'));
     tags.forEach((t, i) => {
-      const chip = el('span', 'vw-tag ' + (t.kind || ''), `${t.label || t.code} · ${SEV[t.severity ?? 1]}`);
+      const chip = el('span', 'vw-tag r-' + riskOf(t.severity, t.kind), `${t.label || t.code} · ${SEV[t.severity ?? 1]}`);
       if (mayWrite) { const rm = el('button', 'vw-x', '×'); rm.title = 'Remove'; rm.onclick = () => saveTags(tags.filter((_, j) => j !== i)); chip.append(rm); }
       list.append(chip);
     });

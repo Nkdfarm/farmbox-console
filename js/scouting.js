@@ -51,7 +51,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
-import { openViewer, tagChips, photoTitle, partLabel } from './viewer.js';
+import { openViewer, tagChips, noteChip, photoTitle, partLabel } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection, robotStrip } from './robot.js';
@@ -1029,13 +1029,16 @@ function photoFig(p, z, day) {
   const part = partLabel(p.part) || 'photo', who = p.by ? String(p.by).trim().split(/\s+/)[0] : null;
   const title = el('div', 'pd-fig-title' + (p.extra ? ' extra' : ''));
   title.append(dotEl(p.dot), el('b', null, [part.charAt(0).toUpperCase() + part.slice(1), hhmm(p.taken_at), who].filter(Boolean).join(' · ')));
-  cap.append(title, tagChips(p, true));
+  // the AI's chips and the person's note in the same colours, the note with its writer's face (0.7.261)
+  const chips = tagChips(p, true), nc = noteChip(p, true);
+  if (nc) chips.append(nc);
+  cap.append(title, chips);
   // only what somebody measured or wrote: the position, the sizes on the scale card, the comment
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
   if (p.pos_code) line.append(el('span', 'mono', p.pos_code));
   if (sizes) line.append(el('b', null, sizes));
-  if (p.note) line.append(el('span', null, p.note));
+  if (p.note && !nc) line.append(el('span', null, p.note));
   if (line.children.length) cap.append(line);
   const st = p.ai_status === 'done' ? 'AI read' : p.ai_status === 'queued' ? 'AI asked' : p.ai_status === 'failed' ? 'AI failed' : null;
   fig.title = [[p.crop, p.section === 'growth' ? 'Growth' : 'Plant health', p.extra ? 'extra scouting' : null, st].filter(Boolean).join(' · '),

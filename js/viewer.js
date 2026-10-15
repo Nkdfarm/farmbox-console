@@ -223,10 +223,56 @@ export function openViewer(ctx) {
     fact('Crop', photo.crop || '—');
     fact('Part', partLabel(photo.part));
   }
-  const nc = noteChip(photo);
-  if (nc) { const f = el('div', 'fact'), v = el('span', 'fact-v'); v.append(nc); f.append(el('span', 'fact-k', 'Note'), v); facts.append(f); }
-  else fact('Note', photo.note);
   panel.append(facts);
+
+  // the person's note, its own section, changed here (0.7.263, 0241; owner 15 Oct 2026: "when I click on the picture I
+  // have to see the human note as well and have the possibility to modify it"): the text and its risk colour, by the
+  // person who wrote it, a manager or the agronomist (the server says who may)
+  const secNote = el('div', 'vw-note-sec');
+  const paintNote = () => {
+    secNote.textContent = '';
+    secNote.append(el('div', 'sec-title', 'Note'));
+    const chip = noteChip(photo);
+    if (chip) { const box = el('div', 'vw-chips'); box.append(chip); secNote.append(box); }
+    else if (photo.note) secNote.append(el('div', 'vw-note-plain', photo.note));
+    else secNote.append(el('div', 'hint', 'No note on this photo.'));
+    if (mayWrite && photo.id) {
+      const ed = el('button', 'btn btn-sm', photo.note ? 'Edit the note' : 'Add a note');
+      ed.onclick = editNote;
+      secNote.append(ed);
+    }
+  };
+  const editNote = () => {
+    secNote.textContent = '';
+    secNote.append(el('div', 'sec-title', 'Note'));
+    const ta = el('textarea', 'vw-note-box'); ta.rows = 3; ta.maxLength = 2000; ta.value = photo.note || '';
+    ta.placeholder = 'What you see on this photo';
+    const risk = el('select', 'vw-note-risk');
+    [['green', 'Green · no risk'], ['yellow', 'Yellow · low risk'], ['red', 'Red · high risk']].forEach(([v, t]) => {
+      const o = el('option', null, t); o.value = v; risk.append(o);
+    });
+    risk.value = RISK_WORD[photo.note_level] ? photo.note_level : 'yellow';
+    const tint = () => { risk.dataset.level = risk.value; };
+    risk.onchange = tint; tint();
+    const save = el('button', 'btn btn-sm btn-primary', 'Save');
+    const cancel = el('button', 'btn btn-sm', 'Cancel');
+    cancel.onclick = paintNote;
+    save.onclick = async () => {
+      busy(save, true, 'Saving…');
+      try {
+        const a = await rpc('edit_photo_note', { p_kind: photo.kind === 'trap' ? 'trap' : 'observation', p_id: photo.id,
+                                                 p_note: ta.value, p_level: risk.value });
+        photo.note = a.note; photo.note_level = a.note_level;
+        paintNote(); toast(a.note ? 'Note saved' : 'Note removed', 'ok'); ctx.onChange?.(photo);
+      } catch (e) { busy(save, false, 'Save'); toast(String(e.message || e).replace(/^\d+ /, ''), 'bad'); }
+    };
+    const acts = el('div', 'vw-note-acts');
+    acts.append(risk, save, cancel);
+    secNote.append(ta, acts);
+    ta.focus();
+  };
+  paintNote();
+  panel.append(secNote);
 
   // the person's tags
   const secTags = el('div');

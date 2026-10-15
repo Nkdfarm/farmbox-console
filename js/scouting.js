@@ -977,7 +977,7 @@ function extraTag(p) {
   t.title = `Added by an extra scouting${p.by ? ' — ' + p.by : ''}, beside the zone's planned scouting`;
   return t;
 }
-function trapCard(p, z, day) {
+function trapCard(p, z, day, withNote = true) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
@@ -985,7 +985,11 @@ function trapCard(p, z, day) {
   if (p.extra) head.append(extraTag(p));
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
-  if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
+  // the AI's chips and the person's note on the trap, in the same risk colours (0.7.262, 0240)
+  const tchips = (p.tags || []).length || p.ai_status === 'done' ? tagChips(p) : el('div', 'vw-chips');
+  const tn = withNote ? noteChip(p, true) : null;
+  if (tn) tchips.append(tn);
+  if (tchips.childNodes.length) card.append(tchips);
   const chk = trapCheckPill(p.check, p.total);
   if (chk) card.append(chk);
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
@@ -1355,7 +1359,9 @@ function trapsBlock(z, day, traps) {
   if (traps.length) {
     const body = el('div', 'pd-sec-body');
     const cards = el('div', 'pd-traps');
-    traps.forEach(p => cards.append(trapCard(p, z, day)));
+    // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)
+    const noted = new Set();
+    traps.forEach(p => { const k = (p.code || '') + '|' + (p.note || ''); const first = !noted.has(k); noted.add(k); cards.append(trapCard(p, z, day, first)); });
     body.append(cards);
     if (kit) {
       const hist = el('div', 'pd-hist');

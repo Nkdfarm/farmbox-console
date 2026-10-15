@@ -57,8 +57,8 @@ export const riskOf = (severity, kind) => kind === 'beneficial' || Number(severi
 // says nothing about the crop: it stays a line of text.
 export function noteChip(p, short = false) {
   const text = String(p.note || '').trim();
-  // a list that does not carry the reading (a case, "The AI found something"), or a trap: the note stays text
-  if (!text || !('note_level' in p) || p.kind === 'trap' || (!p.note_level && /^Recovered by\b/.test(text))) return null;
+  // a list that does not carry the reading (a case, "The AI found something"): the note stays text
+  if (!text || !('note_level' in p) || (!p.note_level && /^Recovered by\b/.test(text))) return null;
   const lvl = RISK_WORD[p.note_level] ? p.note_level : 'yellow';
   const c = el('span', `vw-tag vw-note r-${lvl}`);
   if (p.by || p.worker_id) c.append(avatar({ worker_id: p.worker_id || null, name: p.by || '' }, 'xs'));
@@ -70,8 +70,13 @@ export function tagChips(p, short = false) {
   const box = el('div', 'vw-chips');
   (p.tags || []).forEach(t => box.append(el('span', 'vw-tag r-' + riskOf(t.severity, t.kind), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
   if (p.kind === 'observation' && p.ai_status === 'done') {
-    const f = p.ai?.findings || [];
-    if (!f.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai r-green', 'AI: healthy'));
+    // under a picture (short) at most the two most serious (owner 15 Oct 2026: "put only max 2 ai notes under each
+    // pics"); the viewer lists them all
+    const all = p.ai?.findings || [];
+    const f = short ? all.map((x, i) => [x, i]).sort((a, b) => (Number(b[0].severity ?? 1) - Number(a[0].severity ?? 1)) || a[1] - b[1])
+                        .slice(0, 2).map(([x]) => x) : all;
+    if (!all.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai r-green', 'AI: healthy'));
+    if (short && all.length > 2) box.title = all.map(x => `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`).join('\n');
     f.forEach(x => {
       const full = `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`;
       const c = el('span', 'vw-tag ai r-' + riskOf(x.severity, x.kind), short ? `${shortName(x.name || x.code)}${x.severity != null ? ' · ' + SEV[x.severity] : ''}` : full);
@@ -81,7 +86,7 @@ export function tagChips(p, short = false) {
   }
   // insects on a trap: a pest seen, low risk by itself — the trap's own figure against the limits says more
   if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species)) {
-    p.species.slice(0, 3).forEach(x => box.append(el('span', 'vw-tag ai ' + (x.beneficial ? 'r-green' : 'r-yellow'), `AI: ${x.common || x.name} ${x.count ?? ''}`)));
+    p.species.slice(0, 2).forEach(x => box.append(el('span', 'vw-tag ai ' + (x.beneficial ? 'r-green' : 'r-yellow'), `AI: ${x.common || x.name} ${x.count ?? ''}`)));
   }
   return box;
 }

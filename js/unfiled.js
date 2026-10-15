@@ -160,6 +160,9 @@ function openUnfiled(farm, onChange) {
     d.body.append(el('h3', 'uf-h', `Photos with no report (${live.length})`));
     if (!files.length) d.body.append(el('div', 'empty', 'Every photo of the last 14 days is in a report.'));
     const list = el('div', 'pd-removed');
+    // the traps a trap photo can be filed to (0238), read once for the window when there is one to file
+    const trapList = r.may_file && files.some(f => f.kind === 'trap' && !f.discarded)
+      ? await rpc('photo_traps', { p_farm: farm.id }).catch(() => null) : [];
     files.forEach(f => {
       const row = el('div', 'pd-removed-row uf-row' + (f.discarded ? ' uf-off' : ''));
       const url = urls.get(f.path);
@@ -190,7 +193,30 @@ function openUnfiled(farm, onChange) {
             } catch (e) { busy(go, false, 'File'); toast(errText(e), 'bad'); }
           };
           acts.append(z, s, day, go);
-        } else acts.append(el('span', 'hint', 'A trap reading needs a count: photograph the trap again.'));
+        } else if (!trapList) {
+          acts.append(el('span', 'hint', 'The list of traps could not be read: close and open this window again.'));
+        } else if (trapList.length) {
+          // filed as a reference (0238, owner 15 Oct 2026: Naison's Zone 1 round of 14 Oct): the photo goes into the report
+          // of its day on the trap chosen, left out of the counting — a count needs the phone's reading of the card
+          const side = (String(f.path).split('/').pop().match(/^trap-(blue|yellow)-/) || [])[1];
+          const zoneFirst = f.area ? trapList.filter(x => x.zone === f.area) : [];
+          const opts = [...zoneFirst, ...trapList.filter(x => !zoneFirst.includes(x))];
+          const tp = select([['', 'Trap on the photo…'], ...opts.map(x => [x.id, `${x.zone ? x.zone + ' · ' : ''}${x.code}`])], '');
+          tp.title = 'The position written on the card in the photo';
+          const go = el('button', 'btn btn-sm btn-primary', 'File as reference');
+          go.title = `Into the report of its day${side ? ', ' + side + ' side' : ''}, not counted: a count needs the phone's reading of the card`;
+          go.onclick = async () => {
+            if (!tp.value) { toast('Choose the trap written on the card', 'bad'); return; }
+            if (!url) { toast('The photo could not be opened', 'bad'); return; }
+            busy(go, true, 'Filing…');
+            try {
+              const a = await rpc('file_trap_photo', { p: { farm_id: farm.id, path: f.path, trap_id: tp.value, photo_data: await smallCopy(url) } });
+              toast(`Filed on ${a.trap}${a.side ? ' (' + a.side + ')' : ''} · ${shortDay(a.day)}, as a reference`, 'ok');
+              done(); await paintList();
+            } catch (e) { busy(go, false, 'File as reference'); toast(errText(e), 'bad'); }
+          };
+          acts.append(tp, go);
+        } else acts.append(el('span', 'hint', 'No trap to file it to: photograph the trap again.'));
         const no = el('button', 'btn btn-sm', 'Discard');
         no.title = 'Off this list; the file stays in storage';
         no.onclick = async () => {

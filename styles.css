@@ -1906,6 +1906,23 @@ table.table tr.off td { opacity: .5; }
 .rb-sizes li { display: grid; grid-template-columns: 24px 1fr; gap: var(--space-2); }
 .rb-status { display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-3); }
 .rb-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.rb-strip { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.rb-strip-head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+.rb-live { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+.rb-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: rb-pulse 1.6s ease-in-out infinite; }
+@keyframes rb-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .rb-live::before { animation: none; } }
+.rb-strip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.rb-tile { position: relative; margin: 0; cursor: pointer; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); overflow: hidden; transition: opacity .2s; }
+.rb-tile img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #000; }
+.rb-tile .rb-nophoto { border: 0; border-radius: 0; }
+.rb-tile figcaption { padding: 6px 8px 8px; display: grid; gap: 2px; }
+.rb-tile .rb-size { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.rb-tile .hint { font-size: var(--text-xs); }
+.rb-tile.rb-going { opacity: .35; pointer-events: none; }
+.rb-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.6); color: #fff; font-size: 17px; line-height: 1; cursor: pointer; }
+.rb-x:hover, .rb-x:focus-visible { background: var(--danger); border-color: var(--danger); }
 .sc-outcome { margin-bottom: var(--space-3); font-weight: 600; }
 .note.ok { background: var(--success-bg); border-color: transparent; color: var(--success); }
 

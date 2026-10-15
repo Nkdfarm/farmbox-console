@@ -113,3 +113,51 @@ function open(r, ctx) {
   if (r.status !== 'new') act('Back to validate', 'new');
   dr.body.append(acts);
 }
+
+// ── The robot's pictures at the foot of the whole-greenhouse report (0.7.260, owner 15 Oct 2026: "add a bottom box with
+// the Matthew Paxton pictures and dimension, with the possibility to remove easily with the x in the top right of the
+// pic. this will be used for the today demo in live mode"). The day the report shows, newest first, each picture with
+// its sizes; the × dismisses it at once (a person validates what the robot proposes — it stays in the day's robot line,
+// where Back to validate brings it back). scouting.js reads today's rows again every few seconds while the page is open.
+export function robotStrip(rows, opts) {
+  const ctx = { ...NO_OPTS, ...opts };
+  const box = el('div', 'rb-strip');
+  const head = el('div', 'rb-strip-head');
+  head.append(el('b', null, opts?.names || 'Robot'));
+  if (ctx.live) { const lv = el('span', 'rb-live', 'live'); lv.title = 'New pictures appear here by themselves, within about ten seconds'; head.append(lv); }
+  head.append(el('span', 'hint', rows.length ? `${rows.length} picture${rows.length === 1 ? '' : 's'} with their sizes` : ''));
+  box.append(head);
+  if (!rows.length) {
+    box.append(el('div', 'hint', ctx.live ? 'Nothing received yet today. What the robot photographs and measures shows here as it arrives.'
+                                          : 'No picture from the robot that day.'));
+    return box;
+  }
+  const grid = el('div', 'rb-strip-grid');
+  rows.forEach(r => {
+    const fig = el('figure', 'rb-tile');
+    if (r.photo_data) { const im = el('img'); im.src = r.photo_data; im.alt = what(r); im.loading = 'lazy'; fig.append(im); }
+    else fig.append(el('div', 'rb-nophoto', 'no photo'));
+    if (ctx.mayWrite) {
+      const x = el('button', 'rb-x', '×');
+      x.type = 'button'; x.title = 'Remove this picture (it stays in the robot\'s line of the day, where it can be put back)';
+      x.setAttribute('aria-label', 'Remove this picture');
+      x.onclick = async e => {
+        e.stopPropagation();
+        fig.classList.add('rb-going'); x.disabled = true;
+        try { await rpc('decide_robot_count', { p_id: r.id, p_status: 'dismissed' }); fig.remove(); ctx.onRemoved?.(r); }
+        catch (err) { fig.classList.remove('rb-going'); x.disabled = false; toast(err.message, 'bad'); }
+      };
+      fig.append(x);
+    }
+    const cap = el('figcaption');
+    const sizes = sizeLines(r.measures);
+    if (sizes.length) sizes.forEach(s => cap.append(el('b', 'rb-size', sizes.length > 1 ? `${s.item}  ${s.text}` : s.text)));
+    else cap.append(el('b', 'rb-size', 'no size'));
+    cap.append(el('div', 'hint', [what(r), r.pos_code || r.position, hhmm(r.at)].filter(Boolean).join(' · ')));
+    fig.append(cap);
+    fig.onclick = () => open(r, ctx);
+    grid.append(fig);
+  });
+  box.append(grid);
+  return box;
+}

@@ -54,7 +54,7 @@ import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, dra
 import { openViewer, tagChips, photoTitle, partLabel } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
-import { robotSection } from './robot.js';
+import { robotSection, robotStrip } from './robot.js';
 import { sumpBlock, openSump } from './sump.js';
 import { treatBlock } from './treatments.js';
 import { unfiledButton } from './unfiled.js';
@@ -84,6 +84,37 @@ const robotDay = day => (robot?.rows || []).filter(r => String(r.day) === String
 const robotIn = (z, rows) => rows.filter(r => r.zone && (r.zone === z.name || r.zone === z.zone_name));
 const robotNames = () => (robot?.robots || []).filter(x => x.active !== false).map(x => x.name).join(', ');
 const robotOpts = () => ({ mayWrite: !!robot?.may_write, onChange: reload, names: robotNames() });
+// the robot's pictures of the day the whole-greenhouse report shows, at its foot (0.7.260): none dismissed, newest first;
+// no box on a day without a picture unless a robot is registered and the day is today (it is waiting for the round)
+function robotFoot(day) {
+  const k = String(day), isToday = k === String(over?.today || '');
+  const rows = (robot?.rows || []).filter(r => String(r.day) === k && r.status !== 'dismissed');
+  if (!rows.length && !(isToday && robotNames())) return null;
+  return robotStrip(rows, { ...robotOpts(), live: isToday,
+    onRemoved: r => { const x = (robot?.rows || []).find(y => y.id === r.id); if (x) x.status = 'dismissed'; } });
+}
+// live (0.7.260, for the G1 demo of 15 Oct 2026): the robot sends through ingest, which tells no console, so while this
+// page shows the whole greenhouse on today, today's rows are read again every ten seconds (about 30 kB a picture) and
+// the panel is drawn again when something came, went or changed
+let robotTimer = null, robotAsking = false;
+const robotSig = rows => rows.map(r => r.id + ':' + r.status).join(',');
+async function robotTick() {
+  if (!mount?.isConnected || document.hidden || zoneFilter || !gh || !farm || !robotNames() || robotAsking) return;
+  const t = String(over?.today || '');
+  if (!t || String(gh.day()) !== t) return;
+  robotAsking = true;
+  const mine = farm.id;
+  try {
+    const fresh = await rpc('robot_scouting', { p_farm: mine, p_days: 1 });
+    if (farm?.id !== mine || !robot || !fresh) return;
+    const was = (robot.rows || []).filter(r => String(r.day) === t), now = (fresh.rows || []).filter(r => String(r.day) === t);
+    if (robotSig(was) === robotSig(now)) return;
+    robot = { ...robot, robots: fresh.robots || robot.robots, may_write: fresh.may_write,
+              rows: now.concat((robot.rows || []).filter(r => String(r.day) !== t)) };
+    if (mount?.isConnected && !zoneFilter) gh.panel();
+  } catch { /* a missed read: the next tick asks again */ }
+  finally { robotAsking = false; }
+}
 const zoneKey = () => 'fbc_pd_zone_' + farm.id;
 // the report units (0171): a zone, or one table of a zone reported table by table; an older database gives zones
 const zones = () => (over?.pressure_units || over?.pressure_zones || []).map(z => ({ ...z, unit_id: z.unit_id || z.zone_id }));
@@ -262,7 +293,9 @@ async function load(fresh = false) {
         ghFarm = farm.id;
         const mine = farm.id;
         gh = greenhouseKit({ farm, today: () => over?.today, scouted: () => (dates || []).map(d => d.day),
-                             relist: () => { if (farm?.id === mine && mount && mount.isConnected) paint(); }, openRef: openGhRef });
+                             relist: () => { if (farm?.id === mine && mount && mount.isConnected) paint(); }, openRef: openGhRef,
+                             bottom: robotFoot });
+        if (!robotTimer) robotTimer = setInterval(robotTick, 10000);
       }
       paint();
       if (tail.length) rereadOlder(d[d.length - 1].day, tail.length, here);

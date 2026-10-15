@@ -65,7 +65,7 @@ function rich(text, lead = true) {
   return s;
 }
 
-export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
+export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom }) {
   let days = new Map();            // day → { notes, by[], opinion: { status, trend, trend_note, headline } } (greenhouse_days)
   let known = false;               // the database has 0224
   const data = new Map();          // day → greenhouse_day
@@ -671,6 +671,8 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
     const k = current(), d = data.get(k) || null;
     node.textContent = '';
     node.append(headRow(k), report(k, d), said(k, d));
+    const foot = bottom?.(k);                 // the page's own box at the foot of the report: the robot's pictures (0.7.260)
+    if (foot) node.append(foot);
     if (!d && Date.now() - (tried.get(k) || 0) > 30000) readDay(k).catch(() => {});
     refocus();
   }
@@ -714,5 +716,5 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef }) {
   const playing = () => [...node.querySelectorAll('audio')].some(p => !p.paused && !p.ended && !p.error);   // a recording that failed is not playing
   function panel() { if (node.childNodes.length && playing()) refocus(); else draw(); return node; }
 
-  return { readDays, refresh, pills, panel, select, ready: () => known, dispose };
+  return { readDays, refresh, pills, panel, select, ready: () => known, dispose, day: () => current() };
 }

@@ -17,7 +17,7 @@ import { loading, el, field, selectBox, toast, drawer, confirmDrawer, avatar, bu
          pageHead, pref, farmDate, farmToday, ymd, addDays, mondayOf, parseYmd, isoDow } from './ui.js';
 import { roleLabel as knownRole, employmentLabel, editPerson, personActions } from './people.js';
 import { renderHours } from './hours.js';
-import { aiCard } from './team-ai.js';
+import { aiLine, jobAiSection } from './team-ai.js';
 
 const hrs = m => { m = Math.round(Number(m || 0)); const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`; };
 const DAY = ['', 'M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -35,6 +35,7 @@ export function teamWeek(w = which()) {
 }
 
 let farm = null, mount = null, T = null, people = [], tree = [], hours = null, preview = null, showOff = false, hoursOpen = false;
+let AI = null;   // mcp_team (0242): who has AI access and what it reads; null when not on this database or not a manager
 
 export async function renderTeam(container, currentFarm) {
   farm = currentFarm; mount = container; preview = null;
@@ -44,9 +45,10 @@ export async function renderTeam(container, currentFarm) {
 async function load(fresh = false) {
   const here = mount;
   await openFast([['team_setup', { p_farm: farm.id }], ['labour_hours', { p_farm: farm.id, ...teamWeek() }],
-                  ['people', { p_farm: farm.id }], ['family_tree', { p_farm: farm.id }]], {
-    show: ([t, h, p, tr]) => {
+                  ['people', { p_farm: farm.id }], ['family_tree', { p_farm: farm.id }], ['mcp_team', { p_farm: farm.id }, true]], {
+    show: ([t, h, p, tr, ai]) => {
       T = t; hours = h; people = p || []; tree = tr || [];
+      AI = ai?.may_edit ? { ...ai, farm_id: farm.id } : null;
       setPhotos(people);
       paint();
     },
@@ -57,7 +59,7 @@ async function load(fresh = false) {
 }
 const reload = () => { preview = null; return load(true); };
 // what the profile window needs from this page
-const ctx = () => ({ farm, people, team: true, done: reload, me: T?.me });
+const ctx = () => ({ farm, people, team: true, done: reload, me: T?.me, ai: AI });
 const profile = id => people.find(x => x.worker_id === id);
 
 // family_tree is one row per family / sub-family pair
@@ -136,8 +138,8 @@ function paint() {
   mount.append(card);
 
   if (may) mount.append(planCard());
-  // the AI part (0242): who may connect their own Claude or ChatGPT, and what it may read
-  if (may) mount.append(aiCard(farm));
+  // AI access (0242): set in each person's Edit window; here only who has it, what was asked, Stop all (0.7.265)
+  if (may && AI) mount.append(aiLine(AI, reload));
 
   // the old Hours page, as it was
   const fold = el('details', 'card card-pad team-hours');
@@ -174,7 +176,12 @@ function table(may) {
     line.append(el('b', null, roleLabel(job.role)), el('span', 'hint', ppl.length === 1 ? '1 person' : `${ppl.length} people`));
     if (job.role === 'ai_only') {
       // in the team only for their own AI (0242): no work, so nothing for the job to cover
-      line.append(el('span', 'hint team-jobhas', 'In the team only for their own AI: no work, no hours. What it reads is under AI access below.'));
+      line.append(el('span', 'hint team-jobhas', 'In the team only for their own AI: no work, no hours. What it reads is set in their Edit window.'));
+      if (may && AI) {
+        const edit = el('button', 'btn btn-sm btn-ghost', 'Change…');
+        edit.onclick = () => openJob(job);
+        line.append(el('span', 'spacer'), edit);
+      }
     } else if (may && !job.unlisted) {
       const bundle = job.bundle || [];
       line.append(el('span', 'hint team-jobhas', bundle.length
@@ -240,6 +247,7 @@ function personRow(p, inJob, may, h) {
     lab.append(cb, 'Off the task pages');
     names.append(lab);
   } else if (p.off_tasks) names.append(el('small', 'team-off-word', 'off the task pages'));
+  if (AI?.people.some(x => x.worker_id === p.worker_id && x.in_force)) names.append(el('span', 'team-ai-on', 'AI access on'));
   who.append(names);
   tr.append(tdOf(who));
 
@@ -315,7 +323,8 @@ function aiOnlyRow(tr, p, prof, may) {
   names.append(el('b', null, [p.name, p.surname].filter(Boolean).join(' ')),
                el('small', null, 'AI only' + (prof?.email ? ' · ' + prof.email : ' · no e-mail yet')));
   who.append(names);
-  tr.append(tdOf(who), tdOf(el('span', 'hint', '—')), tdOf(el('span', 'hint', 'no work — their AI reads what AI access below allows')), tdOf(null));
+  if (AI?.people.some(x => x.worker_id === p.worker_id && x.in_force)) names.append(el('span', 'team-ai-on', 'AI access on'));
+  tr.append(tdOf(who), tdOf(el('span', 'hint', '—')), tdOf(el('span', 'hint', 'no work — their AI reads what their Edit window allows')), tdOf(null));
   const acts = el('div', 'acts');
   if (may) {
     const edit = el('button', 'btn btn-sm', 'Edit');
@@ -689,7 +698,8 @@ function openJobs() {
 }
 
 function openJob(job) {
-  const d = drawer(roleLabel(job.role), 'What this job is responsible for. Everybody with the job follows.');
+  const onlyAi = job.role === 'ai_only';        // no work: only what their AI may read (0.7.265)
+  const d = drawer(roleLabel(job.role), onlyAi ? 'In the team only for their own AI.' : 'What this job is responsible for. Everybody with the job follows.');
   const chosen = new Set((job.bundle || []).map(r => r.family + '|' + (r.category || '')));
   const before = new Set(chosen);
   const fams = families();
@@ -726,14 +736,18 @@ function openJob(job) {
          minus.length ? `Taken off them: ${minus.map(nice).join(', ')} — unless it was added for one person by hand.` : ''].filter(Boolean).join(' ');
     body.append(say);
   };
-  draw();
+  if (!onlyAi) draw();
+  // what the AI of the people of this job may read, when their AI access is ticked (0242)
+  const ai = AI ? jobAiSection(AI, job.role) : null;
+  if (ai) d.body.append(ai.node);
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
     busy(go, true, 'Saving…');
     try {
       const rows = [...chosen].map(k => { const [family, category] = k.split('|'); return { family, category: category || '' }; });
-      await rpc('team_save_bundle', { p_farm: farm.id, p_role: job.role, p_rows: rows });
+      if (!onlyAi) await rpc('team_save_bundle', { p_farm: farm.id, p_role: job.role, p_rows: rows });
+      await ai?.save();
       d.close(); toast(`${roleLabel(job.role)}: saved`, 'ok'); await reload();
     } catch (e) { busy(go, false, 'Save'); toast(e.message, 'bad'); }
   };

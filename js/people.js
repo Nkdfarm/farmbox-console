@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, select } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer, suggestPassword, busy, faceIcon } from './ui.js';
+import { personAiSection } from './team-ai.js';
 
 // The words on screen are the job, not the database value.
 export const ROLES = [
@@ -44,7 +45,8 @@ let afterSave = async () => {};
 // The Team page (Tasks › Team, 0.7.222) is where the people are listed; it opens these windows and hands over
 // the farm, the people and what to do after a change. What somebody is responsible for is set there, not here.
 let me = null;       // the worker row of whoever is signed in, when the page knows it
-const take = ctx => { farm = ctx.farm; people = ctx.people || []; afterSave = ctx.done || (async () => {}); me = ctx.me || null; };
+let ai = null;       // mcp_team for a manager (0242): the AI access section of the form; null hides it
+const take = ctx => { farm = ctx.farm; people = ctx.people || []; afterSave = ctx.done || (async () => {}); me = ctx.me || null; ai = ctx.ai || null; };
 export function editPerson(ctx, p) { take(ctx); openPerson(p); }
 export function personActions(ctx, p) { take(ctx); openActions(p); }
 
@@ -134,6 +136,8 @@ function openPerson(p) {
       ? 'Type a new password only if you are resetting it. Changing the e-mail above changes the address they sign in with.'
       : 'Fill in an e-mail and a password to give this person a login.'));
 
+  // AI access (0242, here since 0.7.265): the tick, until when, what their own AI may read, the address to send
+  const aiPart = ai ? personAiSection(ai, p, role, email) : null;
   weekPart = el('div');
   weekPart.append(
     el('div', 'sec-title', 'Their week'),
@@ -162,6 +166,7 @@ function openPerson(p) {
       g.append(field('E-mail', email), field('Phone', phone));
       return g;
     })(),
+    aiPart?.node,
     weekPart, signPart, respPart,
   );
   setRoleHint();
@@ -198,6 +203,8 @@ function openPerson(p) {
     if (linkedin.value.trim() && !body.linkedin_url) {
       toast('That is not a LinkedIn link', 'bad'); linkedin.focus(); return;
     }
+    const aiSays = aiPart?.check();
+    if (aiSays) { toast(aiSays, 'bad'); return; }
 
     const wantsAccount = !aiOnly && !!pw.value.trim();
     if (wantsAccount && !body.email) { toast('A password needs an e-mail', 'bad'); email.focus(); return; }
@@ -223,6 +230,7 @@ function openPerson(p) {
 
     busy(save, true, isNew ? 'Adding…' : 'Saving…');
     const done = [];   // what was already changed on the login when a later step fails: said, so nobody thinks nothing happened
+    let id = p?.worker_id ?? null;
     try {
       if (wantsAccount && (isNew || !p.has_login)) {
         // account + access + person, in the edge function that holds the key
@@ -231,6 +239,7 @@ function openPerson(p) {
         // (surname, LinkedIn, picture) goes through save_person like any edit.
         // a login given to somebody switched off brings them back, as admin-user just did: the profile must not undo it
         await rpc('save_person', { p: { ...body, active: true, worker_id: made.worker_id } });
+        id = made.worker_id;
       } else {
         // the account first: refused there (an address another account has, a login used outside this FarmBox),
         // nothing is saved here either. The password too goes before the profile (it came after: a password refused —
@@ -244,10 +253,15 @@ function openPerson(p) {
                                    worker_id: p.worker_id, password: pw.value.trim() });
           done.push('the password');
         }
-        await rpc('save_person', { p: body });
+        const saved = await rpc('save_person', { p: body });   // the person's id (a new one for a new person)
+        if (typeof saved === 'string') id = saved;
       }
+      // the person is saved; AI access after it (it needs the job and the e-mail just saved)
+      let aiFailed = null;
+      try { await aiPart?.save(id); } catch (e) { aiFailed = e.message; }
       d.close();
-      toast(isNew ? `${body.name} added` : newLogin ? `Saved · ${body.name} signs in with ${body.email} now` : 'Saved', 'ok');
+      if (aiFailed) toast(`${body.name} saved, but not the AI access: ${aiFailed}`, 'bad');
+      else toast(isNew ? `${body.name} added` : newLogin ? `Saved · ${body.name} signs in with ${body.email} now` : 'Saved', 'ok');
       await afterSave();
     } catch (e) {
       busy(save, false, isNew ? 'Add person' : 'Save');

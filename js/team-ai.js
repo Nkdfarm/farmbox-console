@@ -1,240 +1,213 @@
 // ═════════════════════════════════════════════════════════════════════
-// Tasks › Team › AI access (migrations 0242–0244, console 0.7.264)
+// AI access on the Team page (migrations 0242–0245, console 0.7.264–0.7.265)
 //
 // Somebody of the team can connect their own Claude or ChatGPT to Naked Heart (the MCP) and have it
-// READ the farm data their job allows. The same pattern as the task responsibilities above it:
-//   * a fixed list of AI data families, as chips;
-//   * per job the families its people get — a click gives a chip to, or takes it from, the whole job;
-//     "Back to standard" puts the standard list back;
-//   * per person the MCP tick, an end date, and their own chips: + = added beyond the job, struck
-//     through = a job family taken away from them; a click changes that person only;
-//   * Stop all, the address to send, and every question their AIs asked.
-// Shown to whoever manages the people (the database decides: mcp_team's may_edit). Nothing changes
-// on the farm through it: the AI reads, through views of its own, never the tables.
+// READ the farm data that is ticked for them. Since 0.7.265 it is set where the rest of a person is set:
+//   * a person's Edit window has a section "AI access": the tick, an end date, what it may read (chips,
+//     starting from what their job gives), the address to send them and what their AI asked;
+//   * a job's Change… window has "Their own AI may read": the chips everybody of the job starts from;
+//   * the page itself keeps one line: who has AI access, What was asked, Stop all.
+// Everything is saved with the window's own Save. The database decides who may (mcp_team's may_edit).
 // ═════════════════════════════════════════════════════════════════════
 import { rpc, URL_BASE } from './api.js';
-import { el, toast, confirmDrawer, busy, loading, farmInstant, farmLocal, shortDate } from './ui.js';
-import { roleLabel } from './people.js';
+import { el, toast, confirmDrawer, drawer, busy, farmInstant, farmLocal } from './ui.js';
 
 export const MCP_URL = URL_BASE + '/functions/v1/mcp';
 const when = iso => iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const say = e => String(e?.message || e).replace(/^\d+ /, '');
+const sameSet = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
 
-let open = false;          // the fold stays as it was while the page repaints
-
-// The fold for the Team page; it reads only when opened.
-export function aiCard(farm) {
-  const fold = el('details', 'card card-pad team-ai');
-  fold.open = open;
-  fold.append(el('summary', 'sec-title', 'AI access — their own Claude or ChatGPT, read-only'));
-  const inner = el('div', 'team-ai-in');
-  fold.append(inner);
-  const fill = () => { if (!inner.dataset.on) { inner.dataset.on = '1'; draw(inner, farm); } };
-  fold.addEventListener('toggle', () => { open = fold.open; if (fold.open) fill(); });
-  if (open) fill();
-  return fold;
-}
-
-async function draw(mount, farm) {
-  mount.textContent = '';
-  mount.append(loading('Reading who has AI access…'));
-  let T, calls = [];
-  try {
-    T = await rpc('mcp_team', { p_farm: farm.id });
-    if (T.may_edit) calls = await rpc('mcp_call_log', { p_farm: farm.id, p_limit: 100 }).catch(() => []);
-  } catch (e) {
-    mount.textContent = '';
-    mount.append(el('div', 'note bad', /mcp_team|schema cache/.test(say(e))
-      ? 'AI access is not on this database yet.' : say(e)));
-    return;
-  }
-  const again = () => draw(mount, farm);
-  mount.textContent = '';
-  mount.append(el('p', 'hint team-hint',
-    'Tick MCP for somebody, choose what their AI may read, and send them the address below. Their AI reads only — '
-    + 'it never changes anything — and only until the end date or until you untick them. An AI-only person is in the team '
-    + 'only for this: never on the task pages, no hours, no login here.'));
-  mount.append(jobs(T, farm, again), people(T, farm, again), connect(), asked(calls));
-}
-
-// ── what each job's AI may read ─────────────────────────────────────────────
-function jobs(T, farm, again) {
-  const box = el('div', 'team-ai-block');
-  box.append(el('div', 'sec-title team-sec', 'What each job’s AI may read'));
-  T.roles.forEach(r => {
-    const row = el('div', 'team-ai-row');
-    const who = el('div', 'team-ai-who');
-    who.append(el('b', null, roleLabel(r.role)), el('small', null, r.own ? 'chosen for this farm' : 'standard'));
-    if (r.own && T.may_edit) {
-      const back = el('button', 'btn btn-sm btn-ghost', 'Back to standard');
-      back.onclick = async () => {
-        busy(back, true, 'Saving…');
-        try { await rpc('mcp_reset_role', { p_farm: farm.id, p_role: r.role }); toast(`${roleLabel(r.role)}: the standard list again`, 'ok'); again(); }
-        catch (e) { busy(back, false); toast(say(e), 'bad'); }
-      };
-      who.append(back);
-    }
-    const chips = el('div', 'resp-cats team-ai-chips');
-    T.families.forEach(f => {
-      const on = r.families.includes(f.code);
+// The chips of the data families, on and off; returns the node and the chosen set.
+function familyChips(AI, chosen, onChange) {
+  const box = el('div', 'resp-cats team-ai-chips');
+  const draw = () => {
+    box.textContent = '';
+    AI.families.forEach(f => {
       const b = el('button', 'toggle', f.label);
       b.type = 'button';
       b.title = f.about;
-      b.setAttribute('aria-pressed', String(on));
-      b.disabled = !T.may_edit;
-      b.onclick = async () => {
-        const next = on ? r.families.filter(c => c !== f.code) : [...r.families, f.code];
-        b.disabled = true;
-        try {
-          await rpc('mcp_set_role', { p_farm: farm.id, p_role: r.role, p_families: next });
-          toast(`${roleLabel(r.role)}: ${on ? f.label + ' taken off the job' : f.label + ' given to the job'}`, 'ok');
-          again();
-        } catch (e) { b.disabled = false; toast(say(e), 'bad'); }
-      };
-      chips.append(b);
+      b.setAttribute('aria-pressed', String(chosen.has(f.code)));
+      b.onclick = () => { chosen.has(f.code) ? chosen.delete(f.code) : chosen.add(f.code); draw(); onChange?.(); };
+      box.append(b);
     });
-    row.append(who, chips);
-    box.append(row);
-  });
-  return box;
+  };
+  draw();
+  return { node: box, redraw: draw };
 }
 
-// ── the people: the tick, the end date, their own chips ─────────────────────
-function people(T, farm, again) {
-  const box = el('div', 'team-ai-block');
+const jobFamilies = (AI, role) => (AI.roles.find(r => r.role === role) || { families: [] }).families;
+
+// ── a person's Edit window ──────────────────────────────────────────────────
+// p: the person (null for a new one); role: the job select of the form; email: its e-mail field.
+// Returns { node, check(), save(workerId) } — save runs after the person is saved.
+export function personAiSection(AI, p, role, email) {
+  const me = p ? AI.people.find(x => x.worker_id === p.worker_id) : null;
+  const start = new Set(me ? me.families : jobFamilies(AI, role.value));
+  const chosen = new Set(start);
+  let touched = false;
+
+  const wrap = el('div');
+  wrap.append(el('div', 'sec-title', 'AI access'));
+  const lab = el('label', 'team-off team-ai-tick');
+  const tick = el('input'); tick.type = 'checkbox'; tick.checked = !!me?.ai_access;
+  lab.append(tick, 'Their own Claude or ChatGPT may read this farm’s data');
+  wrap.append(lab);
+
+  const more = el('div', 'team-ai-more');
+  const until = el('input', 'input team-ai-until');
+  until.type = 'date';
+  until.value = me?.ai_until ? farmLocal(me.ai_until).slice(0, 10) : '';
+  until.min = farmLocal(new Date().toISOString()).slice(0, 10);
+  const untilRow = el('div', 'team-ai-access');
+  untilRow.append(el('span', null, 'Until'), until, el('span', 'hint', 'empty: until you untick'));
+  const chips = familyChips(AI, chosen, () => { touched = true; });
+  const url = el('div', 'row team-more');
+  const code = el('code', 'team-ai-url', MCP_URL);
+  const copy = el('button', 'btn btn-sm', 'Copy');
+  copy.type = 'button';
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(MCP_URL); copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }
+    catch { toast('Select the address and copy it', 'bad'); }
+  };
+  url.append(code, copy);
+  more.append(untilRow,
+    el('div', 'hint team-ai-say', 'What it may read — it never changes anything:'), chips.node,
+    el('div', 'hint team-ai-say', 'Send them this address. They add it in Claude (Settings › Connectors › Add custom connector) or ChatGPT, sign in with their e-mail here and press Allow.'),
+    url);
+  if (me?.last_used) {
+    const used = el('div', 'hint team-ai-say');
+    used.append(`Asked ${me.calls_30d} time${me.calls_30d === 1 ? '' : 's'} in 30 days, last ${when(me.last_used)}`
+      + ((me.ai_names || []).length ? ' · ' + me.ai_names.join(', ') : '') + ' · ');
+    const see = el('button', 'btn btn-sm btn-ghost', 'What was asked');
+    see.type = 'button';
+    see.onclick = () => openAsked(AI, me);
+    used.append(see);
+    more.append(used);
+  }
+  wrap.append(more);
+  const show = () => { more.hidden = !tick.checked; };
+  tick.onchange = show;
+  show();
+  // a new job brings that job's chips, unless they were clicked already
+  role.addEventListener('change', () => {
+    if (touched) return;
+    chosen.clear(); jobFamilies(AI, role.value).forEach(c => chosen.add(c)); chips.redraw();
+  });
+
+  const firstUntil = until.value;
+  const untilIso = () => (tick.checked && until.value ? farmInstant(until.value + 'T23:59') : null);
+  const changed = () => !!me?.ai_access !== tick.checked
+    || (tick.checked && (until.value !== firstUntil || !sameSet(chosen, start)));
+
+  return {
+    node: wrap,
+    // what to say before saving, or null
+    check() {
+      if (!tick.checked) return null;
+      if (!chosen.size) return 'Choose at least one thing their AI may read, or untick AI access';
+      if (!email.value.trim() && !p?.has_login) return 'AI access needs an e-mail: their AI signs in with it';
+      if (until.value && until.value < until.min) return 'The AI access end date is already past';
+      return null;
+    },
+    async save(workerId) {
+      if (!workerId || !changed()) return false;
+      if (tick.checked) {
+        // the person's chips as they are now (a new job may have changed them), then each difference
+        const T = await rpc('mcp_team', { p_farm: AI.farm_id });
+        const now = new Set((T.people.find(x => x.worker_id === workerId) || { families: [] }).families);
+        for (const f of AI.families) {
+          if (chosen.has(f.code) !== now.has(f.code)) {
+            await rpc('mcp_person_family', { p_worker: workerId, p_family: f.code, p_on: chosen.has(f.code) });
+          }
+        }
+      }
+      await rpc('mcp_set_access', { p_worker: workerId, p_on: tick.checked, p_until: untilIso() });
+      return true;
+    },
+  };
+}
+
+// ── a job's Change… window ──────────────────────────────────────────────────
+export function jobAiSection(AI, roleName) {
+  const r = AI.roles.find(x => x.role === roleName);
+  if (!r) return null;
+  const start = new Set(r.families), chosen = new Set(start);
+  const wrap = el('div', 'team-ai-job');
   const head = el('div', 'row team-sec');
-  head.append(el('div', 'sec-title', 'People'), el('div', 'spacer'));
-  if (T.may_edit && T.people.some(p => p.ai_access)) {
-    const stop = el('button', 'btn btn-sm btn-ghost team-danger', 'Stop all AI access');
+  head.append(el('div', 'sec-title', 'Their own AI may read'), el('div', 'spacer'));
+  if (r.own) {
+    const back = el('button', 'btn btn-sm btn-ghost', 'Back to standard');
+    back.type = 'button';
+    back.onclick = async () => {
+      busy(back, true, 'Saving…');
+      try {
+        const T = await rpc('mcp_reset_role', { p_farm: AI.farm_id, p_role: roleName });
+        chosen.clear(); jobFamilies(T, roleName).forEach(c => chosen.add(c)); start.clear(); chosen.forEach(c => start.add(c));
+        chips.redraw(); back.remove(); toast('Back to the standard list', 'ok');
+      } catch (e) { busy(back, false); toast(say(e), 'bad'); }
+    };
+    head.append(back);
+  }
+  wrap.append(head, el('div', 'hint', 'For those of this job whose AI access is ticked (in their Edit window). A change here reaches all of them; what was changed for one person stays.'));
+  const chips = familyChips(AI, chosen);
+  wrap.append(chips.node);
+  return {
+    node: wrap,
+    async save() {
+      if (sameSet(chosen, start)) return false;
+      await rpc('mcp_set_role', { p_farm: AI.farm_id, p_role: roleName, p_families: [...chosen] });
+      return true;
+    },
+  };
+}
+
+// ── the Team page's line ────────────────────────────────────────────────────
+export function aiLine(AI, done) {
+  const on = AI.people.filter(p => p.in_force);
+  const c = el('div', 'card card-pad team-ai-line');
+  const row = el('div', 'row');
+  const text = el('div');
+  text.append(el('b', null, 'AI access '), el('span', 'hint', on.length
+    ? `${on.map(p => p.name).join(', ')} can connect their own Claude or ChatGPT, read-only.`
+    : 'Nobody connects their own AI yet. Tick it in a person’s Edit window.'));
+  row.append(text, el('div', 'spacer'));
+  const asked = el('button', 'btn btn-sm', 'What was asked');
+  asked.onclick = () => openAsked(AI, null);
+  row.append(asked);
+  if (AI.people.some(p => p.ai_access)) {
+    const stop = el('button', 'btn btn-sm btn-ghost team-danger', 'Stop all');
     stop.onclick = async () => {
       if (!await confirmDrawer('Stop all AI access?',
         'Everybody of this farm and its sister units is unticked now, and their AIs are signed out. You can tick them again later.',
         'Stop all', true)) return;
       busy(stop, true, 'Stopping…');
-      try { const n = await rpc('mcp_stop_all', { p_farm: farm.id }); toast(`AI access stopped for ${n} ${n === 1 ? 'person' : 'people'}`, 'ok'); again(); }
+      try { const n = await rpc('mcp_stop_all', { p_farm: AI.farm_id }); toast(`AI access stopped for ${n} ${n === 1 ? 'person' : 'people'}`, 'ok'); await done(); }
       catch (e) { busy(stop, false); toast(say(e), 'bad'); }
     };
-    head.append(stop);
+    row.append(stop);
   }
-  box.append(head);
-
-  const active = T.people.filter(p => p.active);
-  if (!active.length) box.append(el('div', 'hint', 'Nobody on the team yet.'));
-  active.forEach(p => {
-    const jobFams = (T.roles.find(r => r.role === p.role) || { families: [] }).families;
-    const row = el('div', 'team-ai-row');
-    const who = el('div', 'team-ai-who');
-    who.append(el('b', null, [p.name, p.surname].filter(Boolean).join(' ')),
-               el('small', null, roleLabel(p.role) + (p.email ? ' · ' + p.email : '')));
-    if (p.in_force) who.append(el('span', 'team-ai-on', 'AI access on'));
-    if (p.last_used) who.append(el('small', null, `asked ${when(p.last_used)} · ${p.calls_30d} in 30 days`
-      + ((p.ai_names || []).length ? ' · ' + p.ai_names.join(', ') : '')));
-
-    const right = el('div');
-    const access = el('div', 'team-ai-access');
-    const canTick = T.may_edit && (p.has_login || p.email);
-    const lab = el('label', 'team-off');
-    const tick = el('input'); tick.type = 'checkbox'; tick.checked = !!p.ai_access; tick.disabled = !canTick;
-    lab.append(tick, 'MCP');
-    lab.title = 'Ticked: their own Claude or ChatGPT may read what the chips say, until the end date.';
-    const until = el('input', 'input team-ai-until');
-    until.type = 'date';
-    until.value = p.ai_until ? farmLocal(p.ai_until).slice(0, 10) : '';
-    until.disabled = !T.may_edit || !p.ai_access;
-    until.setAttribute('aria-label', `End of ${p.name}’s AI access`);
-    const save = async () => {
-      tick.disabled = true; until.disabled = true;
-      try {
-        await rpc('mcp_set_access', { p_worker: p.worker_id, p_on: tick.checked,
-                                      p_until: tick.checked && until.value ? farmInstant(until.value + 'T23:59') : null });
-        toast(tick.checked ? `${p.name}: AI access on` + (until.value ? ` until ${shortDate(until.value)}` : '') : `${p.name}: AI access off — signed out`, 'ok');
-        again();
-      } catch (e) { tick.checked = !!p.ai_access; tick.disabled = !canTick; until.disabled = !p.ai_access; toast(say(e), 'bad'); }
-    };
-    tick.onchange = async () => {
-      if (!tick.checked && !await confirmDrawer(`Stop ${p.name}’s AI access?`, 'Their AI is signed out now and cannot ask again until you tick them.', 'Stop', true)) {
-        tick.checked = true; return;
-      }
-      save();
-    };
-    until.onchange = save;
-    access.append(lab, el('span', 'hint', 'until'), until, el('span', 'hint', p.ai_access && !until.value ? 'no end date: until unticked' : ''));
-    if (T.may_edit && !canTick) access.append(el('span', 'hint', 'Give them an e-mail first (Edit): their AI signs in with it.'));
-    right.append(access);
-
-    const chips = el('div', 'resp-cats team-ai-chips' + (p.ai_access ? '' : ' team-ai-dim'));
-    T.families.forEach(f => {
-      const has = p.families.includes(f.code), fromJob = jobFams.includes(f.code);
-      const b = el('button', 'toggle' + (has && !fromJob ? ' team-ai-added' : '') + (!has && fromJob ? ' team-ai-away' : ''), f.label);
-      b.type = 'button';
-      b.setAttribute('aria-pressed', String(has));
-      b.title = f.about + (has && !fromJob ? ' · added for this person' : !has && fromJob ? ' · the job gives it, taken away from this person' : fromJob ? ' · from the job' : '');
-      b.disabled = !T.may_edit;
-      b.onclick = async () => {
-        if (!has && f.code === 'team' && !await confirmDrawer('Give the team’s personal data?',
-          `${p.name}’s AI would read names, hours, clock-ins and the hourly cost of each person.`, 'Give it')) return;
-        b.disabled = true;
-        try {
-          await rpc('mcp_person_family', { p_worker: p.worker_id, p_family: f.code, p_on: !has });
-          toast(`${p.name}: ${f.label} ${has ? 'taken away' : 'given'}`, 'ok');
-          again();
-        } catch (e) { b.disabled = false; toast(say(e), 'bad'); }
-      };
-      chips.append(b);
-    });
-    right.append(chips);
-    row.append(who, right);
-    box.append(row);
-  });
-  const legend = el('div', 'resp-cats team-ai-legend');
-  [['toggle', 'true', 'from the job'], ['toggle team-ai-added', 'true', 'added for this person'],
-   ['toggle team-ai-away', 'false', 'taken away from this person'], ['toggle', 'false', 'not given']].forEach(([cls, on, t]) => {
-    const s = el('span', cls, t); s.setAttribute('aria-pressed', on); legend.append(s);
-  });
-  box.append(legend);
-  return box;
+  c.append(row);
+  return c;
 }
 
-// ── how they connect ────────────────────────────────────────────────────────
-function connect() {
-  const box = el('div', 'team-ai-block');
-  box.append(el('div', 'sec-title team-sec', 'How they connect'));
-  box.append(el('p', 'hint', 'Send them this address. In Claude: Settings › Connectors › Add custom connector. '
-    + 'In ChatGPT: a custom connector (MCP) in its settings, under developer mode. They sign in with the e-mail on their row here and press Allow.'));
-  const line = el('div', 'row team-more');
-  const code = el('code', 'team-ai-url', MCP_URL);
-  const copy = el('button', 'btn btn-sm', 'Copy');
-  copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(MCP_URL); copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }
-    catch { toast('Select the address and copy it', 'bad'); }
-  };
-  line.append(code, copy);
-  box.append(line);
-  return box;
-}
-
-// ── what was asked ─────────────────────────────────────────────────────────
-function asked(calls) {
-  const box = el('div', 'team-ai-block');
-  box.append(el('div', 'sec-title team-sec', 'What was asked'));
-  if (!calls.length) { box.append(el('div', 'hint', 'Nothing yet.')); return box; }
-  const wrap = el('div', 'table-wrap');
-  const t = el('table', 'people team-ai-log');
-  const hr = el('tr');
-  ['When', 'Who', 'AI', 'Asked', 'Rows'].forEach(h => hr.append(el('th', null, h)));
-  const thead = el('thead'); thead.append(hr); t.append(thead);
-  const tb = el('tbody');
+// ── what their AIs asked: everybody, or one person ──────────────────────────
+async function openAsked(AI, person) {
+  const d = drawer('What was asked', person ? `By ${person.name}’s AI` : 'By the AIs of this farm’s people, newest first');
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close; d.footer.append(close);
+  let calls;
+  try { calls = await rpc('mcp_call_log', { p_farm: AI.farm_id, p_limit: 200 }); }
+  catch (e) { d.body.append(el('div', 'note bad', say(e))); return; }
+  if (person) {
+    const mail = (person.email || '').trim().toLowerCase();
+    calls = calls.filter(c => (c.email || '').toLowerCase() === mail);
+  }
+  if (!calls.length) { d.body.append(el('div', 'hint', 'Nothing yet.')); return; }
   calls.forEach(c => {
-    const tr = el('tr');
-    const what = c.tool === 'query' ? c.args?.sql : c.tool === 'photo' ? `photo ${c.args?.kind} ${c.args?.id}` : c.tool;
-    const q = el('td');
-    q.append(el('div', 'team-ai-sql', what || ''));
-    if (!c.ok) q.append(el('div', 'team-over', c.error || 'refused'));
-    tr.append(el('td', 'hint', when(c.at)), el('td', null, c.email || ''), el('td', null, c.client_name || ''), q, el('td', null, c.rows ?? ''));
-    tb.append(tr);
+    const b = el('div', 'team-ai-call');
+    const what = c.tool === 'query' ? c.args?.sql : c.tool === 'photo' ? `photo ${c.args?.kind} ${c.args?.id}` : c.tool === 'describe' ? 'what can I see?' : c.tool;
+    b.append(el('div', 'hint', [when(c.at), person ? null : c.email, c.client_name, c.rows != null ? `${c.rows} rows` : null].filter(Boolean).join(' · ')),
+             el('div', 'team-ai-sql', what || ''));
+    if (!c.ok) b.append(el('div', 'team-over', c.error || 'refused'));
+    d.body.append(b);
   });
-  t.append(tb);
-  wrap.append(t);
-  box.append(wrap);
-  return box;
 }

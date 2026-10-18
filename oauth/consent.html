@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect an AI to Naked Heart</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../icons/icon-192.png">
+<!--
+  Naked Heart MCP (migration 0242, console 0.7.264): the consent page Supabase Auth sends people to when
+  Claude or ChatGPT asks to connect. Served at https://heart.nkd.farm/oauth/consent — the Site URL plus
+  the Authorization Path set in Authentication > OAuth Server. It reads mcp_my_access to show what the
+  person's AI may read, then Allow or Deny. Its own sign-in (supabase-js keeps it apart from the
+  console's): password, or a link by e-mail. The key below is the public anon key the console uses
+  (js/api.js), never a secret one.
+-->
+<style>
+  :root { --bg:#f6f5f1; --card:#fff; --text:#23251f; --muted:#6b6e64; --line:#e2e0d8; --accent:#788c5d; --accent-text:#fff; --error:#b3412f; --ok-bg:#eef3e6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1b1c19; --card:#262723; --text:#ecebe5; --muted:#a3a59b; --line:#3a3b35; --accent:#9db37f; --accent-text:#16170f; --error:#e07a68; --ok-bg:#2d3326; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:32px 16px 48px; }
+  h1 { font-size:1.35rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:.9rem; color:var(--muted); margin:12px 0 4px; }
+  input { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  button { font:inherit; font-weight:600; padding:11px 18px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; min-height:44px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-text); }
+  button:disabled { opacity:.55; cursor:default; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  .row button { flex:1 1 140px; }
+  .link { background:none; border:none; color:var(--accent); padding:0; min-height:0; font-weight:500; text-decoration:underline; }
+  .farm { padding:10px 12px; border-radius:8px; background:var(--ok-bg); margin-top:8px; }
+  .farm b { display:block; }
+  .chips span { display:inline-block; font-size:.8rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line); margin:4px 4px 0 0; background:var(--card); }
+  .msg { color:var(--error); margin-top:12px; }
+  .note { font-size:.9rem; color:var(--muted); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect an AI to Naked Heart</h1>
+  <p class="sub" id="sub">Checking the request…</p>
+
+  <section class="card" id="signin" hidden>
+    <p style="margin-top:0">Sign in with your Naked Heart account.</p>
+    <form id="pwForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+      <div class="row">
+        <button class="primary" type="submit">Sign in</button>
+        <button type="button" id="linkBtn">Email me a sign-in link</button>
+      </div>
+    </form>
+    <p class="msg" id="signinMsg" hidden></p>
+  </section>
+
+  <section class="card" id="consent" hidden>
+    <p style="margin-top:0"><b id="client">An AI</b> asks to read Naked Heart as <b id="who"></b>.</p>
+    <div id="farms"></div>
+    <p class="note">It can only read, never change anything, and only what is listed above. Every question it asks is logged
+      and the farm manager can see it. The access ends <span id="until">when the manager stops it</span>.</p>
+    <div class="row">
+      <button class="primary" id="allow">Allow</button>
+      <button id="deny">Deny</button>
+    </div>
+    <p class="note">Not you? <button class="link" id="signout">Sign out</button></p>
+    <p class="msg" id="consentMsg" hidden></p>
+  </section>
+
+  <section class="card" id="none" hidden>
+    <p style="margin-top:0"><b id="who2"></b> has no AI access to Naked Heart, or it has ended.</p>
+    <p class="note">Ask the farm manager to tick MCP for you on the Naked Heart team page, then connect again.</p>
+    <div class="row"><button id="deny2">Back to the AI</button><button id="signout2">Sign in as someone else</button></div>
+  </section>
+
+  <p class="msg" id="fatal" hidden></p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://azfiajzhzewjcblbltmp.supabase.co';
+// the public anon key of js/api.js — public by design: row-level security and mcp_my_access are the guard
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6ZmlhanpoemV3amNibGJsdG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMDg5NzQsImV4cCI6MjEwNDc4NDk3NH0.0wakTe-gKANg4w6sfxyNfn8nhfgDGW2O7O60WvMI1mY';
+const FAMILIES = { crops: 'Crops & batches', harvest: 'Harvests', tasks: 'Tasks & procedures', water: 'Nutrients & irrigation',
+  climate: 'Climate & sensors', pests: 'Pests & disease', equipment: 'Equipment', purchasing: 'Purchasing & stock',
+  sales: 'Sales & customers', costs: 'Costs', team: 'Team (names, hours)' };
+
+const $ = (id) => document.getElementById(id);
+const show = (id, on = true) => { $(id).hidden = !on; };
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const authId = new URLSearchParams(location.search).get('authorization_id');
+
+function fatal(msg) { $('sub').textContent = ''; $('fatal').textContent = msg; show('fatal'); }
+function day(d) { return new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }); }
+
+async function start() {
+  if (!authId) return fatal('This page opens from Claude or ChatGPT when you connect Naked Heart. The link is missing its request.');
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    $('sub').textContent = 'An AI asks to read Naked Heart for you.';
+    show('signin');
+    return;
+  }
+  show('signin', false);
+  const { data, error } = await sb.auth.oauth.getAuthorizationDetails(authId);
+  if (error) return fatal('This request has expired or is not valid any more. Start the connection again from the AI. (' + error.message + ')');
+  if (!('authorization_id' in data)) { location.href = data.redirect_url; return; }   // allowed before
+
+  const email = session.user.email;
+  const { data: access, error: accErr } = await sb.rpc('mcp_my_access');
+  if (accErr) return fatal('Naked Heart could not check your access: ' + accErr.message);
+  $('sub').textContent = '';
+  if (!access.length) {
+    $('who2').textContent = email;
+    show('none');
+    return;
+  }
+  $('client').textContent = data.client?.name || 'An AI';
+  $('who').textContent = email;
+  $('farms').innerHTML = '';
+  for (const a of access) {
+    const el = document.createElement('div');
+    el.className = 'farm';
+    const name = document.createElement('b');
+    name.textContent = a.farm;
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const f of a.families) { const s = document.createElement('span'); s.textContent = FAMILIES[f] || f; chips.append(s); }
+    el.append(name, chips);
+    if (a.ends_at) { const u = document.createElement('div'); u.className = 'note'; u.textContent = 'until ' + day(a.ends_at); el.append(u); }
+    $('farms').append(el);
+  }
+  const ends = access.map((a) => a.ends_at).filter(Boolean).sort();
+  if (ends.length === access.length) $('until').textContent = 'on ' + day(ends[ends.length - 1]) + ' at the latest, or sooner if the manager stops it';
+  show('consent');
+}
+
+async function decide(approve) {
+  for (const b of document.querySelectorAll('button')) b.disabled = true;
+  const fn = approve ? sb.auth.oauth.approveAuthorization : sb.auth.oauth.denyAuthorization;
+  const { data, error } = await fn.call(sb.auth.oauth, authId);
+  if (error) {
+    for (const b of document.querySelectorAll('button')) b.disabled = false;
+    $('consentMsg').textContent = error.message; show('consentMsg');
+    return;
+  }
+  location.href = data.redirect_url;
+}
+
+$('pwForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  show('signinMsg', false);
+  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+  if (error) { $('signinMsg').textContent = error.message; show('signinMsg'); }
+  // on success onAuthStateChange (below) carries on
+});
+$('linkBtn').addEventListener('click', async () => {
+  const email = $('email').value.trim();
+  if (!email) { $('signinMsg').textContent = 'Write your email first.'; show('signinMsg'); return; }
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href } });
+  $('signinMsg').textContent = error ? error.message : 'Sent. Open the link in the email on this device: it brings you back here.';
+  show('signinMsg');
+});
+$('allow').addEventListener('click', () => decide(true));
+$('deny').addEventListener('click', () => decide(false));
+$('deny2').addEventListener('click', () => decide(false));
+for (const id of ['signout', 'signout2']) $(id).addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+// supabase-js must not be called from inside its own auth callback: hand over with setTimeout.
+sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_IN' && !$('signin').hidden) setTimeout(start, 0); });
+
+start().catch((e) => fatal(String(e?.message || e)));
+</script>
+</body>
+</html>

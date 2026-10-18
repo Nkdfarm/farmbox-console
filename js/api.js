@@ -132,6 +132,7 @@ const READ_RPCS = new Set([
   'procedures', 'purchasing', 'seedling_orders', 'reports', 'system_catalog', 'integration_status', 'task_families',
   'farm_holidays', 'zone_photos', 'pest_catalog', 'cases', 'case_detail', 'pest_overview', 'scouting_dates', 'pest_dot', 'basket_plan',
   'customers', 'yield_dashboard', 'step_harvests', 'labour_hours', 'money', 'forecast_review', 'field_corrections', 'to_decide', 'connections', 'farmnet_dashboard', 'camera_heatmap', 'camera_growth_view', 'camera_counts_view', 'robot_scouting', 'task_feedback_list', 'task_feedback_state', 'sump_history', 'zone_growth', 'removed_photos', 'ai_cost', 'ai_model_setting', 'ai_scan_state', 'ai_found', 'photo_chat', 'ipm_library', 'zone_treatments', 'scouting_day_light', 'scouting_thumbs', 'zone_panels', 'extra_scoutings', 'crop_tracking', 'scouting_people', 'scouting_coverage', 'unfiled_photos', 'photo_traps', 'greenhouse_days', 'greenhouse_day', 'person_history',
+  'mcp_team', 'mcp_call_log',   // Team › AI access (0242): reads
 ]);
 const DATA_CACHE = 'fbc-data';   // sw.js leaves caches with this prefix alone
 

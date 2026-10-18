@@ -20,6 +20,8 @@ export const ROLES = [
   ['trainee', 'Student', 'Learns on the job: no work of their own unless you give some. Mainly extra scouting.'],
   ['technician', 'Technician', 'Maintenance and repairs.'],
   ['office', 'Office', 'Purchasing, records, reporting.'],
+  // 0242 (owner 18 Oct 2026): somebody — staff or an outside freelancer — who is in the team only for their own AI
+  ['ai_only', 'AI only', 'In the team only for their own Claude or ChatGPT, which reads what Team › AI access allows. Never on the task pages, no hours, no login here: their AI signs in with the e-mail below.'],
 ];
 export const roleLabel = v => ROLES.find(r => r[0] === v)?.[1] ?? v;
 
@@ -64,7 +66,11 @@ function openPerson(p) {
   const setRoleHint = () => {
     roleHint.textContent = ROLES.find(r => r[0] === role.value)?.[2] ?? '';
     slots.hidden = role.value !== 'worker';
+    // AI only (0242): no week, no login, no responsibilities — the database forces the same whatever is sent
+    const ai = role.value === 'ai_only';
+    [weekPart, signPart, respPart].forEach(n => { if (n) n.hidden = ai; });
   };
+  let weekPart = null, signPart = null, respPart = null;
 
   // Worker 1…10 — the slot names the weekly roster uses. Taken ones are shown
   // but cannot be picked twice.
@@ -128,6 +134,21 @@ function openPerson(p) {
       ? 'Type a new password only if you are resetting it. Changing the e-mail above changes the address they sign in with.'
       : 'Fill in an e-mail and a password to give this person a login.'));
 
+  weekPart = el('div');
+  weekPart.append(
+    el('div', 'sec-title', 'Their week'),
+    (() => { const f = field('Employment', employment); f.append(empHint); return f; })(),
+    (() => { const f = el('div', 'field');
+             f.append(el('label', null, 'Working days'), dayRow); return f; })(),
+    field('Hours per day', hours));
+  signPart = el('div');
+  signPart.append(el('div', 'sec-title', 'Sign-in'), acct);
+  respPart = el('div');
+  respPart.append(
+    el('div', 'sec-title', 'Responsible for'),
+    el('div', 'hint', isNew
+      ? 'What their job covers is theirs as soon as they are saved (Team › Jobs…). Add or take off a label, and set their numbers, on the Team page.'
+      : 'Set on the Team page: click a label to change its number, ＋ to add one. A change of job brings the new job’s labels.'));
   d.body.append(
     el('div', 'sec-title', 'The person'),
     field('Name', name),
@@ -141,17 +162,7 @@ function openPerson(p) {
       g.append(field('E-mail', email), field('Phone', phone));
       return g;
     })(),
-    el('div', 'sec-title', 'Their week'),
-    (() => { const f = field('Employment', employment); f.append(empHint); return f; })(),
-    (() => { const f = el('div', 'field');
-             f.append(el('label', null, 'Working days'), dayRow); return f; })(),
-    field('Hours per day', hours),
-    el('div', 'sec-title', 'Sign-in'),
-    acct,
-    el('div', 'sec-title', 'Responsible for'),
-    el('div', 'hint', isNew
-      ? 'What their job covers is theirs as soon as they are saved (Team › Jobs…). Add or take off a label, and set their numbers, on the Team page.'
-      : 'Set on the Team page: click a label to change its number, ＋ to add one. A change of job brings the new job’s labels.'),
+    weekPart, signPart, respPart,
   );
   setRoleHint();
   paintSlots();
@@ -178,12 +189,17 @@ function openPerson(p) {
       active: p?.active ?? true,
     };
     if (!body.name) { toast('A name is needed', 'bad'); name.focus(); return; }
-    if (!body.working_days.length) { toast('Pick at least one working day', 'bad'); return; }
+    const aiOnly = body.role === 'ai_only';
+    if (!aiOnly && !body.working_days.length) { toast('Pick at least one working day', 'bad'); return; }
+    if (aiOnly && !body.email && !p?.has_login) { toast('An AI-only person needs an e-mail: their AI signs in with it', 'bad'); email.focus(); return; }
+    if (aiOnly && p?.has_login) {
+      toast(`${body.name} signs in to Naked Heart: remove the login first (⋯ › Remove the login), then make them AI only`, 'bad'); role.focus(); return;
+    }
     if (linkedin.value.trim() && !body.linkedin_url) {
       toast('That is not a LinkedIn link', 'bad'); linkedin.focus(); return;
     }
 
-    const wantsAccount = !!pw.value.trim();
+    const wantsAccount = !aiOnly && !!pw.value.trim();
     if (wantsAccount && !body.email) { toast('A password needs an e-mail', 'bad'); email.focus(); return; }
     if (wantsAccount && pw.value.trim().length < 10) {
       toast('The password needs at least 10 characters', 'bad'); pw.focus(); return;

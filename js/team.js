@@ -17,6 +17,7 @@ import { loading, el, field, selectBox, toast, drawer, confirmDrawer, avatar, bu
          pageHead, pref, farmDate, farmToday, ymd, addDays, mondayOf, parseYmd, isoDow } from './ui.js';
 import { roleLabel as knownRole, employmentLabel, editPerson, personActions } from './people.js';
 import { renderHours } from './hours.js';
+import { aiCard } from './team-ai.js';
 
 const hrs = m => { m = Math.round(Number(m || 0)); const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`; };
 const DAY = ['', 'M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -135,6 +136,8 @@ function paint() {
   mount.append(card);
 
   if (may) mount.append(planCard());
+  // the AI part (0242): who may connect their own Claude or ChatGPT, and what it may read
+  if (may) mount.append(aiCard(farm));
 
   // the old Hours page, as it was
   const fold = el('details', 'card card-pad team-hours');
@@ -169,7 +172,10 @@ function table(may) {
     const jd = el('td'); jd.colSpan = 5;
     const line = el('div', 'team-jobline');
     line.append(el('b', null, roleLabel(job.role)), el('span', 'hint', ppl.length === 1 ? '1 person' : `${ppl.length} people`));
-    if (may && !job.unlisted) {
+    if (job.role === 'ai_only') {
+      // in the team only for their own AI (0242): no work, so nothing for the job to cover
+      line.append(el('span', 'hint team-jobhas', 'In the team only for their own AI: no work, no hours. What it reads is under AI access below.'));
+    } else if (may && !job.unlisted) {
       const bundle = job.bundle || [];
       line.append(el('span', 'hint team-jobhas', bundle.length
         ? 'The job covers: ' + bundle.map(keyLabel).join(', ')
@@ -206,6 +212,7 @@ function personRow(p, inJob, may, h) {
   const tr = el('tr', 'team-row');
   if (!p.active) tr.classList.add('off');
   const prof = profile(p.worker_id);
+  if (p.role === 'ai_only') return aiOnlyRow(tr, p, prof, may);
 
   const who = el('div', 'who');
   who.append(avatar({ ...p, photo_url: prof?.photo_url }));
@@ -295,6 +302,28 @@ function personRow(p, inJob, may, h) {
     more.setAttribute('aria-label', 'More actions for ' + p.name);
     more.onclick = () => personActions(ctx(), prof || p);
     acts.append(more);
+  }
+  tr.append(tdOf(acts));
+  return tr;
+}
+
+// An AI-only person (0242): in the team only for their own AI — no responsibilities, days, hours or place
+function aiOnlyRow(tr, p, prof, may) {
+  const who = el('div', 'who');
+  who.append(avatar({ ...p, photo_url: prof?.photo_url }));
+  const names = el('div');
+  names.append(el('b', null, [p.name, p.surname].filter(Boolean).join(' ')),
+               el('small', null, 'AI only' + (prof?.email ? ' · ' + prof.email : ' · no e-mail yet')));
+  who.append(names);
+  tr.append(tdOf(who), tdOf(el('span', 'hint', '—')), tdOf(el('span', 'hint', 'no work — their AI reads what AI access below allows')), tdOf(null));
+  const acts = el('div', 'acts');
+  if (may) {
+    const edit = el('button', 'btn btn-sm', 'Edit');
+    edit.onclick = () => editPerson(ctx(), prof || p);
+    const more = el('button', 'btn btn-sm btn-ghost', '⋯');
+    more.setAttribute('aria-label', 'More actions for ' + p.name);
+    more.onclick = () => personActions(ctx(), prof || p);
+    acts.append(edit, more);
   }
   tr.append(tdOf(acts));
   return tr;
@@ -639,7 +668,7 @@ function openAdd(p) {
 // ── what a job is responsible for ───────────────────────────────────────────
 function openJobs() {
   const d = drawer('Jobs', 'What each job is responsible for at ' + farm.name + '. Everybody with the job gets it.');
-  (T.jobs || []).forEach(job => {
+  (T.jobs || []).filter(job => job.role !== 'ai_only').forEach(job => {   // AI only covers no work (0242)
     const b = el('div', 'team-key');
     const head = el('div', 'team-keyhead');
     head.append(el('b', null, roleLabel(job.role)), el('span', 'hint', Number(job.people) === 1 ? '1 person' : `${job.people} people`), el('span', 'spacer'));

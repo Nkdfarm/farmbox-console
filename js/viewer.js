@@ -18,8 +18,8 @@
 //     zoneId, cropId, crops   where the photo was taken, for the case section (0097)
 //     openCases   async () → the open cases of the zone (rpc cases, filtered)
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, api, URL_BASE } from './api.js';
-import { el, toast, busy, num, selectBox, avatar } from './ui.js';
+import { rpc, fn, api, URL_BASE, me } from './api.js';
+import { el, toast, busy, num, selectBox, avatar, drawer } from './ui.js';
 import { newCase, openCase } from './cases.js';
 
 const when = ts => ts ? new Date(ts).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -89,6 +89,154 @@ export function tagChips(p, short = false) {
     p.species.slice(0, 2).forEach(x => box.append(el('span', 'vw-tag ai ' + (x.beneficial ? 'r-green' : 'r-yellow'), `AI: ${x.common || x.name} ${x.count ?? ''}`)));
   }
   return box;
+}
+
+// ── the team's notes on a photo (0.7.269) ──
+let meId = null, meAt = 0;           // the signed-in person, asked again after a minute (a sign-out and in)
+const whoAmI = async () => { if (meId && Date.now() - meAt < 60000) return meId; try { meId = (await me())?.id || null; meAt = Date.now(); } catch { meId = null; } return meId; };
+const signedUrl = async path => {
+  try {
+    const r = await api('/storage/v1/object/sign/evidence/' + path.split('/').map(encodeURIComponent).join('/'),
+                        { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
+    return r?.signedURL ? URL_BASE + '/storage/v1' + r.signedURL : null;
+  } catch { return null; }
+};
+const errWord = e => String(e?.message || e).replace(/^\d+ /, '');
+const riskSelect = () => {
+  const s = el('select', 'vw-note-risk');
+  [['green', 'Green · no risk'], ['yellow', 'Yellow · low risk'], ['red', 'Red · high risk']].forEach(([v, w]) => { const o = el('option', null, w); o.value = v; s.append(o); });
+  s.value = 'yellow'; s.dataset.level = 'yellow'; s.onchange = () => { s.dataset.level = s.value; };
+  return s;
+};
+function teamNotes(photo, ctx, mayWrite) {
+  const sec = el('div', 'vw-note-sec vw-team');
+  const kind = photo.kind === 'trap' ? 'trap' : 'observation';
+  const paint = async () => {
+    const mine = await whoAmI();
+    sec.textContent = '';
+    const notes = photo.notes || [];
+    sec.append(el('div', 'sec-title', notes.length ? `Team notes · ${notes.length}` : 'Team notes'));
+    const list = el('div', 'vw-team-list');
+    if (!notes.length) list.append(el('div', 'hint', 'No team note yet.'));
+    notes.forEach(n => {
+      const lvl = RISK_WORD[n.level] ? n.level : 'yellow';
+      const b = el('div', `vw-tag vw-note r-${lvl}`);
+      if (n.by || n.worker_id) b.append(avatar({ worker_id: n.worker_id || null, name: n.by || '' }, 'xs'));
+      const txt = el('div', 'vw-note-text');
+      txt.append(el('b', null, (n.by ? String(n.by).split(/\s+/)[0] : 'Somebody') + ' · ' + day(n.at)));
+      if (n.body) txt.append(el('div', null, n.body));
+      else if (n.audio_path) txt.append(el('div', 'hint', n.voice_status === 'failed' ? 'The recording could not be written down' : 'Writing the recording down…'));
+      if (n.audio_path) {
+        const play = el('button', 'btn btn-sm', 'Listen');
+        play.onclick = async () => {
+          const u = await signedUrl(n.audio_path);
+          if (!u) { toast('The recording could not be opened', 'bad'); return; }
+          const a = el('audio'); a.controls = true; a.autoplay = true; a.src = u; play.replaceWith(a);
+        };
+        txt.append(play);
+      }
+      b.append(txt);
+      if (mayWrite && mine && n.by_user === mine) {
+        const x = el('button', 'vw-x', '×'); x.title = 'Delete my note';
+        x.onclick = async () => {
+          try { await rpc('dg_delete_note', { p_id: n.id }); photo.notes = (photo.notes || []).filter(q => q.id !== n.id); paint(); ctx.onChange?.(photo); }
+          catch (e) { toast(errWord(e), 'bad'); }
+        };
+        b.append(x);
+      }
+      list.append(b);
+    });
+    sec.append(list);
+    if (!mayWrite) return;
+    const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.maxLength = 4000; ta.placeholder = 'Add a note for the team';
+    const risk = riskSelect();
+    const add = el('button', 'btn btn-sm btn-primary', 'Add note');
+    const cref = 'hc:' + crypto.randomUUID();      // one id for this note: a retry after a lost answer is the same note
+    add.onclick = async () => {
+      if (!ta.value.trim()) { toast('Write the note first', 'bad'); return; }
+      busy(add, true, 'Saving…');
+      try {
+        const r = await rpc('dg_add_note', { p: { kind, ref_id: photo.id, body: ta.value, level: risk.value, client_ref: cref } });
+        photo.notes = [...(photo.notes || []), { id: r.id, body: ta.value.trim(), level: risk.value, by: 'You', by_user: mine, at: new Date().toISOString() }];
+        toast('Note added', 'ok'); paint(); ctx.onChange?.(photo);
+      } catch (e) { busy(add, false, 'Add note'); toast(errWord(e), 'bad'); }
+    };
+    const ask = el('button', 'btn btn-sm', 'Ask someone…');
+    ask.onclick = () => askOpinion(photo, kind, ctx);
+    const acts = el('div', 'vw-note-acts'); acts.append(risk, add, ask);
+    sec.append(ta, acts);
+  };
+  paint();
+  return sec;
+}
+async function askOpinion(photo, kind, ctx) {
+  const d = drawer('Ask for an opinion', 'They find this photo with all its data in their list, in Naked Brain and Naked Heart');
+  d.body.append(el('div', 'hint', 'Reading the team…'));
+  let people = [];
+  try { people = await rpc('dg_people', { p_farm: ctx.farm.id }); } catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', errWord(e))); return; }
+  const mine = await whoAmI();
+  d.body.textContent = '';
+  const box = el('div', 'vw-ask-people');
+  const picks = new Set();
+  people.filter(x => x.user_id !== mine).forEach(x => {
+    const lab = el('label', 'vw-ask-person'); const cb = el('input'); cb.type = 'checkbox';
+    cb.onchange = () => { if (cb.checked) picks.add(x.user_id); else picks.delete(x.user_id); };
+    lab.append(cb, avatar({ worker_id: x.worker_id || null, name: x.name }, 'xs'), el('span', null, x.name));
+    box.append(lab);
+  });
+  const q = el('textarea', 'vw-note-box'); q.rows = 3; q.maxLength = 1000; q.placeholder = 'Your question (optional)';
+  const go = el('button', 'btn btn-primary', 'Send');
+  go.onclick = async () => {
+    if (!picks.size) { toast('Choose at least one person', 'bad'); return; }
+    busy(go, true, 'Sending…');
+    try {
+      const r = await rpc('dg_ask_opinion', { p: { kind, ref_id: photo.id, to: [...picks], question: q.value } });
+      toast(r.asked ? `Asked ${r.asked} ${r.asked === 1 ? 'person' : 'people'}` : 'Already asked', 'ok'); d.close();
+    } catch (e) { busy(go, false, 'Send'); toast(errWord(e), 'bad'); }
+  };
+  d.body.append(box, q, go);
+}
+
+// the photos waiting for my opinion, with an answer box (0.7.269): opened from the Scouting page
+export async function openOpinions(farm, onChange) {
+  const d = drawer('Asked for your opinion', 'Photos the team sent you, newest first');
+  const paint = async () => {
+    d.body.textContent = ''; d.body.append(el('div', 'hint', 'Reading…'));
+    let rows = [];
+    try { rows = await rpc('dg_my_requests', { p_farm: farm.id }); } catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', errWord(e))); return; }
+    d.body.textContent = '';
+    if (!rows.length) { d.body.append(el('div', 'hint', 'Nothing waiting for your opinion.')); return; }
+    rows.forEach(q => {
+      const card = el('div', 'vw-req');
+      const ph = q.photo || {};
+      const img = el('img', 'vw-req-img'); img.alt = '';
+      if (ph.photo_path) signedUrl(ph.photo_path).then(u => { if (u) { img.src = u; img.onclick = () => window.open(u, '_blank', 'noopener'); } });
+      const info = el('div', 'vw-req-info');
+      info.append(el('b', null, [q.kind === 'trap' ? `Trap ${ph.trap || ''}${ph.side ? ' (' + ph.side + ')' : ''}` : 'Plant photo', ph.zone, ph.taken_at ? day(ph.taken_at) : null].filter(Boolean).join(' · ')),
+                  el('div', 'hint', `From ${q.by || 'somebody'} · ${day(q.at)}`));
+      if (q.question) info.append(el('div', null, '"' + q.question + '"'));
+      if (ph.note) info.append(el('div', 'hint', 'Note: ' + ph.note));
+      const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.placeholder = 'Your opinion';
+      const risk = riskSelect();
+      const ans = el('button', 'btn btn-sm btn-primary', 'Answer');
+      const cref = 'hc:' + crypto.randomUUID();
+      ans.onclick = async () => {
+        if (!ta.value.trim()) { toast('Write your opinion first', 'bad'); return; }
+        busy(ans, true, 'Sending…');
+        try {
+          await rpc('dg_add_note', { p: { kind: q.kind, ref_id: q.ref_id, body: ta.value, level: risk.value, request_id: q.id, client_ref: cref } });
+          toast('Answer added to the photo', 'ok'); onChange?.(); paint();
+        } catch (e) { busy(ans, false, 'Answer'); toast(errWord(e), 'bad'); }
+      };
+      const dis = el('button', 'btn btn-sm', 'Dismiss');
+      dis.onclick = async () => { try { await rpc('dg_dismiss_request', { p_id: q.id }); paint(); onChange?.(); } catch (e) { toast(errWord(e), 'bad'); } };
+      const acts = el('div', 'vw-note-acts'); acts.append(risk, ans, dis);
+      info.append(ta, acts);
+      card.append(img, info);
+      d.body.append(card);
+    });
+  };
+  paint();
 }
 
 export function openViewer(ctx) {
@@ -305,6 +453,10 @@ export function openViewer(ctx) {
   };
   paintNote();
   panel.append(secNote);
+  // the team's notes on the photo, oldest first, typed or voice; a note added here; somebody asked for an opinion
+  // (0.7.269, 0246–0247, Digital scouting: "always possible to add new notes to all pics", "share a pic … asking
+  // personal opinion"). A person deletes their own note on its day; the server says who may.
+  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) panel.append(teamNotes(photo, ctx, mayWrite));
 
   // the person's tags
   const secTags = el('div');

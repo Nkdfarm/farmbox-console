@@ -51,7 +51,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
-import { openViewer, tagChips, noteChip, photoTitle, partLabel } from './viewer.js';
+import { openViewer, tagChips, noteChip, photoTitle, partLabel, openOpinions } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection, robotStrip, robotFig } from './robot.js';
@@ -309,6 +309,20 @@ async function load(fresh = false) {
 }
 const reload = () => load(true);   // after a change: the server's answer, not the old copy
 
+// the photos the team asked my opinion on (0.7.269, Digital scouting): the count on the button, the list in a window
+function opinionsButton() {
+  const b = el('button', 'btn', 'Opinions');
+  b.title = 'Photos the team sent you for your opinion';
+  b.onclick = () => openOpinions(farm, () => { reload(); count(); });
+  const count = () => rpc('dg_my_requests', { p_farm: farm.id }).then(rows => {
+    const n = (rows || []).length;
+    b.textContent = n ? `Opinions · ${n}` : 'Opinions';
+    b.classList.toggle('btn-primary', n > 0);
+  }).catch(() => {});
+  count();
+  return b;
+}
+
 // what the whole-greenhouse report rests on, opened beside the page (0.7.240): the windows the page already has
 async function openGhRef(ref) {
   if (ref.kind === 'case') return openCase(ref.id, reload, farm);
@@ -454,7 +468,7 @@ function paint() {
   mount.append(pageHead('Scouting',
     'The whole greenhouse first, then each scouting day by zone. ' +
     'A dot marks the worst thing inside: red severe or over the limit, orange open or on watch, green improving or resolved.',
-    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(farm, reload), openBtn));
+    scaleBtn, setupBtn, ...(tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(farm, reload), opinionsButton(), openBtn));
 
   if (zoneFilter && !cur()) zoneFilter = null;   // a zone gone, or Zone 4 now reported as 4.1 and 4.2
   mount.append(zoneBar());

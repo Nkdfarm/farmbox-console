@@ -2271,6 +2271,16 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-ins-drawer .pd-traps { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .pd-ins-block > summary .pd-ins-photos { margin-left: auto; padding: 1px 8px; font-size: var(--text-xs); }
 .pd-ins-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+/* the team's notes and the opinions (0.7.269) */
+.vw-team-list { display: grid; gap: 6px; width: 100%; }
+.vw-team .vw-note-text b { display: block; font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.vw-team .vw-tag.vw-note { position: relative; }
+.vw-team .vw-tag.vw-note .vw-x { position: absolute; top: 2px; right: 4px; }
+.vw-ask-people { display: grid; gap: 6px; margin-bottom: var(--space-3); }
+.vw-ask-person { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.vw-req { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.vw-req-img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-sm); background: var(--surface-2); cursor: zoom-in; }
+.vw-req-info { display: grid; gap: 4px; min-width: 0; }
 .pd-ins-block .tm-mini { margin-block: var(--space-1); }
 .pd-ins-drawer .tm-mini { margin-block: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }

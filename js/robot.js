@@ -51,6 +51,16 @@ export function robotSection(rows, opts) {
   return det;
 }
 
+// a robot observation as a tile among the zone's photos (0.7.264, owner: "robot as Matthew G1 all in the same block")
+export function robotFig(r, opts) {
+  const fig = card(r, { ...NO_OPTS, ...opts });
+  fig.classList.add('rb-in-block');
+  const badge = el('span', 'pill rb-badge', 'Matthew G1');
+  badge.title = `Sent by the robot (${r.robot || 'Matthew Paxton'}); a manager confirms or dismisses it`;
+  fig.querySelector('.pd-fig-title')?.prepend(badge);
+  return fig;
+}
+
 function card(r, ctx) {
   const fig = el('figure', 'sc-fig rb-fig' + (r.status === 'dismissed' ? ' rb-off' : ''));
   if (r.photo_data) { const im = el('img'); im.src = r.photo_data; im.alt = what(r); im.loading = 'lazy'; fig.append(im); }

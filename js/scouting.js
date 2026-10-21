@@ -54,7 +54,7 @@ import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, dra
 import { openViewer, tagChips, noteChip, photoTitle, partLabel } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
-import { robotSection, robotStrip } from './robot.js';
+import { robotSection, robotStrip, robotFig } from './robot.js';
 import { sumpBlock, openSump } from './sump.js';
 import { treatBlock } from './treatments.js';
 import { unfiledButton } from './unfiled.js';
@@ -868,14 +868,14 @@ function zoneBand(z, day, withAi = false) {
   }
   const shared = [...traps, ...photos].filter(p => p.shared).length;
   if (shared) body.append(el('div', 'hint pd-shared', `${shared} of these name ${z.zone_name || 'the zone'} without its table, so they are in each of its reports.`));
-  // plant health first, open: its photos on two thirds, the zone's insect curve and trap map on the last third; the
-  // day's trap photos behind the map; Growth underneath (0.7.175)
-  const hs = healthSection(z, day, photos.filter(p => p.section !== 'growth'), traps, photos.filter(p => p.section === 'growth'));
-  const bottom = el('div', 'pd-hbottom');
-  bottom.append(trapsBlock(z, day, traps));
+  // one compact section (0.7.264, owner 21 Oct 2026): every photo of the zone in one block on the left — plant health
+  // first, then the photos with sizes and the robot's, newest at the top left — and on the right the water (open), the
+  // treatments, the insects (their traps open in a window of their own) and the growth curve, closed with their figure
   const rb = robotIn(z, robotDay(day.day));
-  if (rb.length) { bottom.append(robotSection(rb, robotOpts())); det.open = true; }
-  body.append(hs, bottom);
+  if (rb.length) det.open = true;
+  const hs = healthSection(z, day, photos, traps, rb);
+  det.liveTraps = () => traps.filter(t => (z.traps || []).some(q => q.id === t.id)).length;
+  body.append(hs);
   if (det.open) hs.load();
   det.addEventListener('toggle', () => { if (det.open) hs.load(); });
   if (!traps.length && !photos.length && !rb.length) body.append(el('div', 'hint', z.item?.done_at || zt?.status === 'done' ? 'Nothing photographed, traps not counted.' : 'Not scouted that day.'));
@@ -921,13 +921,13 @@ function removeX(p) {
       }));
       card?.remove();
       if (band) {
-        const figs = band.querySelectorAll('.sc-fig').length, traps = band.querySelectorAll('.pd-trap').length;
+        const figs = band.querySelectorAll('.sc-fig').length, traps = band.liveTraps ? band.liveTraps() : 0;
         band.querySelectorAll(':scope > summary .pill').forEach(pill => {
           if (/^\d+ photos?$/.test(pill.textContent)) pill.textContent = `${figs} photo${figs === 1 ? '' : 's'}`;
           else if (/^\d+ traps?$/.test(pill.textContent)) pill.textContent = traps ? `${traps} trap${traps === 1 ? '' : 's'}` : 'traps —';
         });
-        const health = band.querySelectorAll('.pd-hleft > .pd-hphotos .sc-fig').length, hint = band.querySelector('.pd-health > summary .hint');
-        if (hint && /photo/.test(hint.textContent)) hint.textContent = health ? `${health} photo${health === 1 ? '' : 's'}` : 'no photo that day';
+        const hint = band.querySelector('.pd-photos-head .hint'), n = band.querySelectorAll('.pd-hphotos .sc-fig').length;
+        if (hint) hint.textContent = n ? `${n} photo${n === 1 ? '' : 's'}` : 'no photo that day';
       }
     } catch (err) { toast(String(err.message || err).replace(/^\d+ /, ''), 'bad'); }
   };
@@ -977,7 +977,7 @@ function extraTag(p) {
   t.title = `Added by an extra scouting${p.by ? ' — ' + p.by : ''}, beside the zone's planned scouting`;
   return t;
 }
-function trapCard(p, z, day, withNote = true) {
+function trapCard(p, z, day, withNote = true, gallery = null) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
@@ -986,15 +986,14 @@ function trapCard(p, z, day, withNote = true) {
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   // the AI's chips and the person's note on the trap, in the same risk colours (0.7.262, 0240)
-  const tchips = (p.tags || []).length || p.ai_status === 'done' ? tagChips(p) : el('div', 'vw-chips');
-  const tn = withNote ? noteChip(p, true) : null;
-  if (tn) tchips.append(tn);
-  if (tchips.childNodes.length) card.append(tchips);
+  if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
+  const tn = withNote ? noteChip(p, true) : null;            // the person's note: its own bubble under the chips
+  if (tn) card.append(tn);
   const chk = trapCheckPill(p.check, p.total);
   if (chk) card.append(chk);
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
   if (day.may_write !== false && p.id) card.append(removeX({ ...p, kind: 'trap' }));
-  card.onclick = () => openViewer(viewerCtx(p, z, day));
+  card.onclick = () => openInGallery(p, z, day, gallery);
   return card;
 }
 
@@ -1023,7 +1022,7 @@ function trapCurve(pts, th) {
   return svg;
 }
 
-function photoFig(p, z, day) {
+function photoFig(p, z, day, gallery = null) {
   const fig = el('figure', 'sc-fig' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = photoTitle(p); im.loading = 'lazy'; thumb(im, p, day);
   fig.append(im);
@@ -1033,10 +1032,12 @@ function photoFig(p, z, day) {
   const part = partLabel(p.part) || 'photo', who = p.by ? String(p.by).trim().split(/\s+/)[0] : null;
   const title = el('div', 'pd-fig-title' + (p.extra ? ' extra' : ''));
   title.append(dotEl(p.dot), el('b', null, [part.charAt(0).toUpperCase() + part.slice(1), hhmm(p.taken_at), who].filter(Boolean).join(' · ')));
-  // the AI's chips and the person's note in the same colours, the note with its writer's face (0.7.261)
-  const chips = tagChips(p, true), nc = noteChip(p, true);
-  if (nc) chips.append(nc);
-  cap.append(title, chips);
+  // the AI's chips, then the person's note as a bubble of its own with the writer's face and its risk colour
+  // (0.7.261, 0.7.264: "identify better the human notes")
+  const nc = noteChip(p, true);
+  cap.append(title, tagChips(p, true));
+  if (nc) cap.append(nc);
+  if ((p.measures || []).length) title.append(el('span', 'pill pd-sized', 'sizes'));
   // only what somebody measured or wrote: the position, the sizes on the scale card, the comment
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');
   const line = el('div', 'sc-where');
@@ -1049,8 +1050,19 @@ function photoFig(p, z, day) {
                p.ai?.summary ? '✦ ' + p.ai.summary : null].filter(Boolean).join('\n');
   fig.append(cap);
   if (day.may_write !== false && p.id) fig.append(removeX(p));
-  fig.onclick = () => openViewer(viewerCtx(p, z, day));
+  fig.onclick = () => openInGallery(p, z, day, gallery);
   return fig;
+}
+
+// a photo opened from its block slides through the block (0.7.264, owner: "a gallery mode with all current information
+// but with the possibility to slide all pictures of the same section"): ‹ › and the arrow keys
+function openInGallery(p, z, day, gallery) {
+  const list = gallery ? (typeof gallery.list === 'function' ? gallery.list() : gallery.list) || [] : [];
+  const at = list.findIndex(q => q.id === p.id);
+  if (at < 0) return openViewer(viewerCtx(p, z, day));
+  const show = i => openViewer({ ...viewerCtx(list[i], z, day),
+    gallery: { index: i, count: list.length, label: gallery.label, open: show } });
+  show(at);
 }
 
 // ── the AI's opinion on the chosen zone, at the top of its report (0180) ──
@@ -1125,52 +1137,141 @@ function opinionCard(u = cur(), compact = false) {
 // ── a zone's plant health (0.7.175, owner 30 Sept 2026: "2/3 of the width for the health pictures, 1/3 on the right:
 // on top the average insects a day for the whole bay with its curve over time, at the bottom the heat map with all
 // the information of the traps; the traps block can go if its information is in the daily report") ──
-function healthSection(z, day, health, traps, growth = []) {
-  const sec = el('details', 'pd-sec pd-health');
-  sec.open = true;
-  const sum = el('summary');
-  sum.append(el('b', null, 'Plant health'), el('span', 'hint', health.length ? `${health.length} photo${health.length === 1 ? '' : 's'}` : 'no photo that day'));
+const newestFirst = (a, b) => (Date.parse(b.taken_at || b.at) || 0) - (Date.parse(a.taken_at || a.at) || 0);
+function healthSection(z, day, photos, traps, robotRows = []) {
+  const sec = el('div', 'pd-sec pd-health');
+  const health = photos.filter(p => p.section !== 'growth').sort(newestFirst);
+  const growth = photos.filter(p => p.section === 'growth').sort(newestFirst);
   const grid = el('div', 'pd-hgrid');
-  // left, two thirds: the plant-health photos
+  // left, two thirds: one block of photos — health first, then sizes and the robot's, each newest first
   const left = el('div', 'pd-hleft');
-  if (health.length) {
+  const head = el('div', 'pd-photos-head');
+  const measured = growth.filter(p => (p.measures || []).length).length;
+  const toValidate = robotRows.filter(r => r.status === 'new').length;
+  head.append(el('b', null, 'Photos'), el('span', 'hint', [
+    health.length ? `${health.length} plant health` : null,
+    growth.length ? `${growth.length} growth${measured < growth.length ? ` (${measured} with sizes)` : ''}` : null,
+    robotRows.length ? `${robotRows.length} Matthew G1` : null].filter(Boolean).join(' · ') || 'no photo that day'));
+  if (toValidate) head.append(el('span', 'pill warn', `${toValidate} to validate`));
+  left.append(head);
+  if (health.length || growth.length || robotRows.length) {
     const g = el('div', 'sc-grid pd-hphotos');
-    health.forEach(p => g.append(photoFig(p, z, day)));
+    // the photos the viewer slides through, in this order — read when a photo opens, so a photo removed meanwhile is gone
+    const order = [...health, ...growth];
+    const gallery = { label: 'Photos', list: () => order.filter(p => (z.photos || []).some(q => q.id === p.id)) };
+    health.forEach(p => g.append(photoFig(p, z, day, gallery)));
+    const later = [...growth.map(p => ({ t: Date.parse(p.taken_at) || 0, p })), ...robotRows.map(r => ({ t: Date.parse(r.at) || 0, r }))]
+      .sort((a, b) => b.t - a.t);
+    later.forEach(x => g.append(x.p ? photoFig(x.p, z, day, gallery) : robotFig(x.r, robotOpts())));
     left.append(g);
-  } else left.append(el('div', 'hint pd-hnone', 'No plant-health photo that day.'));
-  // under them, the growth photos and the sizes of 30 days (0190: no longer a line that opens)
-  // the sizes of 30 days go on the right, after the trap map (0.7.189, owner: "put the growth graphs on the right just after the insect heatmap")
-  const gcurve = el('div', 'pd-gcurve');
-  left.append(growthPart(z, day, growth));
-  // right, one third: the sump that feeds the zone, the zone's insects a day over time, then its traps as they stand
+  } else left.append(el('div', 'hint pd-hnone', 'No photo that day.'));
+  // right, one third: the water open, then treatments, insects and growth closed with their figure on the line
   const right = el('div', 'pd-hright');
-  const call = panelCall(String(day.day));               // the zone's four blocks come in one answer for the day (0198)
-  const treat = treatBlock(farm, z, day, call, reload);   // the IPM programs on this zone's tables (0197)
+  const call = panelCall(String(day.day));               // the zone's blocks come in one answer for the day (0198)
   const sump = sumpBlock(farm, z, day, call);
-  const curve = el('div', 'pd-hcurve');
-  curve.append(el('div', 'hint', 'Reading the curve…'));
-  // the insects a day sit on top of the trap map, in one block (0.7.190)
-  const tb = trapBlock(z, day, traps);
-  tb.inner.prepend(curve);
-  right.append(treat, sump, tb, gcurve);
+  const treat = treatBlock(farm, z, day, call, reload);   // the IPM programs on this zone's tables (0197)
+  treat.keepClosed = true;
+  const ins = insectsBlock(z, day, traps);
+  const grow = growthBlock();
+  right.append(sump, treat, ins, grow);
   grid.append(left, right);
-  sec.append(sum, grid);
+  sec.append(grid);
   sec.load = async () => {
     if (sec.dataset.loaded) return;
     sec.dataset.loaded = '1';
     sump.load();
     treat.load();
     call('zone_growth', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day })
-      .then(g => { gcurve.textContent = ''; const c = growthCurve(g); if (c) gcurve.append(c); }).catch(() => {});
+      .then(g => grow.fill(g)).catch(e => grow.fill(null, e));
     try {
       const h = await call('zone_health', { p_farm: farm.id, p_zone: z.zone_id, p_system: z.system_id || null, p_day: day.day });
-      curve.textContent = '';
-      const strip = insectStrip(h, z);
-      curve.append(strip);
-      tb.setRate(strip);
-    } catch (e) { curve.textContent = ''; curve.append(el('div', 'note bad', e.message)); delete sec.dataset.loaded; }
+      ins.fill(h);
+    } catch (e) { ins.fail(e); delete sec.dataset.loaded; }
   };
   return sec;
+}
+
+// the insects, closed (0.7.264): the line holds the zone's insects a day in its colour, the traps over or on watch and
+// what is to look at again; a click opens a window with the curve, the trap map and the day's trap photos to slide
+function insectsBlock(z, day, traps) {
+  const box = el('div', 'pd-fold pd-ins-block');
+  const sum = el('div', 'pd-fold-line');
+  sum.tabIndex = 0; sum.setAttribute('role', 'button');
+  sum.title = 'Open the traps: the curve, the map and every trap photo of the day';
+  const mu = (tmap?.units || []).find(u => u.n === z.zone_number);
+  const spots = mu ? (tmap.spots || []).filter(s => s.n === mu.n && s.active) : [];
+  const rate = el('span', 'tr-kpi'); rate.hidden = true;
+  sum.append(el('span', 'pd-hlabel', 'Insects'), rate);
+  const over = spots.filter(s => s.tone === 'red').length, watch = spots.filter(s => s.tone === 'orange').length;
+  const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
+  const codes = [...new Set(traps.map(p => p.code))];
+  sum.append(el('span', 'hint', traps.length ? `${codes.length} trap${codes.length === 1 ? '' : 's'} read` : spots.length ? 'not read that day' : 'no trap'));
+  if (over) sum.append(el('span', 'pill bad', `${over} over`));
+  if (watch) sum.append(el('span', 'pill warn', `${watch} on watch`));
+  if (toCheck) sum.append(el('span', 'pill warn', `${toCheck} to look at again`));
+  sum.append(el('span', 'pd-fold-go', '›'));
+  box.append(sum);
+  let health = null;
+  box.fill = h => {
+    health = h;
+    const strip = insectStrip(h, z), b = strip.querySelector('.pd-ins-big');
+    if (!b) return;
+    rate.textContent = b.textContent + '/day';
+    rate.className = 'tr-kpi ' + (b.classList.contains('bad') ? 'bad' : b.classList.contains('warn') ? 'warn' : 'ok');
+    rate.title = 'Insects a trap a day, the last day read'; rate.hidden = false;
+  };
+  box.fail = e => { rate.hidden = false; rate.className = 'tr-kpi'; rate.textContent = '?'; rate.title = String(e?.message || e); };
+  const open = () => {
+    const d = drawer(`Insects · ${z.name}`, `${longDay(day.day)} · the traps, their photos and the insects a day`);
+    d.box.classList.add('sump-drawer', 'pd-ins-drawer');
+    const live = traps.filter(t => (z.traps || []).some(q => q.id === t.id));
+    d.body.append(health ? insectStrip(health, z) : el('div', 'hint', 'The insects a day are still being read (or could not be): close and open again.'));
+    if (mu && kit) { const m = kit.unitMap(mu, spots); m.classList.add('tm-mini'); d.body.append(m); }
+    else d.body.append(el('div', 'hint', 'No trap map for this zone.'));
+    const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
+    if (lastRead) d.body.append(el('div', 'hint', 'Last read ' + shortDay(lastRead)));
+    d.body.append(el('div', 'sec-title', live.length ? `Trap photos · ${live.length}` : 'No trap photo that day'));
+    if (live.length) {
+      const cards = el('div', 'pd-traps');
+      const gallery = { label: 'Trap photos', list: () => live.filter(t => (z.traps || []).some(q => q.id === t.id)) };
+      // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)
+      const noted = new Set();
+      live.forEach(p => { const k = (p.code || '') + '|' + (p.note || ''); const first = !noted.has(k); noted.add(k);
+        cards.append(trapCard(p, z, day, first, gallery)); });
+      d.body.append(cards);
+    }
+    if (kit && codes.length) {
+      const hist = el('div', 'pd-hist');
+      hist.append(el('span', 'hint', 'History:'));
+      codes.forEach(c => { const sp = kit.spotOf(c); if (!sp) return; const b = el('button', 'pd-cropchip', c); b.onclick = () => kit.openSpots(`${z.name} · trap ${c}`, [sp]); hist.append(b); });
+      if (hist.children.length > 1) d.body.append(hist);
+    }
+  };
+  sum.onclick = open;
+  sum.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  return box;
+}
+
+// the growth curve, closed (0.7.264): the line holds the latest size measured in the zone
+function growthBlock() {
+  const box = el('details', 'pd-fold pd-grow-block');
+  const sum = el('summary');
+  const kpi = el('span', 'hint', 'reading…');
+  sum.append(el('span', 'pd-hlabel', 'Growth'), kpi);
+  const inner = el('div', 'pd-fold-body');
+  box.append(sum, inner);
+  box.fill = (g, err = null) => {
+    inner.textContent = '';
+    if (err) { kpi.textContent = 'not read'; kpi.className = 'hint'; kpi.title = String(err.message || err); return; }
+    const pts = g?.points || [];
+    if (!pts.length) { kpi.textContent = 'no size yet'; inner.append(el('div', 'hint', 'Sizes come from photos with the scale card.')); return; }
+    const last = pts.reduce((a, p) => (String(p.day) >= String(a.day) ? p : a), pts[0]);
+    kpi.textContent = `${G_WORD[last.what] || last.what} ${num(last.mm, 0)} mm · ${shortDay(last.day)}`;
+    kpi.className = 'tr-kpi ok';
+    const c = growthCurve(g);
+    if (c) inner.append(c);
+  };
+  return box;
 }
 
 // the insects a day in one line on top of the trap map (0.7.190, owner 2 Oct 2026: "integrate the insect per day graph
@@ -1306,89 +1407,6 @@ function zoneCurve(h, z) {
       box.append(row);
     });
   }
-  return box;
-}
-
-// the zone's traps as they stand: its map (an area or a dot opens the trap: photo, both sides, history), a line of
-// what they say, and that day's trap photos in a window — the traps block of 0.7.174, folded into the map
-function trapBlock(z, day, traps) {
-  // a fold (0.7.200, owner: "the traps block has to be collapsible as well … closed if no traps"): the line says how
-  // many traps and the insects a day once read (setRate); the curve and the map are inside
-  const box = el('details', 'pd-hmap pd-fold');
-  const mu = (tmap?.units || []).find(u => u.n === z.zone_number);
-  const spots = mu ? (tmap.spots || []).filter(s => s.n === mu.n && s.active) : [];
-  const sum = el('summary'), rate = el('span', 'tr-kpi');
-  rate.hidden = true;
-  sum.append(el('span', 'pd-hlabel', 'Traps'), rate);
-  box.append(sum);
-  box.open = spots.length > 0;
-  // the zone's insects a day, in the line: the figure of the strip inside, in its colour
-  box.setRate = strip => { const b = strip.querySelector('.pd-ins-big'); if (!b) return;
-    rate.textContent = b.textContent + '/day'; rate.className = 'tr-kpi ' + (b.classList.contains('bad') ? 'bad' : b.classList.contains('warn') ? 'warn' : 'ok'); rate.hidden = false;
-    rate.title = 'Insects a trap a day, the last day read'; };
-  box.inner = el('div', 'pd-fold-body');
-  box.append(box.inner);
-  if (mu && kit) {
-    const m = kit.unitMap(mu, spots);
-    m.classList.add('tm-mini');
-    box.inner.append(m);
-  } else box.inner.append(el('div', 'hint', 'No trap map for this zone.'));
-  const over = spots.filter(s => s.tone === 'red').length, watch = spots.filter(s => s.tone === 'orange').length;
-  const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
-  const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
-  const facts = el('div', 'pd-hmap-facts');
-  sum.append(el('span', 'hint', spots.length ? `${spots.length} trap${spots.length === 1 ? '' : 's'}` : 'no trap'));
-  if (over) sum.append(el('span', 'pill bad', `${over} over`));
-  if (watch) sum.append(el('span', 'pill warn', `${watch} on watch`));
-  if (lastRead) facts.append(el('span', 'hint', 'last read ' + shortDay(lastRead)));
-  if (toCheck) facts.append(el('span', 'pill warn', `${toCheck} to look at again`));
-  if (facts.childElementCount) box.inner.append(facts);
-  return box;
-}
-
-// ── Traps: the day's cards, both sides, with their counts and checks, and each trap's history (0.7.176) ──
-function trapsBlock(z, day, traps) {
-  const det = el('details', 'pd-sec pd-trapsec');
-  const codes = [...new Set(traps.map(p => p.code))];
-  const toCheck = traps.filter(p => ['fewer', 'auto_new', 'excluded'].includes(p.check?.state)).length;
-  const sum = el('summary');
-  sum.append(dotEl(worst(traps.map(p => p.dot))), el('b', null, 'Trap photos'),   // "Traps" is the map's fold just above
-             el('span', 'hint', traps.length ? `${codes.length} trap${codes.length === 1 ? '' : 's'} · ${traps.length} photo${traps.length === 1 ? '' : 's'}` : 'none read that day'));
-  if (toCheck) sum.append(el('span', 'pill warn', `${toCheck} to look at again`));
-  det.append(sum);
-  if (traps.length) {
-    const body = el('div', 'pd-sec-body');
-    const cards = el('div', 'pd-traps');
-    // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)
-    const noted = new Set();
-    traps.forEach(p => { const k = (p.code || '') + '|' + (p.note || ''); const first = !noted.has(k); noted.add(k); cards.append(trapCard(p, z, day, first)); });
-    body.append(cards);
-    if (kit) {
-      const hist = el('div', 'pd-hist');
-      hist.append(el('span', 'hint', 'History:'));
-      codes.forEach(c => { const sp = kit.spotOf(c); if (!sp) return; const b = el('button', 'pd-cropchip', c); b.onclick = () => kit.openSpots(`${z.name} · trap ${c}`, [sp]); hist.append(b); });
-      if (hist.children.length > 1) body.append(hist);
-    }
-    det.append(body);
-  }
-  return det;
-}
-
-// ── Growth: under the plant-health photos — the day's photos with their sizes, the sizes of 30 days as a curve ──
-function growthPart(z, day, growth) {
-  const box = el('div', 'pd-growth');
-  const head = el('div', 'pd-growth-head');
-  const sized = growth.filter(p => (p.measures || []).length).length;
-  head.append(dotEl(worst(growth.map(p => p.dot))), el('b', null, 'Growth'),
-    el('span', 'hint', growth.length ? `${growth.length} photo${growth.length === 1 ? '' : 's'}${sized < growth.length ? ` · ${growth.length - sized} without a size` : ''}` : 'no photo that day'));
-  box.append(head);
-  const row = el('div', 'pd-growth-row');
-  if (growth.length) {
-    const grid = el('div', 'sc-grid pd-hphotos');
-    growth.forEach(p => grid.append(photoFig(p, z, day)));
-    row.append(grid);
-  }
-  box.append(row);
   return box;
 }
 

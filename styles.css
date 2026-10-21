@@ -1112,9 +1112,10 @@ tr.off { opacity: .6; }
 .vw-tag.r-red { background: var(--error-bg); color: var(--error); border-color: transparent; }
 .vw-tag.ai.r-green, .vw-tag.ai.r-yellow, .vw-tag.ai.r-red { border-color: currentColor; }
 /* the person's note: the same chip, their face inside on the left, the text kept whole (two lines on a report card) */
-.vw-tag.vw-note { max-width: 100%; padding: 2px 9px 2px 3px; border-radius: 12px; align-items: flex-start; font-weight: 500; }
-.vw-tag.vw-note .avatar.xs { width: 16px; height: 16px; flex: none; margin-top: 1px; }
-.vw-note-text { white-space: normal; line-height: 1.35; padding-top: 1px; }
+.vw-tag.vw-note { display: flex; width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 4px; padding: 5px 9px 5px 6px; gap: 6px;
+  border-radius: 3px 10px 10px 10px; border: 0; border-left: 4px solid currentColor; align-items: flex-start; font-weight: 500; font-size: 12px; }
+.vw-tag.vw-note .avatar.xs { width: 18px; height: 18px; flex: none; }
+.vw-note-text { white-space: normal; line-height: 1.4; padding-top: 1px; color: var(--text); }
 .vw-note-text.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .vw-note-sec { display: grid; gap: var(--space-2); justify-items: start; margin-top: var(--space-3); }
 .vw-note-sec .vw-chips { width: 100%; }
@@ -1132,7 +1133,14 @@ tr.off { opacity: .6; }
 
 /* ── the photo viewer (0096) ─────────────────────────────────────────────── */
 .viewer { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-columns: 1fr 360px; background: #000; color: var(--text); }
-.vw-stage { display: grid; grid-template-columns: 1fr; min-width: 0; min-height: 0; }
+.vw-stage { display: grid; grid-template-columns: 1fr; min-width: 0; min-height: 0; position: relative; }
+/* the gallery's arrows on the picture (0.7.264) */
+.vw-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 44px; height: 64px; border: 0; border-radius: var(--radius-md);
+  background: rgba(0,0,0,.45); color: #fff; font-size: 34px; line-height: 1; cursor: pointer; }
+.vw-nav.prev { left: 10px; } .vw-nav.next { right: 10px; }
+.vw-nav:hover:not(:disabled), .vw-nav:focus-visible { background: rgba(0,0,0,.7); }
+.vw-nav:disabled { opacity: .25; cursor: default; }
+.vw-gal { color: var(--accent); font-weight: 600; }
 .viewer.cmp .vw-stage { grid-template-columns: 1fr 1fr; }
 .vw-pane { position: relative; overflow: hidden; touch-action: none; cursor: grab; border-right: 1px solid #222; }
 .vw-pane:active { cursor: grabbing; }
@@ -2249,6 +2257,19 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .tr-kpi.run, .tr-kpi.warn { color: var(--warning); background: var(--warning-bg); }
 .tr-kpi.bad { color: var(--error); background: var(--error-bg); }
 .pd-fold-body { display: grid; gap: var(--space-2); }
+/* the compact zone (0.7.264): one photo block on the left; the insects as a line that opens a window */
+.pd-photos-head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.pd-health > .pd-hgrid { padding-top: var(--space-3); }
+.pd-fold-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; border-radius: var(--radius-sm); }
+.pd-fold-line .pd-hlabel { margin: 0; }
+.pd-fold-line:hover .pd-hlabel, .pd-fold-line:focus-visible .pd-hlabel { color: var(--accent); }
+.pd-fold-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pd-fold-go { margin-left: auto; color: var(--text-faint); font-size: 1.1rem; line-height: 1; }
+.pd-fold-line:hover .pd-fold-go { color: var(--accent); }
+.pill.pd-sized { font-size: 10px; padding: 0 6px; margin-left: 4px; color: var(--accent); background: var(--accent-soft); }
+.pill.rb-badge { font-size: 10px; padding: 0 6px; margin-right: 4px; color: var(--text); background: var(--surface-offset); border: 1px solid var(--border); }
+.pd-ins-drawer .pd-traps { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.pd-ins-drawer .tm-mini { margin-block: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }
 .tr-head .spacer, .tr-prog-top .spacer { flex: 1; }
 .tr-flag { font-size: var(--text-xs); color: var(--text-faint); }

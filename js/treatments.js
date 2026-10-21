@@ -76,7 +76,7 @@ function paintBlock(box, farm, z, t, again, onChange) {
   const kpi = el('span', 'tr-kpi ' + (done >= total ? 'ok' : 'run'), `${done}/${total}`);
   kpi.title = total ? `${done} of ${total} applications applied, over ${running.length} program${running.length === 1 ? '' : 's'} running here` : 'No treatment running on this zone';
   head.append(el('span', 'pd-hlabel', 'Treatments'), kpi);
-  if (!box.dataset.seen) { box.open = (t.applications || []).length > 0; box.dataset.seen = '1'; }
+  if (!box.dataset.seen) { if (!box.keepClosed) box.open = (t.applications || []).length > 0; box.dataset.seen = '1'; }
   // the flag: a program runs here
   const flag = el('span', 'tr-flag' + (running.length ? ' on' : ''), running.length ? `⚑ ${running.length === 1 ? running[0].name : running.length + ' programs running'}` : '');
   if (running.length) flag.title = running.map(p => `${p.name} — ${p.tables}`).join('\n');

@@ -184,17 +184,49 @@ export function openViewer(ctx) {
     else if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;   // typing (the chat, 0195) is not a zoom key
     else if (e.key === '+' || e.key === '=') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 1.25, panes[0]);
     else if (e.key === '-') zoomAt(panes[0].pane.clientWidth / 2, panes[0].pane.clientHeight / 2, 0.8, panes[0]);
+    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && ctx.gallery) {
+      // a window opened from the viewer is on top: the arrows are not the gallery's then
+      if ([...document.querySelectorAll('.drawer')].some(dr => root.compareDocumentPosition(dr) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+      e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1);
+    }
     else if (e.key === '0') fitAll();
     else if (e.key === '1') oneToOne(null, null, panes[0]);
   };
   document.addEventListener('keydown', onKey, true);
+  // the gallery (0.7.264): the photos of the same block, one after the other — ‹ › on the picture, the arrow keys, a swipe
+  // when the photo is not zoomed; the panel says where in the block this one is
+  const step = d => {
+    const g = ctx.gallery; if (!g) return;
+    const i = g.index + d;
+    if (i < 0 || i >= g.count) return;
+    close(); g.open(i);
+  };
+  if (ctx.gallery && ctx.gallery.count > 1) {
+    const nav = (cls, label, d) => {
+      const b = el('button', 'vw-nav ' + cls, label);
+      b.type = 'button'; b.setAttribute('aria-label', d < 0 ? 'The photo before' : 'The next photo');
+      b.disabled = ctx.gallery.index + d < 0 || ctx.gallery.index + d >= ctx.gallery.count;
+      b.onclick = e => { e.stopPropagation(); step(d); };
+      return b;
+    };
+    stage.append(nav('prev', '‹', -1), nav('next', '›', 1));
+    let x0 = null;
+    stage.addEventListener('touchstart', e => { x0 = e.touches.length === 1 && view.fit ? e.touches[0].clientX : null; }, { passive: true });
+    stage.addEventListener('touchend', e => {
+      if (x0 == null) return;
+      const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
   const onResize = () => { if (view.fit) fitAll(); };   // removed on close: it kept every viewer and its photo alive
   window.addEventListener('resize', onResize);
   const main = makePane(photo);
 
   // ── the panel ──
   const head = el('div', 'vw-head');
-  head.append(el('h2', null, photoTitle(photo)), el('div', 'hint', `${when(photo.taken_at)}${photo.zone ? ' · ' + photo.zone : ''}`));
+  const sub = el('div', 'hint', `${when(photo.taken_at)}${photo.zone ? ' · ' + photo.zone : ''}`);
+  if (ctx.gallery) sub.append(el('span', 'vw-gal', ` · ${ctx.gallery.label || 'Photos'} ${ctx.gallery.index + 1} of ${ctx.gallery.count}`));
+  head.append(el('h2', null, photoTitle(photo)), sub);
   // added by an extra scouting (0204), beside the zone's planned one
   if (photo.extra) {
     const xt = el('span', 'pill pd-extra', 'extra' + (photo.by ? ' · ' + String(photo.by).trim().split(/\s+/)[0] : ''));

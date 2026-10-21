@@ -855,15 +855,14 @@ function zoneBand(z, day, withAi = false) {
   const body = el('div', 'pd-zone-body');
   // the AI's opinion on this zone over its 30 days, at the top of the latest day's report (0.7.176)
   if (withAi) body.append(opinionCard({ unit_id: z.unit_id || z.zone_id, zone_id: z.zone_id, system_id: z.system_id || null, zone: z.name }, true));
-  if (zt?.outcome_note) body.append(el('div', 'note ' + (zt.outcome === 'nok' ? 'bad' : 'ok') + ' sc-outcome', zt.outcome_note));
-  if (zt?.section_outcomes && Object.keys(zt.section_outcomes).length) {
+  // the phone's verdicts on the zone say something only when it is Not OK (0.7.268, owner 21 Oct 2026: "remove these
+  // not useful information" — "Traps: No traps today" and the ✓ Traps ✓ Plant health pills)
+  if (zt?.outcome === 'nok' && zt.outcome_note) body.append(el('div', 'note bad sc-outcome', zt.outcome_note));
+  const noks = Object.entries(zt?.section_outcomes || {}).filter(([, v]) => v && v.outcome !== 'ok');
+  if (noks.length) {
     const row = el('div', 'sc-verdicts');
-    [['trap', 'Traps'], ['health', 'Plant health'], ['growth', 'Growth']].forEach(([k, label]) => {
-      const v = zt.section_outcomes[k]; if (!v) return;
-      const pill = el('span', 'pill ' + (v.outcome === 'ok' ? 'ok' : 'bad'), `${v.outcome === 'ok' ? '✓' : '✕'} ${label}`);
-      if (v.note) pill.title = v.note;
-      row.append(pill);
-    });
+    const LABEL = { trap: 'Traps', health: 'Plant health', growth: 'Growth' };
+    noks.forEach(([k, v]) => { const pill = el('span', 'pill bad', `✕ ${LABEL[k] || k}${v.note ? ': ' + v.note : ''}`); row.append(pill); });
     body.append(row);
   }
   const shared = [...traps, ...photos].filter(p => p.shared).length;

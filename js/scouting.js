@@ -1191,13 +1191,13 @@ function healthSection(z, day, photos, traps, robotRows = []) {
   return sec;
 }
 
-// the insects, closed (0.7.264): the line holds the zone's insects a day in its colour, the traps over or on watch and
-// what is to look at again; a click opens a window with the curve, the trap map and the day's trap photos to slide
+// the insects (0.7.266, 0.7.267 owner 21 Oct 2026: "make the insect block collapsible opening the heat map and only a
+// special click to have the side page with all traps pics"): a fold — its line holds the insects a day in its colour,
+// the traps over or on watch and what is to look at again; open, the curve and the trap map; the button "Trap photos"
+// (on the line and inside) opens the side page with every trap photo of the day to slide, and each trap's history
 function insectsBlock(z, day, traps) {
-  const box = el('div', 'pd-fold pd-ins-block');
-  const sum = el('div', 'pd-fold-line');
-  sum.tabIndex = 0; sum.setAttribute('role', 'button');
-  sum.title = 'Open the traps: the curve, the map and every trap photo of the day';
+  const box = el('details', 'pd-fold pd-ins-block');
+  const sum = el('summary');
   const mu = (tmap?.units || []).find(u => u.n === z.zone_number);
   const spots = mu ? (tmap.spots || []).filter(s => s.n === mu.n && s.active) : [];
   const rate = el('span', 'tr-kpi'); rate.hidden = true;
@@ -1209,37 +1209,54 @@ function insectsBlock(z, day, traps) {
   if (over) sum.append(el('span', 'pill bad', `${over} over`));
   if (watch) sum.append(el('span', 'pill warn', `${watch} on watch`));
   if (toCheck) sum.append(el('span', 'pill warn', `${toCheck} to look at again`));
-  sum.append(el('span', 'pd-fold-go', '›'));
+  const live = () => traps.filter(t => (z.traps || []).some(q => q.id === t.id));
+  const photosBtn = cls => {
+    const b = el('button', 'btn btn-sm ' + cls, `Trap photos${traps.length ? ' · ' + traps.length : ''} ›`);
+    b.type = 'button'; b.title = 'Every trap photo of the day in a side page, to slide one after the other';
+    b.disabled = !traps.length;
+    b.onclick = e => { e.preventDefault(); e.stopPropagation(); open(); };
+    return b;
+  };
+  sum.append(photosBtn('pd-ins-photos'));
   box.append(sum);
-  let health = null;
+  // inside: the curve (read with the zone) and the map
+  const body = el('div', 'pd-fold-body');
+  const curve = el('div', 'pd-ins-curve');
+  curve.append(el('div', 'hint', 'Reading the insects a day…'));
+  body.append(curve);
+  if (mu && kit) { const m = kit.unitMap(mu, spots); m.classList.add('tm-mini'); body.append(m); }
+  else body.append(el('div', 'hint', 'No trap map for this zone.'));
+  const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
+  const foot = el('div', 'pd-ins-foot');
+  if (lastRead) foot.append(el('span', 'hint', 'last read ' + shortDay(lastRead)));
+  foot.append(photosBtn(''));
+  body.append(foot);
+  box.append(body);
+  box.open = false;
   box.fill = h => {
-    health = h;
     const strip = insectStrip(h, z), b = strip.querySelector('.pd-ins-big');
+    curve.textContent = ''; curve.append(strip);
     if (!b) return;
     rate.textContent = b.textContent + '/day';
     rate.className = 'tr-kpi ' + (b.classList.contains('bad') ? 'bad' : b.classList.contains('warn') ? 'warn' : 'ok');
     rate.title = 'Insects a trap a day, the last day read'; rate.hidden = false;
   };
-  box.fail = e => { rate.hidden = false; rate.className = 'tr-kpi'; rate.textContent = '?'; rate.title = String(e?.message || e); };
+  box.fail = e => {
+    rate.hidden = false; rate.className = 'tr-kpi'; rate.textContent = '?'; rate.title = String(e?.message || e);
+    curve.textContent = ''; curve.append(el('div', 'note bad', 'The insects a day could not be read: close and open the zone again.'));
+  };
   const open = () => {
-    const d = drawer(`Insects · ${z.name}`, `${longDay(day.day)} · the traps, their photos and the insects a day`);
+    const now = live();
+    const d = drawer(`Trap photos · ${z.name}`, `${longDay(day.day)} · ${now.length} photo${now.length === 1 ? '' : 's'}, both sides of each card`);
     d.box.classList.add('sump-drawer', 'pd-ins-drawer');
-    const live = traps.filter(t => (z.traps || []).some(q => q.id === t.id));
-    d.body.append(health ? insectStrip(health, z) : el('div', 'hint', 'The insects a day are still being read (or could not be): close and open again.'));
-    if (mu && kit) { const m = kit.unitMap(mu, spots); m.classList.add('tm-mini'); d.body.append(m); }
-    else d.body.append(el('div', 'hint', 'No trap map for this zone.'));
-    const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
-    if (lastRead) d.body.append(el('div', 'hint', 'Last read ' + shortDay(lastRead)));
-    d.body.append(el('div', 'sec-title', live.length ? `Trap photos · ${live.length}` : 'No trap photo that day'));
-    if (live.length) {
-      const cards = el('div', 'pd-traps');
-      const gallery = { label: 'Trap photos', list: () => live.filter(t => (z.traps || []).some(q => q.id === t.id)) };
-      // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)
-      const noted = new Set();
-      live.forEach(p => { const k = (p.code || '') + '|' + (p.note || ''); const first = !noted.has(k); noted.add(k);
-        cards.append(trapCard(p, z, day, first, gallery)); });
-      d.body.append(cards);
-    }
+    if (!now.length) { d.body.append(el('div', 'hint', 'No trap photo that day.')); return; }
+    const cards = el('div', 'pd-traps');
+    const gallery = { label: 'Trap photos', list: live };
+    // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)
+    const noted = new Set();
+    now.forEach(p => { const k = (p.code || '') + '|' + (p.note || ''); const first = !noted.has(k); noted.add(k);
+      cards.append(trapCard(p, z, day, first, gallery)); });
+    d.body.append(cards);
     if (kit && codes.length) {
       const hist = el('div', 'pd-hist');
       hist.append(el('span', 'hint', 'History:'));
@@ -1247,8 +1264,6 @@ function insectsBlock(z, day, traps) {
       if (hist.children.length > 1) d.body.append(hist);
     }
   };
-  sum.onclick = open;
-  sum.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   return box;
 }
 

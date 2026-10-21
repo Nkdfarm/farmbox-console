@@ -2269,6 +2269,9 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pill.pd-sized { font-size: 10px; padding: 0 6px; margin-left: 4px; color: var(--accent); background: var(--accent-soft); }
 .pill.rb-badge { font-size: 10px; padding: 0 6px; margin-right: 4px; color: var(--text); background: var(--surface-offset); border: 1px solid var(--border); }
 .pd-ins-drawer .pd-traps { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.pd-ins-block > summary .pd-ins-photos { margin-left: auto; padding: 1px 8px; font-size: var(--text-xs); }
+.pd-ins-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.pd-ins-block .tm-mini { margin-block: var(--space-1); }
 .pd-ins-drawer .tm-mini { margin-block: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }
 .tr-head .spacer, .tr-prog-top .spacer { flex: 1; }

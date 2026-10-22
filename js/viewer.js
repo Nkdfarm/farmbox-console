@@ -108,24 +108,139 @@ const riskSelect = () => {
   s.value = 'yellow'; s.dataset.level = 'yellow'; s.onchange = () => { s.dataset.level = s.value; };
   return s;
 };
-function teamNotes(photo, ctx, mayWrite) {
+// The photo as a post (0.7.271, 0250; owner 22 Oct 2026: "Naked Heart shows the same thread, votes and verified answer
+// on each photo"): the conversation as the phone shows it, read with dg_photo_thread — the team's comments in time order
+// (face, risk colour, Listen for a voice note) and the AI's answers indented under the comment they answer
+// (photo_chat.note_id). A question asked in the chat further down stays there with its answer: the chat is where it is
+// asked and where its cards are run. On top, when a manager or the agronomist has marked one comment, the verified
+// diagnosis; under Agree / Disagree, who disagrees and why. "Ask the AI" under my own comment sends that comment
+// (photo-chat, brief) — never by itself. After every change the photo's social and notes are the thread's, and the page
+// underneath is told (ctx.onChange).
+const firstWord = s => s ? String(s).trim().split(/\s+/)[0] : '';
+function verifiedBlock(v) {
+  const lvl = RISK_WORD[v.level] ? v.level : 'yellow';
+  const box = el('div', `vw-verified r-${lvl}`);
+  box.append(el('div', 'vw-verified-h', '✓ Verified diagnosis'), el('div', 'vw-verified-body', v.body || 'A voice note'),
+             el('div', 'hint', [v.by ? 'by ' + v.by : null, v.verified_by ? 'verified by ' + v.verified_by : null, v.at ? when(v.at) : null]
+                                 .filter(Boolean).join(' · ')));
+  box.title = `${RISK_WORD[lvl]} — it stands above the AI's reading`;
+  return box;
+}
+function teamNotes(photo, ctx, mayWrite, onAsked) {
   const sec = el('div', 'vw-note-sec vw-team');
   const kind = photo.kind === 'trap' ? 'trap' : 'observation';
-  // a note being written lives through a repaint (a vote, a note deleted); a new one after it is saved
-  const draft = { body: '', level: 'yellow', cref: 'hc:' + crypto.randomUUID() };
-  let socialAsked = false;
-  const paint = async () => {
-    const mine = await whoAmI();
-    // opened from a page whose photo carries no counts (cases, the trap map, the opinions list): read them once
-    if (photo.ai_status === 'done' && !photo.social && !socialAsked) {
-      socialAsked = true;
-      try { photo.social = (await rpc('dg_photo_thread', { p_kind: kind, p_id: photo.id }))?.social || null; } catch { /* the row shows without counts */ }
+  const top = el('div', 'vw-team-top');
+  sec.append(top);
+  let T = null, tried = false, readSeq = 0, paintSeq = 0;
+  const asking = new Set();                       // my comments on their way to the AI
+  // the thread: dg_photo_thread is not on the api's list of reads, so it is asked quiet — reading it is no change to
+  // tell the other consoles about. Its notes become the photo's (the report's note chips read photo.notes).
+  const read = async () => {
+    const my = ++readSeq;
+    try {
+      const t = await rpc('dg_photo_thread', { p_kind: kind, p_id: photo.id }, { quiet: true });
+      if (my !== readSeq || !t) return;
+      T = t;
+      photo.social = t.social || photo.social || null;
+      photo.notes = (t.thread || []).filter(x => x.type === 'note');
+    } catch { /* a database before 0249: the photo's own notes, without the AI's answers */ }
+    finally { if (my === readSeq) tried = true; }
+  };
+  // after a change: drawn at once from what is known, then the thread read again, then the page underneath
+  const changed = async () => { paint(); await read(); paint(); ctx.onChange?.(photo); };
+
+  const askAi = async n => {
+    if (asking.has(n.id)) return;
+    if (ctx.aiReady === false) { toast('Paste an Anthropic API key in Settings › Integrations first', 'bad'); return; }
+    asking.add(n.id); paint();
+    try {
+      const res = await fn('photo-chat', { kind, id: photo.id, note_id: n.id, brief: true });
+      if (!res?.ok) throw new Error(res?.error || 'no answer');
+    } catch (e) {
+      // 409: this comment has its answer already (another console, a phone) — the thread read again shows it
+      if (e?.status !== 409) toast('The AI did not answer: ' + errWord(e).slice(0, 160), 'bad');
     }
-    sec.textContent = '';
-    const notes = photo.notes || [];
+    asking.delete(n.id);
+    await changed();
+    onAsked?.();                                   // the chat below holds the same answer
+  };
+  const verify = async (n, on, btn) => {
+    busy(btn, true, '…');
+    try {
+      photo.social = await rpc('dg_verify_note', { p: { note_id: n.id, on } });
+      toast(on ? 'Marked as the verified diagnosis' : 'No longer the verified diagnosis', 'ok');
+      await changed();
+    } catch (e) { busy(btn, false, on ? 'Verify' : 'Unverify'); toast(errWord(e), 'bad'); }
+  };
+
+  // one comment: face, risk colour, words or the voice; under it what I may do with it
+  const comment = (n, mine, mayVerify) => {
+    const lvl = RISK_WORD[n.level] ? n.level : 'yellow';
+    const b = el('div', `vw-tag vw-note r-${lvl}` + (n.verified_at ? ' verified' : ''));
+    if (n.by || n.worker_id) b.append(avatar({ worker_id: n.worker_id || null, name: n.by || '' }, 'xs'));
+    const txt = el('div', 'vw-note-text');
+    txt.append(el('b', null, (firstWord(n.by) || 'Somebody') + ' · ' + when(n.at) + (n.verified_at ? ' · verified' : '')));
+    const words = String(n.body || n.transcript || '').trim();
+    if (words) txt.append(el('div', null, words));
+    else if (n.audio_path) txt.append(el('div', 'hint', n.voice_status === 'failed' ? 'The recording could not be written down' : 'Writing the recording down…'));
+    const acts = el('div', 'vw-msg-acts');
+    if (n.audio_path) {
+      const play = el('button', 'btn btn-sm', 'Listen');
+      play.onclick = async () => {
+        const u = await signedUrl(n.audio_path);
+        if (!u) { toast('The recording could not be opened', 'bad'); return; }
+        const a = el('audio'); a.controls = true; a.autoplay = true; a.src = u; play.replaceWith(a);
+      };
+      acts.append(play);
+    }
+    // my own comment, written and not yet asked: I decide whether the AI sees it (the phone's "Ask the AI")
+    if (mayWrite && mine && n.id && n.by_user === mine && !n.asked_ai && words && !asking.has(n.id)) {
+      const ask = el('button', 'btn btn-sm', 'Ask the AI');
+      ask.title = 'Send this comment to the AI — a short answer, kept under it; about half a minute';
+      ask.onclick = () => askAi(n);
+      acts.append(ask);
+    }
+    if (mayVerify && n.id) {
+      const v = el('button', 'btn btn-sm' + (n.verified_at ? ' btn-primary' : ''), n.verified_at ? 'Unverify' : 'Verify');
+      v.title = n.verified_at ? 'It stops being the verified diagnosis of this photo'
+                              : 'Mark it as the verified diagnosis of this photo (one a photo; a comment changed loses it)';
+      v.onclick = () => verify(n, !n.verified_at, v);
+      acts.append(v);
+    }
+    if (acts.childElementCount) txt.append(acts);
+    b.append(txt);
+    if (mayWrite && mine && n.id && n.by_user === mine) {
+      const x = el('button', 'vw-x', '×'); x.title = 'Delete my note';
+      x.onclick = async () => {
+        try {
+          await rpc('dg_delete_note', { p_id: n.id });
+          photo.notes = (photo.notes || []).filter(q => q.id !== n.id);
+          if (T) T.thread = (T.thread || []).filter(q => !(q.type === 'note' && q.id === n.id));
+          await changed();
+        } catch (e) { toast(errWord(e), 'bad'); }
+      };
+      b.append(x);
+    }
+    return b;
+  };
+  const answer = a => {
+    const r = el('div', 'vw-reply');
+    const txt = el('div', 'vw-note-text');
+    txt.append(el('b', null, 'AI · ' + when(a.at)), el('div', null, a.body || ''));
+    r.append(el('span', 'vw-ai-face', 'AI'), txt);
+    return r;
+  };
+
+  const paint = async () => {
+    const my = ++paintSeq;
+    const mine = await whoAmI();
+    if (my !== paintSeq) return;
+    top.textContent = '';
+    const s = photo.social || {};
+    // the verified diagnosis, pinned on top (0250)
+    if (s.verified) top.append(verifiedBlock(s.verified));
     // agree or disagree with the AI's reading (0.7.270, 0249): one vote each, the same again takes it back
     if (photo.ai_status === 'done') {
-      const s = photo.social || {};
       const row = el('div', 'vw-vote');
       row.append(el('span', 'hint', 'The AI\'s reading:'));
       const btn = (v, word) => {
@@ -133,70 +248,65 @@ function teamNotes(photo, ctx, mayWrite) {
         b.onclick = async () => {
           const vote = s.mine === v ? 0 : v;               // why one disagrees is written as a comment below
           busy(b, true, '…');
-          try { photo.social = await rpc('dg_vote', { p: { kind, ref_id: photo.id, vote } }); paint(); ctx.onChange?.(photo); }
+          try { photo.social = await rpc('dg_vote', { p: { kind, ref_id: photo.id, vote } }); await changed(); }
           catch (e) { busy(b, false, word); toast(errWord(e), 'bad'); }
         };
         return b;
       };
       if (mayWrite) row.append(btn(1, 'Agree'), btn(-1, 'Disagree'));
       else row.append(el('span', null, `Agree ${s.agree || 0} · Disagree ${s.disagree || 0}`));
-      sec.append(row);
+      top.append(row);
+      // who disagrees and why (the reason is given on the phone)
+      (T?.votes || []).filter(v => v.vote === -1 && v.reason).forEach(v =>
+        top.append(el('div', 'vw-why', `${firstWord(v.by) || 'Somebody'} disagrees: ${v.reason}`)));
     }
-    sec.append(el('div', 'sec-title', notes.length ? `Team notes · ${notes.length}` : 'Team notes'));
+    // the conversation: the comments in time order, each AI answer under the comment it answers
+    const items = T ? (T.thread || []) : (photo.notes || []).map(n => ({ type: 'note', ...n }));
+    const notes = items.filter(x => x.type === 'note');
+    const under = new Map();
+    items.forEach(x => { if (x.type === 'ai' && x.note_id && notes.some(n => n.id === x.note_id)) under.set(x.note_id, [...(under.get(x.note_id) || []), x]); });
+    const count = notes.length + [...under.values()].reduce((a, l) => a + l.length, 0);
+    top.append(el('div', 'sec-title', count ? `Comments · ${count}` : 'Comments'));
     const list = el('div', 'vw-team-list');
-    if (!notes.length) list.append(el('div', 'hint', 'No team note yet.'));
+    const mayVerify = mayWrite && !!T?.may_verify;
     notes.forEach(n => {
-      const lvl = RISK_WORD[n.level] ? n.level : 'yellow';
-      const b = el('div', `vw-tag vw-note r-${lvl}`);
-      if (n.by || n.worker_id) b.append(avatar({ worker_id: n.worker_id || null, name: n.by || '' }, 'xs'));
-      const txt = el('div', 'vw-note-text');
-      txt.append(el('b', null, (n.by ? String(n.by).split(/\s+/)[0] : 'Somebody') + ' · ' + day(n.at)));
-      if (n.body) txt.append(el('div', null, n.body));
-      else if (n.audio_path) txt.append(el('div', 'hint', n.voice_status === 'failed' ? 'The recording could not be written down' : 'Writing the recording down…'));
-      if (n.audio_path) {
-        const play = el('button', 'btn btn-sm', 'Listen');
-        play.onclick = async () => {
-          const u = await signedUrl(n.audio_path);
-          if (!u) { toast('The recording could not be opened', 'bad'); return; }
-          const a = el('audio'); a.controls = true; a.autoplay = true; a.src = u; play.replaceWith(a);
-        };
-        txt.append(play);
-      }
-      b.append(txt);
-      if (mayWrite && mine && n.by_user === mine) {
-        const x = el('button', 'vw-x', '×'); x.title = 'Delete my note';
-        x.onclick = async () => {
-          try { await rpc('dg_delete_note', { p_id: n.id }); photo.notes = (photo.notes || []).filter(q => q.id !== n.id); paint(); ctx.onChange?.(photo); }
-          catch (e) { toast(errWord(e), 'bad'); }
-        };
-        b.append(x);
-      }
-      list.append(b);
+      list.append(comment(n, mine, mayVerify));
+      (under.get(n.id) || []).forEach(a => list.append(answer(a)));
+      if (asking.has(n.id)) { const w = el('div', 'vw-reply wait'); w.append(el('span', 'vw-ai-face', 'AI'), el('div', 'vw-note-text', 'The AI is answering…')); list.append(w); }
     });
-    sec.append(list);
-    if (!mayWrite) return;
+    if (!notes.length) list.append(el('div', 'hint', T || tried ? 'No comment yet.' : 'Reading the conversation…'));
+    top.append(list);
+    if (items.some(x => x.type === 'question')) top.append(el('div', 'hint', 'The questions asked in the chat about this photo are in the chat below.'));
+  };
+  paint();
+  read().then(() => paint());
+
+  if (mayWrite) {
+    // the box is made once: a note being written lives through every repaint (a vote, a note deleted, an AI answer)
     const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.maxLength = 4000; ta.placeholder = 'Add a note for the team';
-    ta.value = draft.body; ta.oninput = () => { draft.body = ta.value; };
     const risk = riskSelect();
-    risk.value = risk.dataset.level = draft.level; risk.addEventListener('change', () => { draft.level = risk.value; });
     const add = el('button', 'btn btn-sm btn-primary', 'Add note');
-    const cref = draft.cref;                        // one id for this note: a retry after a lost answer is the same note
+    let cref = 'hc:' + crypto.randomUUID();       // one id for this note: a retry after a lost answer is the same note
     add.onclick = async () => {
       if (!ta.value.trim()) { toast('Write the note first', 'bad'); return; }
       busy(add, true, 'Saving…');
       try {
+        const mine = await whoAmI();
         const r = await rpc('dg_add_note', { p: { kind, ref_id: photo.id, body: ta.value, level: risk.value, client_ref: cref } });
-        photo.notes = [...(photo.notes || []), { id: r.id, body: ta.value.trim(), level: risk.value, by: 'You', by_user: mine, at: new Date().toISOString() }];
-        draft.body = ''; draft.level = 'yellow'; draft.cref = 'hc:' + crypto.randomUUID();
-        toast('Note added', 'ok'); paint(); ctx.onChange?.(photo);
+        const n = { id: r.id, body: ta.value.trim(), level: risk.value, by: 'You', by_user: mine, at: new Date().toISOString() };
+        photo.notes = [...(photo.notes || []), n];
+        if (T) T.thread = [...(T.thread || []), { type: 'note', ...n }];
+        ta.value = ''; risk.value = risk.dataset.level = 'yellow'; cref = 'hc:' + crypto.randomUUID();
+        busy(add, false, 'Add note');
+        toast('Note added', 'ok');
+        await changed();
       } catch (e) { busy(add, false, 'Add note'); toast(errWord(e), 'bad'); }
     };
     const ask = el('button', 'btn btn-sm', 'Ask someone…');
     ask.onclick = () => askOpinion(photo, kind, ctx);
     const acts = el('div', 'vw-note-acts'); acts.append(risk, add, ask);
     sec.append(ta, acts);
-  };
-  paint();
+  }
   return sec;
 }
 async function askOpinion(photo, kind, ctx) {
@@ -485,8 +595,12 @@ export function openViewer(ctx) {
   panel.append(secNote);
   // the team's notes on the photo, oldest first, typed or voice; a note added here; somebody asked for an opinion
   // (0.7.269, 0246–0247, Digital scouting: "always possible to add new notes to all pics", "share a pic … asking
-  // personal opinion"). A person deletes their own note on its day; the server says who may.
-  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) panel.append(teamNotes(photo, ctx, mayWrite));
+  // personal opinion"). A person deletes their own note on its day; the server says who may. Since 0.7.271 (0250) the
+  // whole post: the verified diagnosis, the reasons to disagree, the AI's answers under their comment, Ask the AI, Verify.
+  // An answer asked from there is in the chat below too: the chat is read again, unless a question of its own is on its way.
+  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) panel.append(teamNotes(photo, ctx, mayWrite, () => {
+    if (chat && !asking) rpc('photo_chat', { p_kind: photo.kind, p_id: photo.id }).then(j => { if (!asking) { chat = j; paintChat(); } }).catch(() => {});
+  }));
 
   // the person's tags
   const secTags = el('div');

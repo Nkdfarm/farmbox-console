@@ -2283,6 +2283,44 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .vw-req-info { display: grid; gap: 4px; min-width: 0; }
 .pd-social { font-size: 11px; color: var(--text-muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .vw-vote { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+/* the photo as a post in the viewer (0.7.271, 0250): the verified diagnosis on top, the reasons to disagree, the AI's
+   answers indented under their comment; the feed's cards with their risk as the left edge */
+.vw-team-top { display: grid; gap: var(--space-2); width: 100%; }
+.vw-team-top .vw-vote { margin-bottom: 0; }
+.vw-verified { display: grid; gap: 2px; width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: var(--text-sm); color: var(--text);
+  border-radius: 3px var(--radius-md) var(--radius-md) var(--radius-md); background: var(--surface-2); border-left: 4px solid var(--warning); }
+.vw-verified.r-green { border-left-color: var(--success); background: var(--success-bg); }
+.vw-verified.r-yellow { border-left-color: var(--warning); background: var(--warning-bg); }
+.vw-verified.r-red { border-left-color: var(--error); background: var(--error-bg); }
+.vw-verified-h { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: var(--success); }
+.vw-verified-body { line-height: 1.4; }
+.vw-verified-body.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vw-why { font-size: var(--text-xs); color: var(--text-muted); padding-left: 10px; border-left: 2px solid var(--error); }
+.vw-tag.vw-note.verified { box-shadow: inset 0 0 0 1px var(--success); }
+.vw-msg-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.vw-reply { display: flex; gap: 6px; align-items: flex-start; margin-left: 22px; padding: 5px 9px 5px 6px; font-size: 12px;
+  border-radius: 3px 10px 10px 10px; background: var(--surface-offset); border-left: 4px solid var(--accent); }
+.vw-reply b { display: block; font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.vw-reply.wait .vw-note-text { color: var(--text-muted); font-style: italic; }
+.vw-ai-face { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 8px; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+.pd-verified { margin-left: 6px; color: var(--success); font-weight: 700; }
+.pd-feed-ctl { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.pd-feed { display: grid; gap: var(--space-2); }
+.pd-feed-foot:empty { display: none; }
+.pd-post { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--space-3); align-items: start; width: 100%; text-align: left;
+  padding: var(--space-2); font: inherit; color: var(--text); cursor: pointer; background: var(--surface-2);
+  border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: var(--radius-md); }
+.pd-post:hover { background: var(--surface-offset); }
+.pd-post:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pd-post.r-red { border-left-color: var(--error); }
+.pd-post.r-orange { border-left-color: var(--warning); }
+.pd-post.r-green { border-left-color: var(--success); }
+.pd-post img { width: 88px; height: 88px; object-fit: cover; border-radius: var(--radius-sm); background: var(--surface-offset); display: block; }
+.pd-post-info { display: grid; gap: 4px; min-width: 0; font-size: var(--text-xs); }
+.pd-post-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-sm); }
+.pd-post .vw-verified { padding: 4px 8px; font-size: 12px; }
+.pd-post .vw-tag.vw-note { margin-top: 0; }
 .pd-ins-block .tm-mini { margin-block: var(--space-1); }
 .pd-ins-drawer .tm-mini { margin-block: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }

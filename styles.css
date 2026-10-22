@@ -1129,6 +1129,7 @@ tr.off { opacity: .6; }
 .vw-note-risk[data-level="yellow"] { border-left-color: var(--warning); }
 .vw-note-risk[data-level="red"] { border-left-color: var(--error); }
 .vw-tag.ai { border-style: dashed; }
+.vw-tag.vw-note.ai { border-style: solid; }   /* the AI's block: the same as a person's, the robot's face (0.7.273) */
 .vw-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
 
 /* ── the photo viewer (0096) ─────────────────────────────────────────────── */

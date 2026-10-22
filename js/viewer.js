@@ -19,7 +19,7 @@
 //     openCases   async () → the open cases of the zone (rpc cases, filtered)
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE, me } from './api.js';
-import { el, toast, busy, num, selectBox, avatar, drawer } from './ui.js';
+import { el, toast, busy, num, selectBox, avatar, drawer, g1Face } from './ui.js';
 import { newCase, openCase } from './cases.js';
 
 const when = ts => ts ? new Date(ts).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -66,6 +66,14 @@ export function noteChip(p, short = false) {
   c.title = `${p.by ? p.by + ': ' : ''}${text} (${p.note_level ? RISK_WORD[lvl] : 'no risk chosen'})`;
   return c;
 }
+// the AI's reading in the same block as a person's note, the robot's face in place of theirs (0.7.273, owner 22 Oct
+// 2026: "use the same visual block used for human for ai as well just with the robot avatar"); "AI:" stays on hover
+function aiNote(text, lvl, title, short) {
+  const c = el('span', `vw-tag vw-note ai r-${lvl}`);
+  c.append(g1Face('xs', 'The AI'), el('span', 'vw-note-text' + (short ? ' clamp' : ''), text));
+  c.title = title || `AI: ${text}`;
+  return c;
+}
 export function tagChips(p, short = false) {
   const box = el('div', 'vw-chips');
   (p.tags || []).forEach(t => box.append(el('span', 'vw-tag r-' + riskOf(t.severity, t.kind), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
@@ -75,18 +83,16 @@ export function tagChips(p, short = false) {
     const all = p.ai?.findings || [];
     const f = short ? all.map((x, i) => [x, i]).sort((a, b) => (Number(b[0].severity ?? 1) - Number(a[0].severity ?? 1)) || a[1] - b[1])
                         .slice(0, 2).map(([x]) => x) : all;
-    if (!all.length && p.ai?.healthy !== false) box.append(el('span', 'vw-tag ai r-green', 'AI: healthy'));
+    if (!all.length && p.ai?.healthy !== false) box.append(aiNote('Healthy', 'green', 'AI: healthy', short));
     if (short && all.length > 2) box.title = all.map(x => `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`).join('\n');
     f.forEach(x => {
-      const full = `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`;
-      const c = el('span', 'vw-tag ai r-' + riskOf(x.severity, x.kind), short ? `${shortName(x.name || x.code)}${x.severity != null ? ' · ' + SEV[x.severity] : ''}` : full);
-      if (short) c.title = full;
-      box.append(c);
+      const sev = x.severity != null ? ' · ' + SEV[x.severity] : '';
+      box.append(aiNote(short ? `${shortName(x.name || x.code)}${sev}` : `${x.name || x.code}${sev}`, riskOf(x.severity, x.kind), `AI: ${x.name || x.code}${sev}`, short));
     });
   }
   // insects on a trap: a pest seen, low risk by itself — the trap's own figure against the limits says more
   if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species)) {
-    p.species.slice(0, 2).forEach(x => box.append(el('span', 'vw-tag ai ' + (x.beneficial ? 'r-green' : 'r-yellow'), `AI: ${x.common || x.name} ${x.count ?? ''}`)));
+    p.species.slice(0, 2).forEach(x => box.append(aiNote(`${x.common || x.name} ${x.count ?? ''}`.trim(), x.beneficial ? 'green' : 'yellow', null, short)));
   }
   return box;
 }

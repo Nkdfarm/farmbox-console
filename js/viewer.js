@@ -542,7 +542,7 @@ export function openViewer(ctx) {
   if (photo.kind === 'trap') {
     fact('Counted', photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' (corrected)' : photo.algo_total != null ? ' by the phone' : '') : '—');
     const c = photo.counts || {};
-    fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}`).join(' · ') || null);
+    fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || null);
     if (photo.replaced) fact('Trap', 'replaced on this round');
     if (photo.installed_at) fact('Hung since', day(photo.installed_at));
   } else {

@@ -250,7 +250,7 @@ function openReading(t, r) {
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k), el('span', 'fact-v', v ?? '—')); facts.append(f); };
   fact('Counted', num(r.total, 0) + (r.corrected ? ' (corrected)' : r.algo_total != null ? ' by the phone' : ''));
   if (r.algo_total != null && r.corrected) fact('Phone said', num(r.algo_total, 0));
-  fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}`).join(' · ') || '—');
+  fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || '—');
   fact('Mostly', pestLabel(r.pest));
   if (r.confidence != null) fact('Card found', Math.round(r.confidence * 100) + ' %');
   if (r.notes) fact('Note', r.notes);

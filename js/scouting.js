@@ -1174,6 +1174,9 @@ function trapCard(p, z, day, withNote = true, gallery = null) {
   const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
   head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
+  // where the figure comes from (0.7.276, 0254): the AI's count, still counting, or typed by a person
+  const src = p.corrected ? 'typed' : p.ai_count_status === 'done' ? 'AI' : ['queued', 'running'].includes(p.ai_count_status) ? 'counting…' : '';
+  if (src) { const w = el('span', 'hint pd-count-src', src); w.title = src === 'AI' ? 'Counted by the AI on the card' : src === 'typed' ? 'Typed by a person' : "The phone's first guess; the AI is counting"; head.append(w); }
   if (p.extra) head.append(extraTag(p));
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));

@@ -548,7 +548,17 @@ export function openViewer(ctx) {
   const facts = el('div', 'facts');
   const fact = (k, v) => { if (v == null || v === '') return; const f = el('div', 'fact'); f.append(el('span', 'fact-k', k), el('span', 'fact-v', v)); facts.append(f); };
   if (photo.kind === 'trap') {
-    fact('Counted', photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' (corrected)' : photo.algo_total != null ? ' by the phone' : '') : '—');
+    // counting v5 (0.7.276, 0254): the AI counts the card (Haiku, Opus again on a crowded one); a person's typed figure
+    // stands; the phone's own count is a first guess kept beside it
+    const aiWord = m => /opus/.test(m || '') ? 'Opus' : /haiku/.test(m || '') ? 'Haiku' : /sonnet/.test(m || '') ? 'Sonnet' : 'the AI';
+    const counting = ['queued', 'running'].includes(photo.ai_count_status);
+    fact('Counted', photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' — typed by a person'
+      : photo.ai_count_status === 'done' ? ` — counted by the AI (${aiWord(photo.ai_count_model)})`
+      : counting ? " — the phone's first guess; the AI is counting"
+      : photo.algo_total != null && photo.total === photo.algo_total ? ' by the phone' : '') : '—');
+    if (photo.ai_count != null && photo.ai_count !== photo.total) fact('The AI counted', num(photo.ai_count, 0));
+    if (photo.algo_total != null && photo.algo_total !== photo.total) fact('The phone counted', num(photo.algo_total, 0) + ' (first guess)');
+    if (photo.ai_count_status === 'failed') fact('AI count', 'not done');
     const c = photo.counts || {};
     fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || null);
     if (photo.replaced) fact('Trap', 'replaced on this round');
@@ -556,6 +566,28 @@ export function openViewer(ctx) {
   } else {
     fact('Crop', photo.crop || '—');
     fact('Part', partLabel(photo.part));
+  }
+  // a manager counts a trap photo again with the AI (trap-count refuses anybody else); the figure follows unless typed
+  if (photo.kind === 'trap' && photo.photo_path && mayWrite) {
+    const again = el('button', 'btn btn-sm', 'Count again with the AI');
+    again.title = 'Haiku counts the card; Opus again when there are more than 30 — a figure typed by a person stays';
+    again.onclick = async () => {
+      busy(again, true, 'Counting…');
+      try {
+        const r = await fn('trap-count', { reading_id: photo.id });
+        if (r?.ok === false) throw new Error(r.error || 'not counted');
+        Object.assign(photo, { ai_count: r?.reading?.count ?? photo.ai_count, ai_count_status: 'done',
+                               total: r?.reading?.total ?? photo.total });
+        toast(`The AI counted ${r?.reading?.count ?? '?'}${photo.corrected ? ' — the typed figure stays' : ''}`, 'ok');
+        ctx.onChange?.(photo);                       // the page underneath reads again and shows the new figure
+      } catch (e) {
+        const w = errWord(e);
+        toast(/^403|manager/i.test(String(e?.message || '')) ? 'Only a farm manager or the agronomist counts a trap again'
+            : /not queued|409/i.test(String(e?.message || '')) ? 'The AI is counting this photo right now — look again in a minute' : w, 'bad');
+      }
+      busy(again, false, 'Count again with the AI');
+    };
+    facts.append(again);
   }
   panel.append(facts);
 

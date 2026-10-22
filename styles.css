@@ -2516,3 +2516,5 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .team-ai-call { display: grid; gap: 4px; padding: var(--space-3) 0; border-top: 1px solid var(--divider); }
 .team-ai-sql { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word;
   max-height: 8em; overflow: auto; }
+/* where a trap's figure comes from (0.7.276) */
+.pd-count-src { font-size: 11px; margin-left: 4px; }

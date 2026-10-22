@@ -1002,6 +1002,8 @@ function trapCard(p, z, day, withNote = true, gallery = null) {
   if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
   const tn = withNote ? noteChip(p, true) : null;            // the person's note: its own bubble under the chips
   if (tn) card.append(tn);
+  const tsl = socialLine(p.social);
+  if (tsl) card.append(tsl);
   const chk = trapCheckPill(p.check, p.total);
   if (chk) card.append(chk);
   if (p.replaced) card.append(el('span', 'hint', 'card replaced'));
@@ -1035,6 +1037,19 @@ function trapCurve(pts, th) {
   return svg;
 }
 
+// the photo as a post (0.7.270, 0249): its comments and the team's agree / disagree with the AI, under the picture
+function socialLine(s) {
+  if (!s) return null;
+  const parts = [];
+  if (s.comments) parts.push(`${s.comments} comment${s.comments === 1 ? '' : 's'}`);
+  if (s.agree) parts.push(`Agree ${s.agree}`);
+  if (s.disagree) parts.push(`Disagree ${s.disagree}`);
+  if (!parts.length) return null;
+  const d = el('div', 'pd-social', parts.join(' · '));
+  d.title = 'Open the photo for the conversation';
+  return d;
+}
+
 function photoFig(p, z, day, gallery = null) {
   const fig = el('figure', 'sc-fig' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = photoTitle(p); im.loading = 'lazy'; thumb(im, p, day);
@@ -1050,6 +1065,8 @@ function photoFig(p, z, day, gallery = null) {
   const nc = noteChip(p, true);
   cap.append(title, tagChips(p, true));
   if (nc) cap.append(nc);
+  const sl = socialLine(p.social);
+  if (sl) cap.append(sl);
   if ((p.measures || []).length) title.append(el('span', 'pill pd-sized', 'sizes'));
   // only what somebody measured or wrote: the position, the sizes on the scale card, the comment
   const sizes = (p.measures || []).map(m => `${MEASURE_WORD[m.what] || m.what} ${num(m.mm, 0)} mm`).join(' · ');

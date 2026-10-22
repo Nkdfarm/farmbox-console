@@ -2281,6 +2281,8 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .vw-req { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
 .vw-req-img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-sm); background: var(--surface-2); cursor: zoom-in; }
 .vw-req-info { display: grid; gap: 4px; min-width: 0; }
+.pd-social { font-size: 11px; color: var(--text-muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.vw-vote { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
 .pd-ins-block .tm-mini { margin-block: var(--space-1); }
 .pd-ins-drawer .tm-mini { margin-block: var(--space-2); }
 .tr-head .pd-hlabel { margin: 0; }

@@ -111,10 +111,37 @@ const riskSelect = () => {
 function teamNotes(photo, ctx, mayWrite) {
   const sec = el('div', 'vw-note-sec vw-team');
   const kind = photo.kind === 'trap' ? 'trap' : 'observation';
+  // a note being written lives through a repaint (a vote, a note deleted); a new one after it is saved
+  const draft = { body: '', level: 'yellow', cref: 'hc:' + crypto.randomUUID() };
+  let socialAsked = false;
   const paint = async () => {
     const mine = await whoAmI();
+    // opened from a page whose photo carries no counts (cases, the trap map, the opinions list): read them once
+    if (photo.ai_status === 'done' && !photo.social && !socialAsked) {
+      socialAsked = true;
+      try { photo.social = (await rpc('dg_photo_thread', { p_kind: kind, p_id: photo.id }))?.social || null; } catch { /* the row shows without counts */ }
+    }
     sec.textContent = '';
     const notes = photo.notes || [];
+    // agree or disagree with the AI's reading (0.7.270, 0249): one vote each, the same again takes it back
+    if (photo.ai_status === 'done') {
+      const s = photo.social || {};
+      const row = el('div', 'vw-vote');
+      row.append(el('span', 'hint', 'The AI\'s reading:'));
+      const btn = (v, word) => {
+        const b = el('button', 'btn btn-sm' + (s.mine === v ? ' btn-primary' : ''), `${word} ${v === 1 ? (s.agree || 0) : (s.disagree || 0)}`);
+        b.onclick = async () => {
+          const vote = s.mine === v ? 0 : v;               // why one disagrees is written as a comment below
+          busy(b, true, '…');
+          try { photo.social = await rpc('dg_vote', { p: { kind, ref_id: photo.id, vote } }); paint(); ctx.onChange?.(photo); }
+          catch (e) { busy(b, false, word); toast(errWord(e), 'bad'); }
+        };
+        return b;
+      };
+      if (mayWrite) row.append(btn(1, 'Agree'), btn(-1, 'Disagree'));
+      else row.append(el('span', null, `Agree ${s.agree || 0} · Disagree ${s.disagree || 0}`));
+      sec.append(row);
+    }
     sec.append(el('div', 'sec-title', notes.length ? `Team notes · ${notes.length}` : 'Team notes'));
     const list = el('div', 'vw-team-list');
     if (!notes.length) list.append(el('div', 'hint', 'No team note yet.'));
@@ -149,15 +176,18 @@ function teamNotes(photo, ctx, mayWrite) {
     sec.append(list);
     if (!mayWrite) return;
     const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.maxLength = 4000; ta.placeholder = 'Add a note for the team';
+    ta.value = draft.body; ta.oninput = () => { draft.body = ta.value; };
     const risk = riskSelect();
+    risk.value = risk.dataset.level = draft.level; risk.addEventListener('change', () => { draft.level = risk.value; });
     const add = el('button', 'btn btn-sm btn-primary', 'Add note');
-    const cref = 'hc:' + crypto.randomUUID();      // one id for this note: a retry after a lost answer is the same note
+    const cref = draft.cref;                        // one id for this note: a retry after a lost answer is the same note
     add.onclick = async () => {
       if (!ta.value.trim()) { toast('Write the note first', 'bad'); return; }
       busy(add, true, 'Saving…');
       try {
         const r = await rpc('dg_add_note', { p: { kind, ref_id: photo.id, body: ta.value, level: risk.value, client_ref: cref } });
         photo.notes = [...(photo.notes || []), { id: r.id, body: ta.value.trim(), level: risk.value, by: 'You', by_user: mine, at: new Date().toISOString() }];
+        draft.body = ''; draft.level = 'yellow'; draft.cref = 'hc:' + crypto.randomUUID();
         toast('Note added', 'ok'); paint(); ctx.onChange?.(photo);
       } catch (e) { busy(add, false, 'Add note'); toast(errWord(e), 'bad'); }
     };

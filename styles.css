@@ -220,7 +220,7 @@ th.right, td.right { text-align: right; }
 .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
 .avatar.xs { width: 18px; height: 18px; box-shadow: none; }
 /* the G1's face: where the AI speaks (0.7.239) */
-.avatar.g1 { background: #3b4656; display: inline-grid; vertical-align: middle; }
+.avatar.g1 { background: #e3f6fa; box-shadow: inset 0 0 0 1px rgba(27, 191, 168, .45); display: inline-grid; vertical-align: middle; }
 .avatar.g1 svg { width: 100%; height: 100%; display: block; }
 .avatar.crop { border-radius: 10px; overflow: hidden; }
 .avatar.crop img { width: 100%; height: 100%; object-fit: cover; display: block; }

@@ -371,9 +371,10 @@ export function faceIcon() {
 // cyan light, the light bar across it, the three sensors above and the camera under it, on the silver shoulders.
 // A drawing and not a cut of the photograph: it stays sharp at 18 px, and the picture is the maker's, not ours to
 // publish. Flat colours and no ids, so it can stand many times on a page. size: 'xs', 'sm', '' or 'lg'.
+// a light ground (owner, 22 Oct 2026: "a clear background to be more visible"), the shoulders darker to stand on it
 const G1_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true">' +
-  '<rect width="64" height="64" fill="#3b4656"/>' +
-  '<path d="M4 66C6 54 18 50.5 32 50.5S58 54 60 66z" fill="#d5dbe2"/>' +                       // the shoulders
+  '<rect width="64" height="64" fill="#e3f6fa"/>' +
+  '<path d="M4 66C6 54 18 50.5 32 50.5S58 54 60 66z" fill="#7d8b9b"/>' +                       // the shoulders
   '<path d="M24 46h16v9H24z" fill="#0b0e13"/>' +                                                // the neck
   '<path d="M32 5.5c12.5 0 20.5 8.5 20.5 21 0 13-7.5 26-20.5 28.500C19 53.5 11.500 40.500 11.500 26.500 11.500 14 19.500 5.500 32 5.500z" fill="#0b0e13"/>' +
   '<path d="M19 15.500Q32 9.500 45 15.500C54 26 44 48 32 49.500 20 48 10 26 19 15.500z" fill="none" stroke="#3fe0ff" stroke-opacity=".28" stroke-width="5" stroke-linejoin="round"/>' +

@@ -552,12 +552,15 @@ export function openViewer(ctx) {
     // stands; the phone's own count is a first guess kept beside it
     const aiWord = m => /opus/.test(m || '') ? 'Opus' : /haiku/.test(m || '') ? 'Haiku' : /sonnet/.test(m || '') ? 'Sonnet' : 'the AI';
     const counting = ['queued', 'running'].includes(photo.ai_count_status);
-    fact('Counted', photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' — typed by a person'
+    fact('Counted', counting && !photo.corrected ? 'the AI is counting the card' : photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' — typed by a person'
       : photo.ai_count_status === 'done' ? ` — counted by the AI (${aiWord(photo.ai_count_model)})`
       : counting ? " — the phone's first guess; the AI is counting"
       : photo.algo_total != null && photo.total === photo.algo_total ? ' by the phone' : '') : '—');
     if (photo.ai_count != null && photo.ai_count !== photo.total) fact('The AI counted', num(photo.ai_count, 0));
-    if (photo.algo_total != null && photo.algo_total !== photo.total) fact('The phone counted', num(photo.algo_total, 0) + ' (first guess)');
+    // the phone's own count is a hidden placeholder since Naked Brain 0.11.140 (only the card is sent): said only for an
+    // older reading, where it was shown to the person
+    if (photo.algo_total != null && photo.algo_total !== photo.total && !/-card\.jpe?g$/i.test(photo.photo_path || ''))
+      fact('The phone counted', num(photo.algo_total, 0) + ' (first guess)');
     if (photo.ai_count_status === 'failed') fact('AI count', 'not done');
     const c = photo.counts || {};
     fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || null);

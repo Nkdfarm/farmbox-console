@@ -1173,7 +1173,9 @@ function trapCard(p, z, day, withNote = true, gallery = null) {
   const card = el('button', 'pd-trap' + (p.dot ? ' ' + p.dot : ''));
   const im = el('img'); im.alt = `trap ${p.code}`; im.loading = 'lazy'; thumb(im, p, day);
   const head = el('div', 'pd-trap-head');
-  head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, num(p.total, 0)));
+  // while the AI counts, the figure is the phone's hidden placeholder: no number shown (0.7.277)
+  const countingNow = !p.corrected && ['queued', 'running'].includes(p.ai_count_status);
+  head.append(dotEl(p.dot), el('span', 'ipm-code ' + (p.colour || ''), p.code), el('b', null, countingNow ? '…' : num(p.total, 0)));
   // where the figure comes from (0.7.276, 0254): the AI's count, still counting, or typed by a person
   const src = p.corrected ? 'typed' : p.ai_count_status === 'done' ? 'AI' : ['queued', 'running'].includes(p.ai_count_status) ? 'counting…' : '';
   if (src) { const w = el('span', 'hint pd-count-src', src); w.title = src === 'AI' ? 'Counted by the AI on the card' : src === 'typed' ? 'Typed by a person' : "The phone's first guess; the AI is counting"; head.append(w); }

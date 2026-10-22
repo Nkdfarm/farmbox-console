@@ -245,14 +245,12 @@ function openReading(t, r) {
       }).catch(() => { link.textContent = 'Full photo not reachable'; });
     }
   }
-  const c = r.counts || {};
   const facts = el('div', 'facts');
   const fact = (k, v) => { const f = el('div', 'fact'); f.append(el('span', 'fact-k', k), el('span', 'fact-v', v ?? '—')); facts.append(f); };
-  fact('Counted', num(r.total, 0) + (r.corrected ? ' (corrected)' : r.algo_total != null ? ' by the phone' : ''));
-  if (r.algo_total != null && r.corrected) fact('Phone said', num(r.algo_total, 0));
-  fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || '—');
+  // the AI's count or a typed one; no phone count or size classes shown (0.7.278, 0260)
+  fact('Counted', r.total == null ? 'needs a count' : num(r.total, 0) + (r.corrected ? ' (typed)' : ''));
   fact('Mostly', pestLabel(r.pest));
-  if (r.confidence != null) fact('Card found', Math.round(r.confidence * 100) + ' %');
+  if (r.confidence != null && r.algorithm) fact('Card found', Math.round(r.confidence * 100) + ' %');   // an older reading's phone check
   if (r.notes) fact('Note', r.notes);
   d.body.append(facts);
 

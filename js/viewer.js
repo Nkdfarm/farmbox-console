@@ -548,22 +548,30 @@ export function openViewer(ctx) {
   const facts = el('div', 'facts');
   const fact = (k, v) => { if (v == null || v === '') return; const f = el('div', 'fact'); f.append(el('span', 'fact-k', k), el('span', 'fact-v', v)); facts.append(f); };
   if (photo.kind === 'trap') {
-    // counting v5 (0.7.276, 0254): the AI counts the card (Haiku, Opus again on a crowded one); a person's typed figure
-    // stands; the phone's own count is a first guess kept beside it
+    // the figure is the AI's count of the card or one typed by a person (0.7.278, 0260: no phone count shown anywhere);
+    // a card waiting for the AI has none yet, and one the AI could not count needs a person's
     const aiWord = m => /opus/.test(m || '') ? 'Opus' : /haiku/.test(m || '') ? 'Haiku' : /sonnet/.test(m || '') ? 'Sonnet' : 'the AI';
     const counting = ['queued', 'running'].includes(photo.ai_count_status);
-    fact('Counted', counting && !photo.corrected ? 'the AI is counting the card' : photo.total != null ? num(photo.total, 0) + (photo.corrected ? ' — typed by a person'
-      : photo.ai_count_status === 'done' ? ` — counted by the AI (${aiWord(photo.ai_count_model)})`
-      : counting ? " — the phone's first guess; the AI is counting"
-      : photo.algo_total != null && photo.total === photo.algo_total ? ' by the phone' : '') : '—');
-    if (photo.ai_count != null && photo.ai_count !== photo.total) fact('The AI counted', num(photo.ai_count, 0));
-    // the phone's own count is a hidden placeholder since Naked Brain 0.11.140 (only the card is sent): said only for an
-    // older reading, where it was shown to the person
-    if (photo.algo_total != null && photo.algo_total !== photo.total && !/-card\.jpe?g$/i.test(photo.photo_path || ''))
-      fact('The phone counted', num(photo.algo_total, 0) + ' (first guess)');
-    if (photo.ai_count_status === 'failed') fact('AI count', 'not done');
-    const c = photo.counts || {};
-    fact('By size', ['tiny', 'small', 'medium', 'large'].filter(k => c[k] != null).map(k => `${k} ${c[k]}${k === 'tiny' ? ' (not counted)' : ''}`).join(' · ') || null);
+    const needs = photo.total == null && !counting;
+    fact('Counted', photo.total == null ? (counting ? 'the AI is counting the card' : 'needs a count')
+      : num(photo.total, 0) + (photo.corrected ? ' — typed by a person'
+        : photo.ai_count_status === 'done' && photo.ai_count === photo.total ? ` — counted by the AI (${aiWord(photo.ai_count_model)})` : ''));
+    if (photo.corrected && photo.ai_count != null && photo.ai_count !== photo.total) fact('The AI counted', num(photo.ai_count, 0));
+    if (needs && mayWrite) {
+      // the count typed here is the person's figure; the rates follow (correct_trap_reading → dg_edit_item)
+      const box = el('div', 'fact'), inp = el('input'); inp.type = 'number'; inp.min = '0'; inp.style.width = '80px';
+      const save = el('button', 'btn btn-sm btn-primary', 'Save the count');
+      save.onclick = async () => {
+        const n = parseInt(inp.value, 10);
+        if (!(n >= 0)) { toast('Type the number of insects', 'bad'); return; }
+        busy(save, true, 'Saving…');
+        try { await rpc('correct_trap_reading', { p_id: photo.id, p_total: n }); Object.assign(photo, { total: n, corrected: true }); toast('Count saved', 'ok'); ctx.onChange?.(photo); }
+        catch (e) { toast(errWord(e), 'bad'); }
+        busy(save, false, 'Save the count');
+      };
+      box.append(el('span', 'fact-k', 'Type it'), inp, save);
+      facts.append(box);
+    }
     if (photo.replaced) fact('Trap', 'replaced on this round');
     if (photo.installed_at) fact('Hung since', day(photo.installed_at));
   } else {

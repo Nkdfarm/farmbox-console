@@ -74,25 +74,33 @@ function aiNote(text, lvl, title, short) {
   c.title = title || `AI: ${text}`;
   return c;
 }
+// the AI's findings as ONE block, the most serious first and the block in the colour of the worst (0.7.275, owner 22
+// Oct 2026: "the AI notes in only one to be more visual, with first information according with gravity"): red before
+// yellow before green, then the higher severity, then the AI's own order
+const RISK_RANK = { red: 3, yellow: 2, green: 1 };
+export const byGravity = all => all.map((x, i) => ({ x, i, lvl: riskOf(x.severity, x.kind) }))
+  .sort((a, b) => (RISK_RANK[b.lvl] - RISK_RANK[a.lvl]) || (Number(b.x.severity ?? 1) - Number(a.x.severity ?? 1)) || a.i - b.i);
+// a trap's insects the same way: the pests before the beneficial ones, the most counted first
+export const insectsByGravity = sp => sp.map((x, i) => ({ x, i }))
+  .sort((a, b) => (!!a.x.beneficial - !!b.x.beneficial) || (Number(b.x.count ?? 0) - Number(a.x.count ?? 0)) || a.i - b.i).map(o => o.x);
 export function tagChips(p, short = false) {
   const box = el('div', 'vw-chips');
   (p.tags || []).forEach(t => box.append(el('span', 'vw-tag r-' + riskOf(t.severity, t.kind), `${t.label || t.code}${t.severity != null ? ' · ' + SEV[t.severity] : ''}`)));
   if (p.kind === 'observation' && p.ai_status === 'done') {
-    // under a picture (short) at most the two most serious (owner 15 Oct 2026: "put only max 2 ai notes under each
-    // pics"); the viewer lists them all
-    const all = p.ai?.findings || [];
-    const f = short ? all.map((x, i) => [x, i]).sort((a, b) => (Number(b[0].severity ?? 1) - Number(a[0].severity ?? 1)) || a[1] - b[1])
-                        .slice(0, 2).map(([x]) => x) : all;
+    const all = byGravity(p.ai?.findings || []);
     if (!all.length && p.ai?.healthy !== false) box.append(aiNote('Healthy', 'green', 'AI: healthy', short));
-    if (short && all.length > 2) box.title = all.map(x => `AI: ${x.name || x.code}${x.severity != null ? ' · ' + SEV[x.severity] : ''}`).join('\n');
-    f.forEach(x => {
-      const sev = x.severity != null ? ' · ' + SEV[x.severity] : '';
-      box.append(aiNote(short ? `${shortName(x.name || x.code)}${sev}` : `${x.name || x.code}${sev}`, riskOf(x.severity, x.kind), `AI: ${x.name || x.code}${sev}`, short));
-    });
+    if (all.length) {
+      const sev = x => x.severity != null ? ' · ' + SEV[x.severity] : '';
+      // under a picture (short) each finding's first words, two lines at most; every finding in full on hover
+      const text = all.map(({ x }) => `${short ? shortName(x.name || x.code) : (x.name || x.code)}${sev(x)}`).join(', ');
+      box.append(aiNote(text, all[0].lvl, all.map(({ x }) => `AI: ${x.name || x.code}${sev(x)}`).join('\n'), short));
+    }
   }
   // insects on a trap: a pest seen, low risk by itself — the trap's own figure against the limits says more
-  if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species)) {
-    p.species.slice(0, 2).forEach(x => box.append(aiNote(`${x.common || x.name} ${x.count ?? ''}`.trim(), x.beneficial ? 'green' : 'yellow', null, short)));
+  if (p.kind === 'trap' && p.ai_status === 'done' && Array.isArray(p.species) && p.species.length) {
+    const sp = insectsByGravity(p.species);
+    box.append(aiNote(sp.map(x => `${x.common || x.name} ${x.count ?? ''}`.trim()).join(', '), sp.some(x => !x.beneficial) ? 'yellow' : 'green',
+                      sp.map(x => `AI: ${x.common || x.name}${x.name && x.common && x.name !== x.common ? ' (' + x.name + ')' : ''} ${x.count ?? ''}`.trim()).join('\n'), short));
   }
   return box;
 }
@@ -654,7 +662,7 @@ export function openViewer(ctx) {
       if (st === 'done' && photo.ai) {
         const a = photo.ai;
         if (a.quality && a.quality !== 'ok') secAI.append(el('div', 'note warn', 'The photo is ' + a.quality + ' — the reading is less sure.'));
-        const f = a.findings || [];
+        const f = byGravity(a.findings || []).map(o => o.x);          // the most serious first (0.7.275)
         if (!f.length) secAI.append(el('div', 'vw-ai-line', a.healthy === false ? 'Nothing it could name.' : 'Looks healthy.'));
         f.forEach(x => {
           const line = el('div', 'vw-ai-line');
@@ -672,7 +680,7 @@ export function openViewer(ctx) {
       else secAI.append(el('div', 'hint', 'Not asked yet.'));
     } else {
       if (st === 'done') {
-        const list = Array.isArray(photo.species) ? photo.species : [];
+        const list = insectsByGravity(Array.isArray(photo.species) ? photo.species : []);      // the pests first (0.7.275)
         if (!list.length) secAI.append(el('div', 'vw-ai-line', 'Nothing it could name.'));
         list.forEach(x => {
           const line = el('div', 'vw-ai-line');

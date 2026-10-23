@@ -1,5 +1,5 @@
 {
-  "version": "0.7.279",
+  "version": "0.7.280",
   "released": "2026-10-23",
-  "note": "A photo's comments as a social flow, with reactions"
+  "note": "The first three comments under each photo"
 }

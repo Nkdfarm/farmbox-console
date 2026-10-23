@@ -122,6 +122,25 @@ const riskSelect = () => {
   s.value = 'yellow'; s.dataset.level = 'yellow'; s.onchange = () => { s.dataset.level = s.value; };
   return s;
 };
+// under a report photo, the start of its comment flow (0.7.280, owner 23 Oct 2026: "rule is to show up to the 3 first
+// comments"): after the AI's comment and the note of who took the photo (`used` of them shown), the team's first
+// comments, oldest first — three blocks at most in all
+export const CARD_COMMENTS = 3;
+export function firstComments(p, used) {
+  const room = CARD_COMMENTS - used;
+  if (room <= 0 || !Array.isArray(p?.notes)) return [];
+  return p.notes.slice().sort((a, b) => (new Date(a.at).getTime() || 0) - (new Date(b.at).getTime() || 0)).slice(0, room).map(n => {
+    const text = String(n.body || n.transcript || '').trim() || 'Voice note';
+    const lvl = RISK_WORD[n.level] ? n.level : 'yellow';
+    const c = el('span', `vw-tag vw-note r-${lvl}`);
+    if (n.by || n.worker_id) c.append(avatar({ worker_id: n.worker_id || null, name: n.by || '' }, 'xs'));
+    c.append(el('span', 'vw-note-text clamp', text));
+    c.title = `${n.by ? n.by + ': ' : ''}${text}`;
+    return c;
+  });
+}
+// the AI's blocks among a photo's chips (tagChips): one since 0.7.275, none when it has not read the photo
+export const aiBlocks = box => box ? box.querySelectorAll('.vw-note.ai').length : 0;
 // The photo as a post (0.7.271, 0250; owner 22 Oct 2026: "Naked Heart shows the same thread, votes and verified answer
 // on each photo"), as a comment flow since 0.7.279 (0261; owner 23 Oct 2026: "this part has to be as a comments flow in
 // the social … first comment by ai (summarized in one line …), second comment is the human note done by the user take

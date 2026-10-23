@@ -51,7 +51,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
-import { openViewer, tagChips, noteChip, photoTitle, partLabel, openOpinions, REACTS } from './viewer.js';
+import { openViewer, tagChips, noteChip, photoTitle, partLabel, openOpinions, REACTS, firstComments, aiBlocks } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection, robotStrip, robotFig } from './robot.js';
@@ -405,10 +405,12 @@ function openFeed() {
       if (p.crop) title.append(el('span', 'hint', p.crop));
     }
     info.append(title, el('div', 'hint', [`${shortDay(p.taken_at)} ${hhmm(p.taken_at)}`, p.by ? String(p.by).trim().split(/\s+/)[0] : null].filter(Boolean).join(' · ')));
-    // the AI's chips and the person's note, as under a report photo
-    if (p.ai_status === 'done') info.append(tagChips(p, true));
+    // the AI's chips, the person's note and the team's first comments, as under a report photo (three at most, 0.7.280)
+    const tc = p.ai_status === 'done' ? tagChips(p, true) : null;
+    if (tc) info.append(tc);
     const nc = noteChip(p, true);
     if (nc) info.append(nc);
+    info.append(...firstComments(p, aiBlocks(tc) + (nc ? 1 : 0)));
     const v = p.social?.verified;
     if (v) {
       const lvl = ['green', 'yellow', 'red'].includes(v.level) ? v.level : 'yellow';
@@ -1184,9 +1186,12 @@ function trapCard(p, z, day, withNote = true, gallery = null) {
   if (p.day_rate != null) { const r = el('span', 'hint', `${num(p.day_rate, p.day_rate >= 10 ? 0 : 1)}/day`); r.title = 'New insects a day since the photo before'; head.append(r); }
   card.append(im, head, trapCurve(p.curve || [], day.threshold));
   // the AI's chips and the person's note on the trap, in the same risk colours (0.7.262, 0240)
-  if ((p.tags || []).length || p.ai_status === 'done') card.append(tagChips(p));
+  const ttc = (p.tags || []).length || p.ai_status === 'done' ? tagChips(p) : null;
+  if (ttc) card.append(ttc);
   const tn = withNote ? noteChip(p, true) : null;            // the person's note: its own bubble under the chips
   if (tn) card.append(tn);
+  // then the team's first comments: three blocks at most with the AI's and the note (0.7.280)
+  if (withNote) card.append(...firstComments(p, aiBlocks(ttc) + (tn ? 1 : 0)));
   const tsl = socialLine(p.social);
   if (tsl) card.append(tsl);
   const chk = trapCheckPill(p.check, p.total);
@@ -1256,8 +1261,12 @@ function photoFig(p, z, day, gallery = null) {
   // the AI's chips, then the person's note as a bubble of its own with the writer's face and its risk colour
   // (0.7.261, 0.7.264: "identify better the human notes")
   const nc = noteChip(p, true);
-  cap.append(title, tagChips(p, true));
+  const tc = tagChips(p, true);
+  cap.append(title, tc);
   if (nc) cap.append(nc);
+  // then the team's first comments: three blocks at most with the AI's and the note (0.7.280, owner 23 Oct 2026: "rule
+  // is to show up to the 3 first comments")
+  cap.append(...firstComments(p, aiBlocks(tc) + (nc ? 1 : 0)));
   const sl = socialLine(p.social);
   if (sl) cap.append(sl);
   if ((p.measures || []).length) title.append(el('span', 'pill pd-sized', 'sizes'));

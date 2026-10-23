@@ -17,7 +17,7 @@ import { rpc, openFast, select } from './api.js';
 import { liveWatch } from './live.js';
 import { loadFamilies, familyOptions, subFamiliesOf } from './families.js';
 import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
-         mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine, farmToday } from './ui.js';
+         mondayOf as mondayOfDate, pref, field, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine, farmToday } from './ui.js';
 import { roleLabel } from './people.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

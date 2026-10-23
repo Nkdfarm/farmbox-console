@@ -51,7 +51,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, num, cropAvatar, toast, busy, trapCheckPill, drawer, confirmDrawer } from './ui.js';
-import { openViewer, tagChips, noteChip, photoTitle, partLabel, openOpinions } from './viewer.js';
+import { openViewer, tagChips, noteChip, photoTitle, partLabel, openOpinions, REACTS } from './viewer.js';
 import { openCase, newCase, useFarm } from './cases.js';
 import { trapKit } from './trapmap.js';
 import { robotSection, robotStrip, robotFig } from './robot.js';
@@ -1224,12 +1224,14 @@ function trapCurve(pts, th) {
 
 // the photo as a post (0.7.270, 0249): its comments and the team's agree / disagree with the AI, under the picture;
 // since 0.7.271 (0250) a small "Verified" when a manager or the agronomist marked one comment as the diagnosis
+// since 0.7.279 (0261) the reactions of every comment instead: "5 comments · 👍 3 · 👎 1 · 🤔 2" (a database before 0261
+// gives agree / disagree: the AI's likes and dislikes)
 function socialLine(s) {
   if (!s) return null;
   const parts = [];
   if (s.comments) parts.push(`${s.comments} comment${s.comments === 1 ? '' : 's'}`);
-  if (s.agree) parts.push(`Agree ${s.agree}`);
-  if (s.disagree) parts.push(`Disagree ${s.disagree}`);
+  const r = { like: 'like' in s ? s.like : s.agree, dislike: 'dislike' in s ? s.dislike : s.disagree, pensive: s.pensive };
+  REACTS.forEach(([k, emo]) => { if (Number(r[k])) parts.push(`${emo} ${r[k]}`); });
   if (!parts.length && !s.verified) return null;
   const d = el('div', 'pd-social', parts.join(' · '));
   d.title = 'Open the photo for the conversation';

@@ -123,14 +123,20 @@ const riskSelect = () => {
   return s;
 };
 // The photo as a post (0.7.271, 0250; owner 22 Oct 2026: "Naked Heart shows the same thread, votes and verified answer
-// on each photo"): the conversation as the phone shows it, read with dg_photo_thread — the team's comments in time order
-// (face, risk colour, Listen for a voice note) and the AI's answers indented under the comment they answer
-// (photo_chat.note_id). A question asked in the chat further down stays there with its answer: the chat is where it is
-// asked and where its cards are run. On top, when a manager or the agronomist has marked one comment, the verified
-// diagnosis; under Agree / Disagree, who disagrees and why. "Ask the AI" under my own comment sends that comment
-// (photo-chat, brief) — never by itself. After every change the photo's social and notes are the thread's, and the page
+// on each photo"), as a comment flow since 0.7.279 (0261; owner 23 Oct 2026: "this part has to be as a comments flow in
+// the social … first comment by ai (summarized in one line …), second comment is the human note done by the user take
+// the pic, other comments by users … like, dislike and pensive … same approach for the naked heart"): read with
+// dg_photo_thread — the verified diagnosis on top when a manager or the agronomist has marked one, then the AI's reading
+// in one line (the whole of it is "The AI" further down), the note of who took the photo, and everybody's comments and
+// questions in time order with the AI's answers indented under the comment they answer; each with like, dislike and
+// not sure. "Ask the AI" under my own comment sends that comment (photo-chat, brief) — never by itself; "More detail"
+// under an answer asks for the long one. After every change the photo's social and notes are the thread's, and the page
 // underneath is told (ctx.onChange).
 const firstWord = s => s ? String(s).trim().split(/\s+/)[0] : '';
+// the reactions, the one place with emoji (owner 23 Oct 2026: "for general design and gui I prefer the minimalist icon,
+// for the reactions the classic small emoji are better")
+export const REACTS = [['like', '👍', 'Like'], ['dislike', '👎', 'Dislike'], ['pensive', '🤔', 'Not sure']];
+const firstSentence = s => { const t = String(s || '').replace(/\s+/g, ' ').trim(), m = t.match(/^.+?[.!?](?=\s|$)/); const x = (m ? m[0] : t).trim(); return x.length > 160 ? x.slice(0, 157).trimEnd() + '…' : x; };
 function verifiedBlock(v) {
   const lvl = RISK_WORD[v.level] ? v.level : 'yellow';
   const box = el('div', `vw-verified r-${lvl}`);
@@ -140,13 +146,14 @@ function verifiedBlock(v) {
   box.title = `${RISK_WORD[lvl]} — it stands above the AI's reading`;
   return box;
 }
-function teamNotes(photo, ctx, mayWrite, onAsked) {
+// hooks: editNote() opens the photographer's note for a change; showAI() brings the whole AI reading into view
+function teamNotes(photo, ctx, mayWrite, onAsked, hooks = {}) {
   const sec = el('div', 'vw-note-sec vw-team');
   const kind = photo.kind === 'trap' ? 'trap' : 'observation';
   const top = el('div', 'vw-team-top');
   sec.append(top);
   let T = null, tried = false, readSeq = 0, paintSeq = 0;
-  const asking = new Set();                       // my comments on their way to the AI
+  const asking = new Set();                       // my comments (and "more detail" asks) on their way to the AI
   // the thread: dg_photo_thread is not on the api's list of reads, so it is asked quiet — reading it is no change to
   // tell the other consoles about. Its notes become the photo's (the report's note chips read photo.notes).
   const read = async () => {
@@ -178,6 +185,21 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
     await changed();
     onAsked?.();                                   // the chat below holds the same answer
   };
+  // more on a short answer: a question of mine in the flow, the long answer under it
+  const moreDetail = async a => {
+    const key = 'more:' + a.id;
+    if (asking.has(key)) return;
+    if (ctx.aiReady === false) { toast('Paste an Anthropic API key in Settings › Integrations first', 'bad'); return; }
+    asking.add(key); paint();
+    const said = firstSentence(a.body);
+    try {
+      const res = await fn('photo-chat', { kind, id: photo.id, message: `More detail, please, on your answer${said ? ': "' + said + '"' : ''}` });
+      if (!res?.ok) throw new Error(res?.error || 'no answer');
+    } catch (e) { toast('The AI did not answer: ' + errWord(e).slice(0, 160), 'bad'); }
+    asking.delete(key);
+    await changed();
+    onAsked?.();
+  };
   const verify = async (n, on, btn) => {
     busy(btn, true, '…');
     try {
@@ -186,8 +208,78 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
       await changed();
     } catch (e) { busy(btn, false, on ? 'Verify' : 'Unverify'); toast(errWord(e), 'bad'); }
   };
+  // like, dislike, not sure: the same again takes it back; who gave which on hover
+  const reactRow = (target, tid, r0) => {
+    const r = { like: Number(r0?.like) || 0, dislike: Number(r0?.dislike) || 0, pensive: Number(r0?.pensive) || 0, mine: r0?.mine || null };
+    const row = el('span', 'vw-react');
+    const who = Array.isArray(r0?.who) ? r0.who : [];
+    REACTS.forEach(([k, emo, word]) => {
+      const b = el('button', 'vw-rb' + (r.mine === k ? ' on' : ''));
+      b.textContent = r[k] ? `${emo} ${r[k]}` : emo;
+      const names = who.filter(x => x.reaction === k).map(x => firstWord(x.by)).filter(Boolean);
+      b.title = word + (names.length ? ': ' + names.join(', ') : '');
+      b.setAttribute('aria-pressed', String(r.mine === k));
+      b.disabled = !mayWrite;
+      b.onclick = async () => {
+        const reaction = r.mine === k ? null : k;
+        busy(b, true, '…');
+        try {
+          const res = await rpc('dg_react', { p: { kind, ref_id: photo.id, target, target_id: tid || null, reaction } });
+          const { target: _t, target_id: _i, reactions, ...soc } = res || {};
+          photo.social = soc;
+          if (T && reactions) {
+            if (target === 'ai') T.ai_reactions = reactions;
+            else if (target === 'own') { if (T.own) T.own.reactions = reactions; }
+            else (T.thread || []).forEach(x => { if (x.id === tid && (target === 'note' ? x.type === 'note' : x.type !== 'note')) x.reactions = reactions; });
+            T.social = soc;
+          }
+          await changed();
+        } catch (e) { busy(b, false, emo); toast(errWord(e), 'bad'); }
+      };
+      row.append(b);
+    });
+    return row;
+  };
 
-  // one comment: face, risk colour, words or the voice; under it what I may do with it
+  // the AI's reading, first: one line — its findings by gravity and the first thing it says — the whole of it in "The AI"
+  const aiComment = () => {
+    const st = photo.ai_status;
+    const b = el('div', 'vw-tag vw-note ai vw-flow-ai');
+    b.append(g1Face('xs', 'The AI'));
+    const txt = el('div', 'vw-note-text');
+    txt.append(el('b', null, 'AI · the reading'));
+    if (st !== 'done') { txt.append(el('div', 'hint', st === 'queued' ? 'Asked — waiting for the answer.' : st === 'failed' ? 'The AI could not read it.' : 'Not read by the AI yet.')); b.append(txt); return b; }
+    const chips = tagChips({ ...photo, tags: [] }, true).querySelector('.vw-note');
+    const line = [chips ? chips.textContent : null, firstSentence(kind === 'trap' ? photo.ai_notes : photo.ai?.summary)].filter(Boolean).join(' — ');
+    b.classList.add('r-' + ((chips && ['green', 'yellow', 'red'].find(l => chips.classList.contains('r-' + l))) || 'yellow'));
+    txt.append(el('div', null, line || 'Nothing it could name.'));
+    const acts = el('div', 'vw-msg-acts');
+    acts.append(reactRow('ai', null, T?.ai_reactions || photo.social?.ai || null));
+    if (hooks.showAI) { const full = el('button', 'btn btn-sm', 'See the full reading'); full.onclick = hooks.showAI; acts.append(full); }
+    txt.append(acts);
+    b.append(txt);
+    return b;
+  };
+  // the note of who took the photo, second: the photo's own (as changed here), its reactions from the thread
+  const ownComment = () => {
+    const words = String(photo.note || '').trim();
+    if (!words) return null;
+    const o = T?.own || {};
+    const lvl = RISK_WORD[photo.note_level] ? photo.note_level : 'yellow';
+    const b = el('div', `vw-tag vw-note r-${lvl} vw-flow-own`);
+    const by = o.by || photo.by || '';
+    if (by || o.worker_id || photo.worker_id) b.append(avatar({ worker_id: o.worker_id || photo.worker_id || null, name: by }, 'xs'));
+    const txt = el('div', 'vw-note-text');
+    txt.append(el('b', null, [firstWord(by) || 'Somebody', 'took the photo', o.at || photo.taken_at ? when(o.at || photo.taken_at) : null].filter(Boolean).join(' · ')),
+               el('div', null, words));
+    const acts = el('div', 'vw-msg-acts');
+    acts.append(reactRow('own', null, o.reactions || null));
+    if (mayWrite && hooks.editNote) { const ed = el('button', 'btn btn-sm', 'Edit'); ed.onclick = hooks.editNote; acts.append(ed); }
+    txt.append(acts);
+    b.append(txt);
+    return b;
+  };
+  // one comment: face, risk colour, words or the voice; under it its reactions and what I may do with it
   const comment = (n, mine, mayVerify) => {
     const lvl = RISK_WORD[n.level] ? n.level : 'yellow';
     const b = el('div', `vw-tag vw-note r-${lvl}` + (n.verified_at ? ' verified' : ''));
@@ -198,6 +290,7 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
     if (words) txt.append(el('div', null, words));
     else if (n.audio_path) txt.append(el('div', 'hint', n.voice_status === 'failed' ? 'The recording could not be written down' : 'Writing the recording down…'));
     const acts = el('div', 'vw-msg-acts');
+    if (n.id) acts.append(reactRow('note', n.id, n.reactions));
     if (n.audio_path) {
       const play = el('button', 'btn btn-sm', 'Listen');
       play.onclick = async () => {
@@ -221,7 +314,7 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
       v.onclick = () => verify(n, !n.verified_at, v);
       acts.append(v);
     }
-    if (acts.childElementCount) txt.append(acts);
+    txt.append(acts);
     b.append(txt);
     if (mayWrite && mine && n.id && n.by_user === mine) {
       const x = el('button', 'vw-x', '×'); x.title = 'Delete my note';
@@ -237,11 +330,28 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
     }
     return b;
   };
+  // a question to the AI (the chat below, or "More detail"): its asker, no colour
+  const question = q => {
+    const b = el('div', 'vw-tag vw-note vw-flow-q');
+    if (q.by || q.worker_id) b.append(avatar({ worker_id: q.worker_id || null, name: q.by || '' }, 'xs'));
+    const txt = el('div', 'vw-note-text');
+    txt.append(el('b', null, (firstWord(q.by) || 'Somebody') + ' · ' + when(q.at)), el('div', null, q.body || ''));
+    const acts = el('div', 'vw-msg-acts'); acts.append(reactRow('chat', q.id, q.reactions)); txt.append(acts);
+    b.append(txt);
+    return b;
+  };
   const answer = a => {
     const r = el('div', 'vw-reply');
     const txt = el('div', 'vw-note-text');
     txt.append(el('b', null, 'AI · ' + when(a.at)), el('div', null, a.body || ''));
-    r.append(el('span', 'vw-ai-face', 'AI'), txt);
+    const acts = el('div', 'vw-msg-acts');
+    if (a.id) acts.append(reactRow('chat', a.id, a.reactions));
+    if (a.id && mayWrite) {
+      if (asking.has('more:' + a.id)) acts.append(el('span', 'hint', 'The AI is answering…'));
+      else { const mo = el('button', 'btn btn-sm', 'More detail'); mo.title = 'A longer answer, under this one'; mo.onclick = () => moreDetail(a); acts.append(mo); }
+    }
+    txt.append(acts);
+    r.append(g1Face('xs', 'The AI'), txt);
     return r;
   };
 
@@ -251,59 +361,48 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
     if (my !== paintSeq) return;
     top.textContent = '';
     const s = photo.social || {};
-    // the verified diagnosis, pinned on top (0250)
-    if (s.verified) top.append(verifiedBlock(s.verified));
-    // agree or disagree with the AI's reading (0.7.270, 0249): one vote each, the same again takes it back
-    if (photo.ai_status === 'done') {
-      const row = el('div', 'vw-vote');
-      row.append(el('span', 'hint', 'The AI\'s reading:'));
-      const btn = (v, word) => {
-        const b = el('button', 'btn btn-sm' + (s.mine === v ? ' btn-primary' : ''), `${word} ${v === 1 ? (s.agree || 0) : (s.disagree || 0)}`);
-        b.onclick = async () => {
-          const vote = s.mine === v ? 0 : v;               // why one disagrees is written as a comment below
-          busy(b, true, '…');
-          try { photo.social = await rpc('dg_vote', { p: { kind, ref_id: photo.id, vote } }); await changed(); }
-          catch (e) { busy(b, false, word); toast(errWord(e), 'bad'); }
-        };
-        return b;
-      };
-      if (mayWrite) row.append(btn(1, 'Agree'), btn(-1, 'Disagree'));
-      else row.append(el('span', null, `Agree ${s.agree || 0} · Disagree ${s.disagree || 0}`));
-      top.append(row);
-      // who disagrees and why (the reason is given on the phone)
-      (T?.votes || []).filter(v => v.vote === -1 && v.reason).forEach(v =>
-        top.append(el('div', 'vw-why', `${firstWord(v.by) || 'Somebody'} disagrees: ${v.reason}`)));
-    }
-    // the conversation: the comments in time order, each AI answer under the comment it answers
-    const items = T ? (T.thread || []) : (photo.notes || []).map(n => ({ type: 'note', ...n }));
-    const notes = items.filter(x => x.type === 'note');
+    // the flow: comments and questions in time order, each AI answer under the comment it answers
+    const items = (T ? (T.thread || []) : (photo.notes || []).map(n => ({ type: 'note', ...n })))
+      .slice().sort((a, b) => (new Date(a.at).getTime() || 0) - (new Date(b.at).getTime() || 0));
+    const notes = new Set(items.filter(x => x.type === 'note').map(x => x.id));
     const under = new Map();
-    items.forEach(x => { if (x.type === 'ai' && x.note_id && notes.some(n => n.id === x.note_id)) under.set(x.note_id, [...(under.get(x.note_id) || []), x]); });
-    const count = notes.length + [...under.values()].reduce((a, l) => a + l.length, 0);
+    items.forEach(x => { if (x.type === 'ai' && x.note_id && notes.has(x.note_id)) under.set(x.note_id, [...(under.get(x.note_id) || []), x]); });
+    const own = ownComment();
+    const count = items.length + (own ? 1 : 0);
     top.append(el('div', 'sec-title', count ? `Comments · ${count}` : 'Comments'));
     const list = el('div', 'vw-team-list');
+    list.append(aiComment());
+    // the verified diagnosis, right under the AI's reading (0250)
+    if (s.verified) list.append(verifiedBlock(s.verified));
+    if (own) list.append(own);
     const mayVerify = mayWrite && !!T?.may_verify;
-    notes.forEach(n => {
-      list.append(comment(n, mine, mayVerify));
-      (under.get(n.id) || []).forEach(a => list.append(answer(a)));
-      if (asking.has(n.id)) { const w = el('div', 'vw-reply wait'); w.append(el('span', 'vw-ai-face', 'AI'), el('div', 'vw-note-text', 'The AI is answering…')); list.append(w); }
+    items.forEach(x => {
+      if (x.type === 'note') {
+        list.append(comment(x, mine, mayVerify));
+        (under.get(x.id) || []).forEach(a => list.append(answer(a)));
+        if (asking.has(x.id)) { const w = el('div', 'vw-reply wait'); w.append(g1Face('xs', 'The AI'), el('div', 'vw-note-text', 'The AI is answering…')); list.append(w); }
+      } else if (x.type === 'question') list.append(question(x));
+      else if (!(x.note_id && notes.has(x.note_id))) list.append(answer(x));
     });
-    if (!notes.length) list.append(el('div', 'hint', T || tried ? 'No comment yet.' : 'Reading the conversation…'));
+    if (!items.length && !own) list.append(el('div', 'hint', T || tried ? 'No comment yet.' : 'Reading the conversation…'));
     top.append(list);
-    if (items.some(x => x.type === 'question')) top.append(el('div', 'hint', 'The questions asked in the chat about this photo are in the chat below.'));
   };
+  sec.repaint = () => paint();
   paint();
   read().then(() => paint());
 
   if (mayWrite) {
-    // the box is made once: a note being written lives through every repaint (a vote, a note deleted, an AI answer)
-    const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.maxLength = 4000; ta.placeholder = 'Add a note for the team';
+    // the box is made once: a note being written lives through every repaint (a reaction, a note deleted, an AI answer)
+    const ta = el('textarea', 'vw-note-box'); ta.rows = 2; ta.maxLength = 4000; ta.placeholder = 'Write a comment';
     const risk = riskSelect();
-    const add = el('button', 'btn btn-sm btn-primary', 'Add note');
+    const add = el('button', 'btn btn-sm btn-primary', 'Post');
+    const addAi = el('button', 'btn btn-sm', 'Post + ask the AI');
+    const addAsk = el('button', 'btn btn-sm', 'Post + ask someone…');
     let cref = 'hc:' + crypto.randomUUID();       // one id for this note: a retry after a lost answer is the same note
-    add.onclick = async () => {
-      if (!ta.value.trim()) { toast('Write the note first', 'bad'); return; }
-      busy(add, true, 'Saving…');
+    const post = async (btn, then) => {
+      if (!ta.value.trim()) { toast('Write the comment first', 'bad'); return; }
+      const label = btn.textContent;
+      busy(btn, true, 'Posting…');
       try {
         const mine = await whoAmI();
         const r = await rpc('dg_add_note', { p: { kind, ref_id: photo.id, body: ta.value, level: risk.value, client_ref: cref } });
@@ -311,19 +410,24 @@ function teamNotes(photo, ctx, mayWrite, onAsked) {
         photo.notes = [...(photo.notes || []), n];
         if (T) T.thread = [...(T.thread || []), { type: 'note', ...n }];
         ta.value = ''; risk.value = risk.dataset.level = 'yellow'; cref = 'hc:' + crypto.randomUUID();
-        busy(add, false, 'Add note');
-        toast('Note added', 'ok');
+        busy(btn, false, label);
+        if (then === 'ai') { await askAi(n); return; }
         await changed();
-      } catch (e) { busy(add, false, 'Add note'); toast(errWord(e), 'bad'); }
+        if (then === 'ask') askOpinion(photo, kind, ctx, n.body);
+        else toast('Posted', 'ok');
+      } catch (e) { busy(btn, false, label); toast(errWord(e), 'bad'); }
     };
+    add.onclick = () => post(add);
+    addAi.onclick = () => post(addAi, 'ai');
+    addAsk.onclick = () => post(addAsk, 'ask');
     const ask = el('button', 'btn btn-sm', 'Ask someone…');
     ask.onclick = () => askOpinion(photo, kind, ctx);
-    const acts = el('div', 'vw-note-acts'); acts.append(risk, add, ask);
+    const acts = el('div', 'vw-note-acts'); acts.append(risk, add, addAi, addAsk, ask);
     sec.append(ta, acts);
   }
   return sec;
 }
-async function askOpinion(photo, kind, ctx) {
+async function askOpinion(photo, kind, ctx, question = '') {
   const d = drawer('Ask for an opinion', 'They find this photo with all its data in their list, in Naked Brain and Naked Heart');
   d.body.append(el('div', 'hint', 'Reading the team…'));
   let people = [];
@@ -338,7 +442,7 @@ async function askOpinion(photo, kind, ctx) {
     lab.append(cb, avatar({ worker_id: x.worker_id || null, name: x.name }, 'xs'), el('span', null, x.name));
     box.append(lab);
   });
-  const q = el('textarea', 'vw-note-box'); q.rows = 3; q.maxLength = 1000; q.placeholder = 'Your question (optional)';
+  const q = el('textarea', 'vw-note-box'); q.rows = 3; q.maxLength = 1000; q.placeholder = 'Your question (optional)'; q.value = question || '';
   const go = el('button', 'btn btn-primary', 'Send');
   go.onclick = async () => {
     if (!picks.size) { toast('Choose at least one person', 'bad'); return; }
@@ -605,16 +709,23 @@ export function openViewer(ctx) {
   // the person's note, its own section, changed here (0.7.263, 0241; owner 15 Oct 2026: "when I click on the picture I
   // have to see the human note as well and have the possibility to modify it"): the text and its risk colour, by the
   // person who wrote it, a manager or the agronomist (the server says who may)
+  // since 0.7.279 the note itself is the second comment of the flow (teamNotes), with its Edit: this section is its editor,
+  // and "Add a note" when the photo has none
   const secNote = el('div', 'vw-note-sec');
+  let teamSec = null;
   const paintNote = () => {
     secNote.textContent = '';
-    secNote.append(el('div', 'sec-title', 'Note'));
-    const chip = noteChip(photo);
-    if (chip) { const box = el('div', 'vw-chips'); box.append(chip); secNote.append(box); }
-    else if (photo.note) secNote.append(el('div', 'vw-note-plain', photo.note));
-    else secNote.append(el('div', 'hint', 'No note on this photo.'));
-    if (mayWrite && photo.id) {
-      const ed = el('button', 'btn btn-sm', photo.note ? 'Edit the note' : 'Add a note');
+    teamSec?.repaint?.();
+    const inFlow = photo.id && (photo.kind === 'observation' || photo.kind === 'trap');
+    if (!inFlow) {
+      secNote.append(el('div', 'sec-title', 'Note'));
+      const chip = noteChip(photo);
+      if (chip) { const box = el('div', 'vw-chips'); box.append(chip); secNote.append(box); }
+      else if (photo.note) secNote.append(el('div', 'vw-note-plain', photo.note));
+      else secNote.append(el('div', 'hint', 'No note on this photo.'));
+    }
+    if (mayWrite && photo.id && (!inFlow || !photo.note)) {
+      const ed = el('button', 'btn btn-sm', photo.note ? 'Edit the note' : 'Add the note of who took the photo');
       ed.onclick = editNote;
       secNote.append(ed);
     }
@@ -655,9 +766,11 @@ export function openViewer(ctx) {
   // personal opinion"). A person deletes their own note on its day; the server says who may. Since 0.7.271 (0250) the
   // whole post: the verified diagnosis, the reasons to disagree, the AI's answers under their comment, Ask the AI, Verify.
   // An answer asked from there is in the chat below too: the chat is read again, unless a question of its own is on its way.
-  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) panel.append(teamNotes(photo, ctx, mayWrite, () => {
+  if (photo.id && (photo.kind === 'observation' || photo.kind === 'trap')) panel.append(teamSec = teamNotes(photo, ctx, mayWrite, () => {
     if (chat && !asking) rpc('photo_chat', { p_kind: photo.kind, p_id: photo.id }).then(j => { if (!asking) { chat = j; paintChat(); } }).catch(() => {});
-  }));
+  }, { editNote: () => { editNote(); secNote.scrollIntoView({ block: 'nearest' }); },
+       showAI: () => secAI.scrollIntoView({ behavior: 'smooth', block: 'start' }) }));
+  paintNote();
 
   // the person's tags
   const secTags = el('div');

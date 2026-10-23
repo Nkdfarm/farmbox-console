@@ -13,8 +13,9 @@
 // together. Colour is the sub-family's hue (ui.js subFamilyHue), the same as
 // on Procedures and People, so Irrigation is the same blue everywhere.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, openFast } from './api.js';
+import { rpc, openFast, select } from './api.js';
 import { liveWatch } from './live.js';
+import { loadFamilies, familyOptions, subFamiliesOf } from './families.js';
 import { loading, el, toast, drawer, confirmDrawer, avatar, busy, ymd, parseYmd, addDays,
          mondayOf as mondayOfDate, pref, input, selectBox, subFamilyHue, subFamilyTag, icon, sowingLine, farmToday } from './ui.js';
 import { roleLabel } from './people.js';
@@ -347,7 +348,14 @@ function paint() {
   const titles = el('div');
   titles.append(el('h1', null, 'Tasks'));
   titles.append(el('p', null, 'Every task of the FarmBox, day by day: what, where, who. Click a task to open it, change who does it or mark it done.'));
-  head.append(titles, el('div', 'spacer'), planButton());
+  head.append(titles, el('div', 'spacer'));
+  // a task by hand, once or every n days (FarmBox 0262): the Admin and the Farm manager
+  if (data?.may_add_tasks) {
+    const nb = el('button', 'btn btn-primary', '+ New task');
+    nb.onclick = () => newTask(span === 'day' ? day : null);
+    head.append(nb);
+  }
+  head.append(planButton());
   mount.append(head);
 
   const layout = el('div', 'tk-layout');
@@ -888,6 +896,7 @@ function chip(t, opts = {}) {
   }
   const p = PRIO[t.priority];
   if (p && p[0]) { const s = el('span', 'tk-prio ' + t.priority, p[0]); s.title = p[1] + ' priority'; c.append(s); }
+  if (t.hand?.every_days) { const s = el('span', 'tk-prio', '↻'); s.title = repeatsWord(t.hand); c.append(s); }
   // Not done · Paused · Done in … go under the title, so the title keeps the chip's width (0.7.181)
   const tw = timeWord(t);
   if (tw) { const s = el('span', 'tk-time ' + tw.cls, tw.text); if (tw.cls === 'over') s.title = `planned ${hrs(t.minutes)} h`; text.append(s); }
@@ -1061,6 +1070,7 @@ function openTask(t) {
     : 'Planned · ' + t.status.replace('_', ' '));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') : 'nobody yet');
   if (t.harvest_kg != null) fact('Harvested', `${Number(t.harvest_kg)} kg`);
+  if (t.hand) fact('Added by hand', repeatsWord(t.hand));
   d.body.append(facts);
   const pos = positionsLine(t);
   if (pos) {
@@ -1114,6 +1124,12 @@ function openTask(t) {
       catch (e) { busy(re, false, 'Reopen'); toast(e.message, 'bad'); }
     };
     d.footer.append(re);
+  }
+  // a task added by hand goes the way it came (0262): this one, or this one and the later ones
+  if (t.hand && wk?.may_add_tasks && (t.hand.every_days || (t.status !== 'done' && t.status !== 'skipped'))) {
+    const del = el('button', 'btn btn-danger', 'Delete…');
+    del.onclick = () => deleteHand(t, d);
+    d.footer.append(del);
   }
   if (t.status !== 'done' && t.status !== 'skipped') {
     // cancelled, with a reason and a note — the Admin or the task's own people (0100, 0168)
@@ -1180,6 +1196,118 @@ function openHub(t) {
   const close = el('button', 'btn', 'Close');
   close.onclick = d.close;
   d.footer.append(close);
+}
+
+// ── tasks by hand (FarmBox 0262) ─────────────────────────────────────────────
+// once, or every n days from a start day until an end day or until deleted; a closed day moves to the next working day
+const repeatsWord = h => !h?.every_days ? 'Once'
+  : (h.every_days === 1 ? 'Every working day' : `Every ${h.every_days} days`) + ` from ${shortDay(h.starts_on)}`
+    + (h.ends_on ? ` to ${shortDay(h.ends_on)}` : ' until deleted');
+
+async function newTask(onDay) {
+  const d = drawer('New task', 'Added by hand: once, or every few days. A day nobody works moves it to the next working day.');
+  const name = input({ type: 'text', placeholder: 'e.g. Clean the cold room', maxLength: 200 });
+  const fam = selectBox(familyOptions(), 'Agriculture');
+  const sub = el('select');
+  const fillSub = () => {
+    sub.textContent = '';
+    [['', '—'], ...subFamiliesOf(fam.value).map(s => [s, s])].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; sub.append(o); });
+  };
+  fam.onchange = fillSub;
+  const where = selectBox([['', 'The whole FarmBox']]);
+  const slot = selectBox(SLOTS.map(x => [x, SLOT_WORD[x]]), 'any');
+  const mins = input({ type: 'number', min: 5, max: 720, step: 5, value: 30 });
+  const prio = selectBox(['normal', 'high', 'critical', 'low'].map(x => [x, PRIO[x][1]]), 'normal');
+  const who = selectBox([['', 'Nobody yet'], ...(data?.roster || []).map(r => [r.worker_id, r.name])], '');
+  const start = input({ type: 'date', min: today(), value: onDay && onDay >= today() ? onDay : today() });
+  // how often: once, or every n days — and then until when
+  let repeat = false, until = false;
+  const onceB = el('button', 'toggle', 'One time'), everyB = el('button', 'toggle', 'Every');
+  onceB.type = everyB.type = 'button';
+  const every = input({ type: 'number', min: 1, max: 365, value: 7 }); every.style.width = '80px';
+  const everyRow = el('div', 'row'); everyRow.append(onceB, everyB, every, el('span', 'hint', 'days'));
+  const openB = el('button', 'toggle', 'Until deleted'), endB = el('button', 'toggle', 'Until');
+  openB.type = endB.type = 'button';
+  const end = input({ type: 'date', min: today() });
+  const endRow = el('div', 'row'); endRow.append(openB, endB, end);
+  const endF = field('Ends', endRow);
+  const paintRepeat = () => {
+    onceB.setAttribute('aria-pressed', String(!repeat)); everyB.setAttribute('aria-pressed', String(repeat));
+    every.disabled = !repeat; endF.style.display = repeat ? '' : 'none';
+    openB.setAttribute('aria-pressed', String(!until)); endB.setAttribute('aria-pressed', String(until)); end.disabled = !until;
+  };
+  onceB.onclick = () => { repeat = false; paintRepeat(); };
+  everyB.onclick = () => { repeat = true; paintRepeat(); every.focus(); };
+  every.onfocus = () => { if (!repeat) { repeat = true; paintRepeat(); } };
+  openB.onclick = () => { until = false; paintRepeat(); };
+  endB.onclick = () => { until = true; paintRepeat(); end.focus(); };
+  fillSub(); paintRepeat();
+
+  const g1 = el('div', 'grid2'); g1.append(field('Family', fam), field('Sub-family', sub, 'The colour on the board.'));
+  const g2 = el('div', 'grid2'); g2.append(field('Where', where), field('Who', who, 'People rostered this week; empty = the planner or you, later.'));
+  const g3 = el('div', 'grid2'); g3.append(field('When in the day', slot), field('Takes (minutes)', mins));
+  const g4 = el('div', 'grid2'); g4.append(field('Priority', prio), field('First day', start));
+  d.body.append(field('Name', name), g1, g2, g3, g4, field('Repeats', everyRow), endF);
+  // the places of this unit (zones, sumps, rooms), read once the window is open
+  select('area', `select=id,name,sort&farm_id=eq.${farm.id}&active=is.true&order=sort.asc,name.asc`)
+    .then(rows => (rows || []).forEach(a => { const o = el('option', null, a.name); o.value = a.id; where.append(o); }))
+    .catch(() => { /* the whole FarmBox only */ });
+  loadFamilies().then(() => { const keep = fam.value; fam.textContent = ''; familyOptions().forEach(([v, l]) => { const o = el('option', null, l); o.value = v; fam.append(o); }); fam.value = keep || 'Agriculture'; fillSub(); });
+
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const ok = el('button', 'btn btn-primary', 'Add the task');
+  ok.onclick = async () => {
+    if (!name.value.trim()) { toast('Give the task a name', 'bad'); name.focus(); return; }
+    if (!start.value || start.value < today()) { toast('The first day is today or later', 'bad'); start.focus(); return; }
+    const n = Number(every.value);
+    if (repeat && !(Number.isInteger(n) && n >= 1 && n <= 365)) { toast('Every 1 to 365 days', 'bad'); every.focus(); return; }
+    if (repeat && until && (!end.value || end.value < start.value)) { toast('The end day is on or after the first day', 'bad'); end.focus(); return; }
+    busy(ok, true, 'Adding…');
+    try {
+      const r = await rpc('add_hand_task', { p: {
+        farm_id: farm.id, title: name.value.trim(), family: fam.value, category: sub.value || null,
+        area_id: where.value || null, slot: slot.value, minutes: Number(mins.value) || 30, priority: prio.value,
+        worker_id: who.value || null, starts_on: start.value,
+        every_days: repeat ? n : null, ends_on: repeat && until ? end.value : null } });
+      d.close();
+      toast(r?.created ? `Added — ${r.created === 1 ? 'on ' + shortDay(r.first) : r.created + ' days on the board from ' + shortDay(r.first)}` : 'Added', 'ok');
+      await load();
+    } catch (e) { busy(ok, false, 'Add the task'); toast(e.message, 'bad'); }
+  };
+  d.footer.append(cancel, ok);
+}
+
+// this one, or this one and every later one; work started or closed stays
+function deleteHand(t, parent) {
+  const gone = async (fromHere, b, label) => {
+    busy(b, true, 'Deleting…');
+    try {
+      const r = await rpc('delete_hand_task', { p_task: t.id, p_from_here: fromHere });
+      d.close(); parent?.close();
+      toast(`Deleted${r?.deleted > 1 ? ' — ' + r.deleted + ' days' : ''}${r?.kept ? ' · ' + r.kept + ' already started or done stay' : ''}`, 'ok');
+      await load();
+    } catch (e) { busy(b, false, label); toast(e.message, 'bad'); }
+  };
+  const d = drawer('Delete this task', `${t.title} · ${longDate(t.date)}`);
+  const open = t.status !== 'done' && t.status !== 'skipped';
+  if (!t.hand.every_days) {
+    d.body.append(el('p', null, open ? 'It goes from the board and from the phones.' : 'It is closed already: it stays in the history and is not deleted.'));
+  } else {
+    d.body.append(el('p', null, repeatsWord(t.hand) + '.'));
+    d.body.append(el('div', 'hint', 'Only this one: the others stay. This one and every later one: the series stops here. A task somebody has started or closed is never deleted — it stays in the history.'));
+  }
+  const keep = el('button', 'btn', 'Keep it'); keep.onclick = d.close;
+  d.footer.append(keep);
+  if (t.hand.every_days) {
+    const all = el('button', 'btn btn-danger', 'This one and every later one');
+    all.onclick = () => gone(true, all, 'This one and every later one');
+    d.footer.append(all);
+  }
+  if (open) {
+    const one = el('button', 'btn btn-danger', t.hand.every_days ? 'Only this one' : 'Delete');
+    one.onclick = () => gone(false, one, one.textContent);
+    d.footer.append(one);
+  }
 }
 
 // how a chip looks in Assign manually: picked = theirs after Validate, dropping = a name coming off

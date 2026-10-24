@@ -427,6 +427,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
       try {
         const r = await fn('greenhouse-opinion', { farm_id: farm.id, day: k, force: true });
         if (!r?.ok) throw new Error(r?.error || 'no answer');
+        if (r.unchanged) toast('Nothing was recorded or noted since this report: it stands', 'ok');
         await after(k);
       } catch (err) { busy(ask, false, label()); toast('AI report: ' + clean(err), 'bad'); }
     };

@@ -1,0 +1,504 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// One product of the catalogue (console 0.7.284, migration 0263, owner 29 Oct 2026: "add the possibility to add label
+// pictures on each product … ai check the information and propose modifications or validation for each entries with
+// highlighted text in case of modification, user can check each entry and modify manually and validate all
+// modifications … the available stock … the possibility to add/modify stock (with his format and volume and qty)";
+// then "Farm manager, agronomist, admin and office, create a log … made by ai on dd/mm/yyyy, validated by user on,
+// modified by user").
+//
+//   openProduct(farm, p, label, opts) — the drawer of Scouting › Products:
+//     • what the catalogue says (read only)
+//     • Label photos: front, back, leaflet, safety data sheet, pack — added by the Admin, Farm manager, Office and
+//       Agronomist (product-labels bucket, <farm>/<product>/<uuid>.jpg), seen by everyone
+//     • Read the label with AI (edge function label-check) → a review, field by field: Now · Label says (what differs
+//       highlighted) · the value to keep, editable · a tick. A changed safety figure (rate, withholding, re-entry,
+//       applications, interval) is never ticked for you. Validate saves the ticked ones and marks the product checked
+//       against the label; Correct by hand opens the same review without the AI
+//     • In the store: what is held, the lots still there (first in, first out) with their expiry, Add stock (packs ×
+//       size, the pack, the lot, the expiry) and Correct the count; the Stock page shows the same movements
+//     • History: every change, the AI's and the people's, dd/mm/yyyy, with Undo
+//   openChangeLog(farm, onOpen) — the log of the whole catalogue
+// The system proposes, a person validates: nothing the AI read is saved until somebody presses Validate.
+// ═══════════════════════════════════════════════════════════════════════════
+import { rpc, fn, api, URL_BASE } from './api.js';
+import { el, num, drawer, toast, busy, input, field, selectBox, table, loading, confirmDrawer, FARM_TZ } from './ui.js';
+
+const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
+const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
+export const FIELD = {
+  active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Mode-of-action group',
+  targets_text: 'Against', crops: 'Crops on the label', rate_text: 'Rate as written', rate_value: 'Rate, a figure',
+  rate_unit: 'Rate unit', rate_per: 'Rate per', water_l_per_ha: 'Spray volume, L/ha', phi_days: 'Withholding, days',
+  rei_hours: 'Re-entry, hours', max_applications: 'Most applications', interval_days: 'Interval, days', pack_sizes: 'Packs',
+  storage: 'Storage', shelf_life_days: 'Keeps, days', conditions: 'Works when', compatibility: 'Compatibility', ppe: 'Protection',
+};
+const PHOTO_KIND = [['label', 'Front label'], ['back', 'Back label'], ['leaflet', 'Leaflet'], ['sds', 'Safety data sheet'], ['pack', 'Pack'], ['other', 'Other']];
+const PACK = [['bottle', 'Bottle'], ['can', 'Can'], ['drum', 'Drum'], ['bag', 'Bag'], ['sachet', 'Sachet'], ['box', 'Box'], ['bucket', 'Bucket'], ['card', 'Card'], ['other', 'Other']];
+const UNIT_CHOICES = { ml: [['L', 'L'], ['ml', 'ml']], g: [['kg', 'kg'], ['g', 'g']] };
+const ACTION = {
+  ai_read: 'Read by the AI', accepted: 'Validated as the AI read it', modified: 'Modified by hand', rejected: 'Kept, the AI\'s reading refused',
+  edited: 'Edited', checked: 'Checked against the label', unchecked: 'No longer checked', undone: 'Undone',
+  photo_added: 'Label photo added', photo_removed: 'Label photo removed',
+};
+
+// dd/mm/yyyy hh:mm, the farm's time (owner: "made by ai on dd/mm/yyyy")
+const when = iso => new Date(iso).toLocaleString('en-GB', { timeZone: FARM_TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// a date ('2026-10-29') as it is; a moment (a timestamp) on the farm's own day
+const day = s => !s ? '—' : String(s).length <= 10
+  ? new Date(String(s) + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  : new Date(s).toLocaleDateString('en-GB', { timeZone: FARM_TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
+const daysTo = s => Math.round((new Date(String(s).slice(0, 10) + 'T12:00:00') - new Date()) / 864e5);
+const show = v => v == null || v === '' || (Array.isArray(v) && !v.length) ? '—' : Array.isArray(v) ? v.join(', ') : String(v);
+const qtyText = (q, unit) => q == null ? '—' : unit === 'ml' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} kg`
+  : `${num(q, Math.abs(q) < 10 ? 2 : Math.abs(q) < 100 ? 1 : 0)} ${unit || ''}`.trim();
+const n2 = v => num(v, Number(v) % 1 ? 2 : 0);
+const errText = e => String(e?.message || e).replace(/^\d+ /, '');
+
+// an expiry as a pill: red when past or within 30 days, amber within 90
+export function expiryPill(s) {
+  if (!s) return null;
+  const d = daysTo(s);
+  const pill = el('span', 'pill ' + (d < 30 ? 'bad' : d < 90 ? 'warn' : 'ok'), d < 0 ? `expired ${day(s)}` : `expires ${day(s)}`);
+  pill.title = d < 0 ? 'Past its expiry: do not use it.' : `${d} days left`;
+  return pill;
+}
+
+// the words of the new value that the old one does not have, marked (the owner's "highlighted text")
+function marked(oldV, newV) {
+  const w = el('span', 'lb-new');
+  const now = show(newV);
+  if (now === '—') { w.textContent = '—'; return w; }
+  const had = new Set(show(oldV).toLowerCase().split(/[\s,;]+/).filter(Boolean));
+  now.split(/(\s+|,\s*)/).forEach(t => {
+    if (!t) return;
+    if (/^\s+$|^,\s*$/.test(t) || had.has(t.toLowerCase().replace(/[.;:]$/, ''))) w.append(document.createTextNode(t));
+    else w.append(el('mark', null, t));
+  });
+  return w;
+}
+
+// ── photos: shrunk on this computer (small print needs more than a scouting photo: 2000 px), one by one ──
+async function shrink(file) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close?.();
+  return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88));
+}
+const encPath = path => path.split('/').map(encodeURIComponent).join('/');
+const signed = new Map();
+async function photoUrl(path) {
+  if (signed.has(path)) return signed.get(path);
+  try {
+    const r = await api('/storage/v1/object/sign/product-labels/' + encPath(path), { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
+    const u = r?.signedURL ? URL_BASE + '/storage/v1' + r.signedURL : null;
+    if (u) signed.set(path, u);
+    return u;
+  } catch { return null; }
+}
+
+export function openProduct(farm, p, label, opts = {}) {
+  let changed = false;
+  const d = drawer(p.name, `${p.supplier} · ${KIND[p.kind] || p.kind}`, { onClose: () => { if (changed) opts.onChanged?.(); } });
+  d.box.classList.add('tr-drawer');
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close;
+  d.footer.append(close);
+  let det = null;
+  const mount = el('div');
+  d.body.append(mount);
+  mount.append(loading('Reading the product…'));
+
+  const load = async () => {
+    try { det = await rpc('product_detail', { p_farm: farm.id, p_product: p.id }); paint(); }
+    catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', errText(e))); }
+  };
+  // every write answers with the whole product again
+  const took = r => { det = r; changed = true; Object.assign(p, r.product); paint(); };
+
+  function paint() {
+    const pr = det.product;
+    mount.textContent = '';
+    mount.append(factsBlock(pr, label));
+    mount.append(photosBlock());
+    if (det.check) mount.append(reviewBlock(det.check));
+    if (!pr.perishable && pr.item_id) mount.append(stockBlock(pr));
+    else if (pr.perishable) mount.append(el('div', 'note', 'A living product: ordered for each application, never stocked.'));
+    mount.append(historyBlock());
+  }
+
+  // ── what the catalogue says ──
+  function factsBlock(pr, label) {
+    const w = el('div');
+    const facts = el('dl', 'tr-facts');
+    const fact = (k, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) return; facts.append(el('dt', null, k), el('dd', null, Array.isArray(v) ? v.join(', ') : String(v))); };
+    fact('Active', pr.active_ingredient); fact('Formulation', pr.formulation); fact('Mode-of-action group', pr.moa_group);
+    fact('Registration (Act 36 of 1947)', pr.reg_no);
+    fact('Against', (pr.targets || []).map(label)); fact('As the source names them', pr.targets_text);
+    fact('Crops on the label', pr.crops);
+    fact('Rate', pr.rate_text);
+    fact('Worked out as', pr.rate_value != null && pr.rate_per ? `${pr.rate_value} ${pr.rate_unit || ''} per ${pr.rate_per}` : 'not a figure the console can multiply — measure from the label');
+    fact('Spray volume', pr.water_l_per_ha != null ? pr.water_l_per_ha + ' L/ha' : null);
+    fact('Withholding period', pr.phi_days != null ? pr.phi_days + ' days (the longest of its crops)' : 'not found — read the label');
+    fact('Re-entry', pr.rei_hours != null ? pr.rei_hours + ' h' : null);
+    fact('At most', pr.max_applications != null ? pr.max_applications + ' applications' : null);
+    fact('Usual interval', pr.interval_days != null ? pr.interval_days + ' days' : null);
+    fact('Packs', pr.pack_sizes); fact('Storage', pr.storage); fact('Keeps', pr.shelf_life_days != null ? pr.shelf_life_days + ' days' : null);
+    fact('Works when', pr.conditions); fact('Compatibility', pr.compatibility); fact('Protection', pr.ppe); fact('Notes', pr.notes);
+    fact('Used by', p.programs ? `${p.programs} program${p.programs === 1 ? '' : 's'} of the library` : null);
+    w.append(facts);
+    if ((pr.per_crop || []).length) {
+      w.append(el('div', 'pd-hlabel', 'Crop by crop, as the label says'));
+      w.append(table([{ key: 'crop', label: 'Crop' }, { key: 'targets_text', label: 'Against' }, { key: 'rate_text', label: 'Rate' },
+        { key: 'phi_days', label: 'Withholding', align: 'right', fmt: v => v == null ? '?' : v + ' d' }], pr.per_crop));
+    }
+    const st = el('div', 'note ' + (pr.verified_at ? 'ok' : 'warn'), pr.verified_at
+      ? `Checked against the label by ${pr.verified_name || 'the franchisor'} on ${day(pr.verified_at)}.`
+      : `Read from ${CONF[pr.confidence] || pr.confidence}; nobody has checked it against the label yet. The label on the pack is the law — this page is a copy.`);
+    w.append(st);
+    // what this unit and its sisters corrected is theirs: the other franchise farms keep the catalogue's figures (0263)
+    const here = [opts.farmName || 'this unit', ...(det.sisters || [])].join(', ');
+    if ((pr.corrected || []).length) w.append(el('div', 'hint', `Corrected against the label for ${here}: ${pr.corrected.map(f => FIELD[f] || f).join(', ')}. The other farms of the franchise keep the catalogue's figures.`));
+    else if (det.may_label) w.append(el('div', 'hint', `What you validate here holds for ${here} — the other farms of the franchise keep the catalogue's figures.`));
+    const links = el('div', 'tr-links');
+    [pr.label_url, ...(pr.source_urls || [])].filter((u, i, a) => u && a.indexOf(u) === i).forEach((u, i) => {
+      const a = el('a', null, i === 0 && pr.label_url ? 'Label' : (() => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return 'source'; } })());
+      a.href = u; a.target = '_blank'; a.rel = 'noopener'; links.append(a);
+    });
+    if (links.childElementCount) w.append(el('div', 'pd-hlabel', 'Read from'), links);
+    return w;
+  }
+
+  // ── the label photos ──
+  function photosBlock() {
+    const w = el('section', 'lb-sec');
+    const head = el('div', 'lb-head');
+    head.append(el('div', 'pd-hlabel', `Label photos${det.photos.length ? ' · ' + det.photos.length : ''}`), el('span', 'spacer'));
+    w.append(head);
+    const strip = el('div', 'lb-photos');
+    det.photos.forEach(ph => {
+      const fig = el('figure', 'lb-photo');
+      const img = el('img'); img.alt = (PHOTO_KIND.find(k => k[0] === ph.kind) || [, ph.kind])[1]; img.loading = 'lazy';
+      const a = el('a'); a.target = '_blank'; a.rel = 'noopener'; a.append(img);
+      photoUrl(ph.path).then(u => { if (u) { img.src = u; a.href = u; } });
+      const cap = el('figcaption', null, `${img.alt} · ${ph.by || '?'} · ${day(ph.at)}`);
+      fig.append(a, cap);
+      if (ph.may_remove) {
+        const x = el('button', 'btn btn-sm btn-ghost lb-x', '✕'); x.title = 'Remove this photo';
+        x.onclick = async () => {
+          if (!await confirmDrawer('Remove this photo?', 'It goes from this product for your unit and its sister units. The log keeps a line that it was removed.', 'Remove', true)) return;
+          try {
+            const r = await rpc('remove_product_photo', { p_farm: farm.id, p_photo: ph.id });
+            api('/storage/v1/object/product-labels/' + encPath(r.removed_path), { method: 'DELETE' }).catch(() => {});
+            took(r);
+          } catch (e) { toast(errText(e), 'bad'); }
+        };
+        fig.append(x);
+      }
+      strip.append(fig);
+    });
+    if (!det.photos.length) strip.append(el('div', 'hint', det.may_label
+      ? 'No photo yet. Add the front and the back of the label — the small print is what the AI reads.'
+      : 'No photo of this label yet.'));
+    w.append(strip);
+
+    if (det.may_label) {
+      const acts = el('div', 'row lb-acts');
+      const kind = selectBox(PHOTO_KIND, det.photos.some(x => x.kind === 'label') ? 'back' : 'label');
+      const pick = input({ type: 'file', accept: 'image/*', multiple: true }); pick.hidden = true;
+      const add = el('button', 'btn btn-sm', 'Add label photos');
+      add.onclick = () => pick.click();
+      pick.onchange = async () => {
+        const files = [...pick.files]; pick.value = '';
+        if (!files.length) return;
+        let r = null;
+        try {
+          for (let i = 0; i < files.length; i++) {
+            busy(add, true, `Sending ${i + 1} of ${files.length}…`);
+            const blob = await shrink(files[i]);
+            const path = `${farm.id}/${p.id}/${crypto.randomUUID()}.jpg`;
+            await api('/storage/v1/object/product-labels/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+            r = await rpc('add_product_photo', { p_farm: farm.id, p_product: p.id, p_path: path, p_kind: kind.value });
+          }
+          busy(add, false); toast(files.length === 1 ? 'Photo added' : `${files.length} photos added`, 'ok');
+        } catch (e) { busy(add, false); toast(errText(e), 'bad'); }
+        if (r) took(r);
+      };
+      const read = el('button', 'btn btn-sm btn-primary', det.check ? 'Read the label again' : 'Read the label with AI');
+      read.disabled = !det.photos.length;
+      read.title = det.photos.length ? 'The AI reads every field from the photos and proposes; nothing is saved until you validate.' : 'Add a photo of the label first.';
+      read.onclick = async () => {
+        busy(read, true, 'The AI is reading the label… (up to a minute)');
+        try {
+          const r = await fn('label-check', { farm_id: farm.id, product_id: p.id });
+          if (!r?.ok) throw new Error(r?.error || 'the AI gave no answer');
+          changed = true; await load();
+          const n = (r.check.fields || []).filter(f => f.differs).length;
+          toast(n ? `${n} field${n === 1 ? '' : 's'} differ from the label — review them below` : 'The label agrees with the catalogue — validate it below', 'ok');
+          mount.querySelector('.lb-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) { busy(read, false); toast(errText(e), 'bad'); }
+      };
+      const hand = el('button', 'btn btn-sm btn-ghost', 'Correct by hand');
+      hand.onclick = () => { const old = mount.querySelector('.lb-review'); old?.remove(); const b = reviewBlock(null); mount.insertBefore(b, mount.querySelector('.lb-stock, .lb-history')); b.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+      // with a reading open, its review already lets every field be typed: no second form beside it
+      acts.append(field('Photo of', kind), add, pick, el('span', 'spacer'));
+      if (!det.check) acts.append(hand);
+      acts.append(read);
+      w.append(acts);
+    }
+    return w;
+  }
+
+  // ── the review: the AI's reading (check) or the product by hand (check null) ──
+  function reviewBlock(check) {
+    const w = el('section', 'lb-sec lb-review');
+    const safety = new Set(det.safety);
+    const cur = f => det.product[f];
+    const ai = new Map((check?.fields || []).map(x => [x.field, x]));
+    w.append(el('div', 'pd-hlabel', check ? `The AI read the label · ${when(check.at)} · asked by ${check.by || '?'}` : 'Correct by hand, against the label'));
+    if (check?.summary) w.append(el('div', 'note', check.summary));
+    if (!det.may_label) { w.append(el('div', 'hint', 'Waiting for the Admin, the Farm manager, the Office or the Agronomist to validate it.')); }
+    const rows = [];
+    const grid = el('div', 'lb-grid');
+    grid.append(el('div', 'lb-gh', 'Field'), el('div', 'lb-gh', 'Now'), el('div', 'lb-gh', check ? 'Label says' : ''), el('div', 'lb-gh', 'Keep'), el('div', 'lb-gh', ''));
+    det.fields.forEach(f => {
+      const a = ai.get(f);
+      if (check && !a) return;
+      const differs = check ? !!a.differs : false;
+      const readable = check ? !!a.readable : true;
+      const start = check && readable ? a.value : cur(f);
+      let box;
+      if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
+      else if (f === 'rate_per') box = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], start ?? '');
+      else box = input({ value: Array.isArray(start) ? start.join(', ') : start ?? '' });
+      box.disabled = !det.may_label;
+      const tick = input({ type: 'checkbox' });
+      // ticked for you: a changed figure that is not a safety one; a safety one waits for your own click
+      tick.checked = check ? differs && !safety.has(f) : false;
+      tick.disabled = !det.may_label;
+      const row = { f, box, tick, a, differs, readable, typed: false };
+      box.oninput = box.onchange = () => { row.typed = true; tick.checked = true; paintState(); };
+      tick.onchange = () => paintState();
+      const name = el('div', 'lb-f', FIELD[f] || f);
+      if (safety.has(f)) { const s = el('span', 'pill warn lb-safe', 'safety'); s.title = 'A mistake here costs a crop or a person: never ticked for you.'; name.append(' ', s); }
+      const now = el('div', 'lb-now', show(cur(f)));
+      const says = el('div', 'lb-says');
+      if (check) {
+        if (!readable) says.append(el('span', 'hint', 'not on the photos'));
+        else if (!differs) says.append(el('span', 'pill ok', 'matches'));
+        else says.append(marked(cur(f), a.value));
+        if (readable && a.quote) { const q = el('div', 'hint lb-quote', '“' + a.quote + '”'); says.append(q); }
+      }
+      const state = el('div', 'lb-state');
+      row.state = state;
+      const keep = el('div', 'lb-keep'); keep.append(box);
+      const t = el('label', 'lb-tick'); t.append(tick);
+      grid.append(name, now, says, keep, t);
+      row.cells = [name, now, says, keep, t];
+      rows.push(row);
+    });
+    w.append(grid);
+    const paintState = () => rows.forEach(r => r.cells.forEach(c => {
+      c.classList.toggle('lb-diff', r.differs && !r.tick.checked);
+      c.classList.toggle('lb-on', r.tick.checked);
+      c.classList.toggle('lb-dim', !!r.a && !r.readable);
+    }));
+    paintState();
+
+    if (det.may_label) {
+      const note = input({ placeholder: 'optional' });
+      const valueOf = r => { const v = r.box.value.trim(); return ['crops', 'pack_sizes'].includes(r.f) ? v.split(',').map(s => s.trim()).filter(Boolean) : v; };
+      const send = async (btn, all) => {
+        // Accept all: asked first when it would take a safety figure; a no leaves every tick as it was
+        if (all) {
+          const safe = rows.filter(r => r.differs && r.readable && !r.tick.checked && safety.has(r.f));
+          if (safe.length && !await confirmDrawer('Accept the safety figures too?',
+            `${safe.map(r => FIELD[r.f]).join(', ')} — read them on the label yourself before you accept.`, 'I read them — accept all')) return;
+          rows.forEach(r => { if (r.differs && r.readable) r.tick.checked = true; });
+          paintState();
+        }
+        const on = rows.filter(r => r.tick.checked);
+        busy(btn, true, 'Saving…');
+        try {
+          const r = await rpc('apply_label_check', { p_farm: farm.id, p_product: p.id, p: {
+            check_id: check?.id || null,
+            changes: on.map(r => ({ field: r.f, value: valueOf(r) })),
+            rejected: rows.filter(r => r.differs && !r.tick.checked).map(r => r.f),
+            note: note.value || null } });
+          toast(on.length ? `Saved ${on.length} field${on.length === 1 ? '' : 's'} — checked against the label` : 'Checked against the label', 'ok');
+          took(r);
+        } catch (e) { busy(btn, false); toast(errText(e), 'bad'); }
+      };
+      const acts = el('div', 'row lb-acts');
+      const val = el('button', 'btn btn-primary', check ? 'Validate the ticked fields' : 'Save — I checked the label');
+      val.onclick = () => send(val, false);
+      acts.append(field('Note for the log', note), el('span', 'spacer'));
+      if (check) {
+        const drop = el('button', 'btn btn-ghost', 'Dismiss this reading');
+        drop.onclick = async () => { try { took(await rpc('dismiss_label_check', { p_farm: farm.id, p_check: check.id })); } catch (e) { toast(errText(e), 'bad'); } };
+        const all = el('button', 'btn', 'Accept all');
+        all.title = 'Every readable field as the AI read it';
+        all.onclick = () => send(all, true);
+        acts.append(drop, all);
+      } else {
+        const x = el('button', 'btn btn-ghost', 'Cancel'); x.onclick = () => w.remove(); acts.append(x);
+      }
+      acts.append(val);
+      w.append(el('div', 'hint', 'Ticked: the value in “Keep” is saved. Unticked: the product keeps what it has. Saving marks the product as checked against the label, with your name and the day.'), acts);
+    }
+    return w;
+  }
+
+  // ── the store ──
+  function stockBlock(pr) {
+    const w = el('section', 'lb-sec lb-stock');
+    const unit = pr.unit;
+    const head = el('div', 'lb-head');
+    head.append(el('div', 'pd-hlabel', 'In the store'), el('b', 'lb-oh', qtyText(Number(pr.on_hand || 0), unit)));
+    const soon = (det.lots || []).map(l => l.expires_on).filter(Boolean).sort()[0];
+    if (soon) head.append(expiryPill(soon));
+    w.append(head);
+    if ((det.lots || []).length) {
+      w.append(table([
+        { key: 'at', label: 'Received', fmt: v => day(v) },
+        { key: 'packs', label: 'Pack', fmt: (v, r) => v ? `${n2(v)} × ${n2(r.pack_size)} ${r.pack_unit || ''}${r.pack_format ? ' ' + r.pack_format : ''}` : '—' },
+        { key: 'lot', label: 'Lot' },
+        { key: 'expires_on', label: 'Expiry', fmt: v => v ? expiryPill(v) : '—' },
+        { key: 'left', label: 'Still here', align: 'right', fmt: v => qtyText(Number(v), unit) },
+      ], det.lots));
+      w.append(el('div', 'hint', 'What was received last is counted as what is left (first in, first out).'));
+    }
+    if (det.may_label) {
+      const f = el('div', 'tr-form lb-stockform');
+      const packs = input({ type: 'number', min: 1, step: 'any', value: 1 });
+      const choices = UNIT_CHOICES[unit] || [[unit, unit]];
+      const first = (pr.pack_sizes || [])[0] || '';
+      const m = /([\d.,]+)\s*(ml|l|g|kg)\b/i.exec(first);
+      const size = input({ type: 'number', min: 0, step: 'any', value: m ? m[1].replace(',', '.') : '' });
+      const pu = selectBox(choices, m ? (choices.find(c => c[0].toLowerCase() === m[2].toLowerCase())?.[0] ?? choices[0][0]) : choices[0][0]);
+      const fmt = selectBox([['', '—'], ...PACK], 'bottle');
+      const lot = input({ placeholder: 'as printed' });
+      const exp = input({ type: 'date' });
+      const note = input({ placeholder: 'invoice, supplier…' });
+      f.append(field('Packs', packs), field('One pack holds', size, (pr.pack_sizes || []).length ? 'Label: ' + pr.pack_sizes.join(', ') : null), field('Unit', pu),
+        field('Pack', fmt), field('Lot', lot), field('Expiry', exp), field('Note', note));
+      const add = el('button', 'btn btn-primary btn-sm', 'Add to stock');
+      add.onclick = async () => {
+        busy(add, true, 'Adding…');
+        try {
+          took(await rpc('add_product_stock', { p_farm: farm.id, p_product: p.id, p: { packs: packs.value, pack_size: size.value, pack_unit: pu.value,
+            pack_format: fmt.value, lot: lot.value, expires_on: exp.value || null, note: note.value } }));
+          toast('Added to the stock', 'ok');
+        } catch (e) { busy(add, false); toast(errText(e), 'bad'); }
+      };
+      const cnt = input({ type: 'number', min: 0, step: 'any', placeholder: unit });
+      const why = input({ placeholder: 'why (optional)' });
+      const fix = el('button', 'btn btn-sm', 'Correct the count');
+      fix.title = 'After counting the store: what is really there, in ' + unit;
+      fix.onclick = async () => {
+        if (cnt.value === '') { toast('What does the store hold, in ' + unit + '?', 'bad'); return; }
+        busy(fix, true, 'Saving…');
+        try { took(await rpc('count_product_stock', { p_farm: farm.id, p_product: p.id, p_on_hand: Number(cnt.value), p_note: why.value || null })); toast('Count corrected', 'ok'); }
+        catch (e) { busy(fix, false); toast(errText(e), 'bad'); }
+      };
+      const total = el('div', 'hint');
+      const sum = () => {
+        const k = pu.value === 'L' || pu.value === 'kg' ? 1000 : 1;
+        const q = Number(packs.value) * Number(size.value) * k;
+        total.textContent = q > 0 ? `= ${qtyText(q, unit)} into the store` : '';
+      };
+      [packs, size, pu].forEach(x => { x.oninput = x.onchange = sum; }); sum();
+      const a1 = el('div', 'row lb-acts'); a1.append(total, el('span', 'spacer'), add);
+      const a2 = el('div', 'row lb-acts'); a2.append(field('Counted, ' + unit, cnt), field('Why', why), el('span', 'spacer'), fix);
+      w.append(el('div', 'pd-hlabel', 'Add stock'), f, a1, el('div', 'pd-hlabel', 'After a count'), a2);
+      w.append(el('div', 'hint', 'Office › Stock shows the same movements: one line for this product, whatever the pack.'));
+    }
+    return w;
+  }
+
+  // ── the history ──
+  function historyBlock() {
+    const w = el('section', 'lb-sec lb-history');
+    w.append(el('div', 'pd-hlabel', 'History'));
+    const unit = det.product.unit;
+    if (!det.history.length) { w.append(el('div', 'hint', 'Nothing changed on this product yet.')); return w; }
+    const list = el('ol', 'lb-log');
+    det.history.slice(0, 60).forEach(h => list.append(logLine(h, unit, async btn => {
+      if (!await confirmDrawer('Undo this change?', `${FIELD[h.field] || h.field} goes back to ${show(h.old)}. The product stays checked against the label, now in your name.`, 'Undo')) return;
+      busy(btn, true, 'Undoing…');
+      try { took(await rpc('undo_product_change', { p_farm: farm.id, p_change: h.id })); toast('Undone', 'ok'); }
+      catch (e) { busy(btn, false); toast(errText(e), 'bad'); }
+    })));
+    w.append(list);
+    if (det.history.length > 60) w.append(el('div', 'hint', `The 60 latest of ${det.history.length}.`));
+    return w;
+  }
+
+  load();
+  return d;
+}
+
+// one line of a log: dd/mm/yyyy hh:mm · what · who
+function logLine(h, unit, onUndo) {
+  const li = el('li', 'lb-line' + (h.undone_at ? ' lb-undone' : ''));
+  li.append(el('span', 'lb-when', when(h.at)));
+  const what = el('span', 'lb-what');
+  if (h.kind === 'stock') {
+    const q = Number(h.qty);
+    const why = { receipt: 'Received', consumption: 'Used', adjustment: 'Count corrected', waste: 'Thrown away', opening: 'Opening stock' }[h.reason] || h.reason;
+    what.append(el('b', null, `${why} ${q > 0 ? '+' : ''}${qtyText(q, unit)}`));
+    const bits = [h.packs ? `${n2(h.packs)} × ${n2(h.pack_size)} ${h.pack_unit || ''}${h.pack_format ? ' ' + h.pack_format : ''}` : null,
+      h.lot ? 'lot ' + h.lot : null, h.expires_on ? 'expires ' + day(h.expires_on) : null, h.note, h.farm ? 'at ' + h.farm : null].filter(Boolean);
+    if (bits.length) what.append(' · ' + bits.join(' · '));
+  } else {
+    const name = h.field ? (FIELD[h.field] || h.field) : null;
+    what.append(el('b', null, (ACTION[h.action] || h.action) + (name ? ': ' + name : '')));
+    if (h.action === 'ai_read' && h.field) what.append(` — ${show(h.old)} → `, el('mark', null, show(h.ai)));
+    if (h.action === 'ai_read' && !h.field) what.append(' the label photos');
+    else if (['accepted', 'modified', 'edited', 'undone'].includes(h.action) && h.field) what.append(` — ${show(h.old)} → ${show(h.new)}`);
+    if (h.action === 'modified' && h.ai != null) what.append(el('span', 'hint', ` (the AI had read ${show(h.ai)})`));
+    if (h.action === 'rejected') what.append(` — kept ${show(h.old)}, the AI read ${show(h.ai)}`);
+    if (h.model) what.append(el('span', 'hint', ` · ${h.model}`));
+    if (h.note) what.append(el('span', 'hint', ` · “${h.note}”`));
+    if (h.undone_at) what.append(el('span', 'hint', ` · undone by ${h.undone_by || '?'} on ${when(h.undone_at)}`));
+    if (h.farm) what.append(el('span', 'hint', ` · at ${h.farm}`));
+    if (!h.farm && h.action === 'edited') what.append(el('span', 'hint', ' · in the catalogue, for every farm'));
+  }
+  li.append(what, el('span', 'lb-who', h.action === 'ai_read' ? `AI · asked by ${h.by || '?'}` : h.by || ''));
+  if (h.may_undo && onUndo) { const u = el('button', 'btn btn-sm btn-ghost', 'Undo'); u.onclick = () => onUndo(u); li.append(u); }
+  return li;
+}
+
+// ── the whole catalogue's log ──
+export async function openChangeLog(farm, onOpen) {
+  const d = drawer('Change log of the products', 'Every reading of the AI, every validation and change, with who and when');
+  d.box.classList.add('tr-drawer');
+  const x = el('button', 'btn', 'Close'); x.onclick = d.close; d.footer.append(x);
+  d.body.append(loading('Reading the log…'));
+  let rows;
+  try { rows = await rpc('product_changes', { p_farm: farm.id, p_limit: 1000 }); }
+  catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', errText(e))); return; }
+  d.body.textContent = '';
+  const kinds = selectBox([['', 'Everything'], ['ai', 'Read by the AI'], ['people', 'Validated or changed by a person'], ['photo', 'Photos']], '');
+  const who = selectBox([['', 'Anybody'], ...[...new Set(rows.map(r => r.by).filter(Boolean))].sort().map(n => [n, n])], '');
+  const q = input({ type: 'search', placeholder: 'product' });
+  const bar = el('div', 'tr-filters');
+  [['Show', kinds], ['Who', who], ['Search', q]].forEach(([l, n]) => { const f = el('label', 'tr-filter'); f.append(el('span', 'hint', l), n); bar.append(f); });
+  const list = el('ol', 'lb-log');
+  const draw = () => {
+    const s = q.value.trim().toLowerCase();
+    const shown = rows.filter(r => (!who.value || r.by === who.value) && (!s || (r.product + ' ' + r.supplier).toLowerCase().includes(s))
+      && (!kinds.value || (kinds.value === 'ai' ? r.action === 'ai_read' : kinds.value === 'photo' ? r.action.startsWith('photo') : r.action !== 'ai_read' && !r.action.startsWith('photo'))));
+    list.textContent = '';
+    shown.forEach(r => {
+      const li = logLine(r, null, null);
+      const pn = el('a', 'lb-prod', r.product); pn.href = '#';
+      pn.onclick = e => { e.preventDefault(); d.close(); onOpen?.(r.product_id); };
+      li.insertBefore(pn, li.children[1]);
+      list.append(li);
+    });
+    if (!shown.length) list.append(el('li', 'hint', 'Nothing in the log for this choice.'));
+  };
+  kinds.onchange = who.onchange = draw; q.oninput = draw;
+  d.body.append(bar, list);
+  draw();
+}

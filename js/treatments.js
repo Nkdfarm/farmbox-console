@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer } from './ui.js';
+import { openProduct, openChangeLog, expiryPill } from './product.js';
 
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -25,7 +26,6 @@ const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', mon
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const METHOD = { biological: 'Biological', chemical: 'Chemical', integrated: 'Integrated', cultural: 'Cultural', mechanical: 'Mechanical' };
 const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
-const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
 const CATEGORY = { leafy: 'Leafy', mixed_leafy: 'Mixed leafy', herbs: 'Herbs', microgreens: 'Microgreens', fruiting_vines: 'Fruiting vines', fruiting_bush: 'Fruiting bush' };
 // one colour and one letter per product, in the order the database gives (the same product keeps its colour)
 const hueOf = i => Math.round((28 + i * 137.5) % 360);
@@ -436,9 +436,14 @@ export async function renderIpmProducts(container, farm) {
 function paintProducts() {
   const lib = cLib; cMount.textContent = '';
   const checked = lib.products.filter(p => p.verified_at).length;
+  // the catalogue's log (0.7.284): every reading of the AI, every validation and change
+  const logBtn = el('button', 'btn btn-sm', 'Change log');
+  logBtn.onclick = () => openChangeLog(cFarm, id => { const p = lib.products.find(x => x.id === id); if (p) openOne(p); });
   cMount.append(pageHead(null, `${lib.products.length} crop-protection products of ${new Set(lib.products.map(p => p.supplier)).size} suppliers, from their labels; `
-    + `${checked} checked by a person. Each is also a stock item on Office › Stock.`));
+    + `${checked} checked by a person. Each is also a stock item on Office › Stock. Open one to add its label photos, have the AI read them and add stock.`, logBtn));
   const label = code => lib.catalog.find(k => k.code === code)?.label || code;
+  // the product's drawer (js/product.js); what it changed shows in the list when it closes
+  const openOne = p => openProduct(cFarm, p, label, { farmName: cFarm.name, onChanged: () => { libs.delete(cFarm.id); if (cMount?.isConnected) renderIpmProducts(cMount, cFarm); } });
   const sSel = selectBox([['', 'Every supplier'], ...[...new Set(lib.products.map(p => p.supplier))].sort().map(s => [s, s])], cf.supplier);
   const kSel = selectBox([['', 'Any kind'], ...Object.entries(KIND)], cf.kind);
   const tSel = selectBox([['', 'Any target'], ...[...new Set(lib.products.flatMap(p => p.targets || []))].map(c => [c, label(c)]).sort((a, b) => a[1].localeCompare(b[1]))], cf.target);
@@ -461,70 +466,21 @@ function paintProducts() {
       { key: 'targets', label: 'Against', fmt: v => (v || []).map(label).join(', ') },
       { key: 'rate_text', label: 'Label rate' },
       { key: 'phi_days', label: 'Withholding', align: 'right', fmt: v => v == null ? '?' : v + ' d' },
-      { key: 'on_hand', label: 'In the store', align: 'right', fmt: (v, r) => r.perishable ? 'living' : Number(v) ? qtyText(Number(v), r.unit) : '—' },
-      { key: 'verified_at', label: 'Label', fmt: (v, r) => el('span', 'pill ' + (v ? 'ok' : 'warn'), v ? 'checked' : 'to verify') },
-    ], rows, { onRow: p => openProduct(p, label), empty: 'No product matches.' }));
+      { key: 'on_hand', label: 'In the store', align: 'right', fmt: (v, r) => {
+          if (r.perishable) return 'living';
+          if (!Number(v)) return '—';
+          const w = el('span', 'tr-store', qtyText(Number(v), r.unit));
+          // an expiry within 90 days, beside the quantity (0.7.284)
+          if (r.expires_on && (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 < 90) w.append(' ', expiryPill(r.expires_on));
+          return w; } },
+      { key: 'verified_at', label: 'Label', fmt: (v, r) => {
+          const w = el('span', 'tr-label');
+          w.append(el('span', 'pill ' + (v ? 'ok' : 'warn'), v ? 'checked' : 'to verify'));
+          if (r.open_check) { const a = el('span', 'pill info', 'AI reading to review'); a.title = 'The AI read the label; a person has not validated it yet.'; w.append(' ', a); }
+          if (Number(r.photos)) { const c = el('span', 'hint', ` · ${r.photos} photo${r.photos === 1 ? '' : 's'}`); w.append(c); }
+          return w; } },
+    ], rows, { onRow: openOne, empty: 'No product matches.' }));
   };
   cMount.append(filterBar([['Supplier', sSel], ['Kind', kSel], ['Against', tSel], ['Label', vSel], ['Search', q]], draw), list);
   draw();
-}
-
-function openProduct(p, label) {
-  const d = drawer(p.name, `${p.supplier} · ${KIND[p.kind] || p.kind}`);
-  d.box.classList.add('tr-drawer');
-  const facts = el('dl', 'tr-facts');
-  const fact = (k, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) return; facts.append(el('dt', null, k), el('dd', null, Array.isArray(v) ? v.join(', ') : String(v))); };
-  fact('Active', p.active_ingredient); fact('Formulation', p.formulation); fact('Mode-of-action group', p.moa_group);
-  fact('Registration (Act 36 of 1947)', p.reg_no);
-  fact('Against', (p.targets || []).map(label)); fact('As the source names them', p.targets_text);
-  fact('Crops on the label', p.crops);
-  fact('Rate', p.rate_text);
-  fact('Worked out as', p.rate_value != null && p.rate_per ? `${p.rate_value} ${p.rate_unit || ''} per ${p.rate_per}` : 'not a figure the console can multiply — measure from the label');
-  fact('Spray volume', p.water_l_per_ha != null ? p.water_l_per_ha + ' L/ha' : null);
-  fact('Withholding period', p.phi_days != null ? p.phi_days + ' days (the longest of its crops)' : 'not found — read the label');
-  fact('Re-entry', p.rei_hours != null ? p.rei_hours + ' h' : null);
-  fact('At most', p.max_applications != null ? p.max_applications + ' applications' : null);
-  fact('Usual interval', p.interval_days != null ? p.interval_days + ' days' : null);
-  fact('Packs', p.pack_sizes); fact('Storage', p.storage); fact('Keeps', p.shelf_life_days != null ? p.shelf_life_days + ' days' : null);
-  fact('Works when', p.conditions); fact('Compatibility', p.compatibility); fact('Protection', p.ppe); fact('Notes', p.notes);
-  fact('In the store', p.perishable ? 'a living product: ordered for each application, never stocked' : p.on_hand != null ? qtyText(Number(p.on_hand), p.unit) : null);
-  fact('Used by', p.programs ? `${p.programs} program${p.programs === 1 ? '' : 's'} of the library` : null);
-  d.body.append(facts);
-  if ((p.per_crop || []).length) {
-    d.body.append(el('div', 'pd-hlabel', 'Crop by crop, as the label says'));
-    d.body.append(table([{ key: 'crop', label: 'Crop' }, { key: 'targets_text', label: 'Against' }, { key: 'rate_text', label: 'Rate' },
-      { key: 'phi_days', label: 'Withholding', align: 'right', fmt: v => v == null ? '?' : v + ' d' }], p.per_crop));
-  }
-  d.body.append(el('div', 'note ' + (p.verified_at ? 'ok' : 'warn'), p.verified_at
-    ? `Checked against the label by ${p.verified_name || 'the franchisor'} on ${shortDay(p.verified_at)}.`
-    : `Read from ${CONF[p.confidence] || p.confidence}; nobody has checked it against the label yet. The label on the pack is the law — this page is a copy.`));
-  const links = el('div', 'tr-links');
-  [p.label_url, ...(p.source_urls || [])].filter((u, i, a) => u && a.indexOf(u) === i).forEach((u, i) => {
-    const a = el('a', null, i === 0 && p.label_url ? 'Label' : (() => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return 'source'; } })());
-    a.href = u; a.target = '_blank'; a.rel = 'noopener'; links.append(a);
-  });
-  if (links.childElementCount) d.body.append(el('div', 'pd-hlabel', 'Read from'), links);
-  if (cLib?.may_edit) {
-    // the franchisor corrects the figures the console computes with, and says the label was checked
-    const f = el('div', 'tr-form');
-    const rt = input({ value: p.rate_text || '' }), rv = input({ type: 'number', step: 'any', value: p.rate_value ?? '' });
-    const ru = input({ value: p.rate_unit || '', placeholder: 'ml · g · individuals' });
-    const rp = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], p.rate_per || '');
-    const phi = input({ type: 'number', min: 0, value: p.phi_days ?? '' }), rei = input({ type: 'number', min: 0, step: 'any', value: p.rei_hours ?? '' });
-    const mx = input({ type: 'number', min: 1, value: p.max_applications ?? '' }), wat = input({ type: 'number', min: 0, value: p.water_l_per_ha ?? '' });
-    f.append(field('Rate as written', rt), field('Rate, a figure', rv), field('Unit', ru), field('Per', rp),
-      field('Withholding, days', phi), field('Re-entry, hours', rei), field('Most applications', mx), field('Spray volume, L/ha', wat));
-    d.body.append(el('div', 'pd-hlabel', 'Correct against the label'), f);
-    const save = async verified => {
-      try {
-        const r = await rpc('save_ipm_product', { p: { id: p.id, rate_text: rt.value, rate_value: rv.value, rate_unit: ru.value, rate_per: rp.value,
-          phi_days: phi.value, rei_hours: rei.value, max_applications: mx.value, water_l_per_ha: wat.value, ...(verified == null ? {} : { verified }) } });
-        Object.assign(p, r); toast(verified ? 'Saved and marked as checked' : 'Saved', 'ok'); d.close(); libs.delete(cFarm.id); paintProducts();
-      } catch (e) { toast(e.message, 'bad'); }
-    };
-    const sv = el('button', 'btn', 'Save'); sv.onclick = () => save(null);
-    const ok = el('button', 'btn btn-primary', p.verified_at ? 'Save — still checked' : 'Save — I checked the label'); ok.onclick = () => save(true);
-    if (p.verified_at) { const un = el('button', 'btn', 'Not checked after all'); un.onclick = () => save(false); d.footer.append(un); }
-    d.footer.append(sv, ok);
-  } else { const x = el('button', 'btn', 'Close'); x.onclick = d.close; d.footer.append(x); }
 }

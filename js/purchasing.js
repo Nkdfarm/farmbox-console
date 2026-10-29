@@ -13,6 +13,7 @@
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
          num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign } from './ui.js';
+import { expiryPill } from './product.js';
 
 let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
 let stockOnly = false;
@@ -196,7 +197,14 @@ function stockCard(may) {
     { key: 'reorder_point', label: 'Reorder at', align: 'right',
       fmt: (v, r) => v == null ? '—' : `${num(v, 2)}${r.own_rule ? ' ·' : ''}` },
     { key: 'value', label: 'Value', align: 'right', fmt: v => Number(v) ? `${R()} ${num(v, 0)}` : '—' },
-    { key: 'below', label: '', fmt: v => v ? el('span', 'pill bad', 'low') : '' },
+    // a crop-protection product's soonest expiry still in store, within 90 days (0.7.284, from Scouting › Products)
+    { key: 'below', label: '', fmt: (v, r) => {
+        const soon = r.expires_on && (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 < 90 ? expiryPill(r.expires_on) : null;
+        if (!v && !soon) return '';
+        const w = el('span', 'row');
+        if (v) w.append(el('span', 'pill bad', 'low'));
+        if (soon) w.append(soon);
+        return w; } },
     { key: 'item_id', label: '', align: 'right', fmt: (v, r) => {
         if (!may) return '';
         const w = el('span', 'row');

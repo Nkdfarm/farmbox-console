@@ -22,6 +22,10 @@
 //     • In the store: what is held, the lots still there (first in, first out) with their expiry, Add stock (packs ×
 //       size, the pack, the lot, the expiry) and Correct the count; the Stock page shows the same movements
 //     • History: every change, the AI's and the people's, dd/mm/yyyy, with Undo
+//     • Side effects on beneficials (0.7.288, migration 0267): for a spray, what it does to each beneficial (safe,
+//       moderate, harmful, unknown, how many days, where it was read) — the catalogue's rows and the unit's own, which
+//       come first; for a beneficial, the sprays known to touch it. The four roles add the unit's own; the franchisor
+//       the catalogue's. The treatment's preview warns from them
 //   openChangeLog(farm, onOpen) — the log of the whole catalogue
 //   openNewProduct(farm, products, onCreated, onOpenExisting) — a product of our own (0.7.285, migration 0264, owner
 //     29 Oct 2026: "add the possibility to add a product manually just adding photos as well"): a name, or none when
@@ -33,20 +37,34 @@
 import { rpc, fn, api, URL_BASE } from './api.js';
 import { el, num, drawer, toast, busy, input, field, selectBox, table, loading, confirmDrawer, FARM_TZ } from './ui.js';
 import { pickFromGallery } from './gallery.js';
+import { KIND, KIND_HINT, SPRAY } from './kinds.js';
 
-const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
+const EFFECT = { safe: 'Safe', moderate: 'Moderate', harmful: 'Harmful', unknown: 'Not known' };
+const EFFECT_PILL = { safe: 'ok', moderate: 'warn', harmful: 'bad', unknown: 'info' };
+// the kind select says what each kind holds as you choose
+const kindBox = (k, extra) => {
+  const b = selectBox([...Object.entries(KIND), ...extra], k);
+  b.title = KIND_HINT[k] || '';
+  b.addEventListener('change', () => { b.title = KIND_HINT[b.value] || ''; });
+  return b;
+};
 const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
 export const FIELD = {
   name: 'Name', supplier: 'Supplier', kind: 'Kind', targets: 'Against', notes: 'Notes', label_url: 'Label link',
   active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Mode-of-action group',
   targets_text: 'Against', crops: 'Crops on the label', rate_text: 'Rate as written', rate_value: 'Rate, a figure',
   rate_unit: 'Rate unit', rate_per: 'Rate per', water_l_per_ha: 'Spray volume, L/ha', phi_days: 'Withholding, days',
+  water_l_min: 'Spray volume, least L/ha', water_l_max: 'Spray volume, most L/ha', dose_min_per_ha: 'Least per ha (rate unit)',
+  dose_max_per_ha: 'Most per ha (rate unit)',
   rei_hours: 'Re-entry, hours', max_applications: 'Most applications', interval_days: 'Interval, days', pack_sizes: 'Packs',
   storage: 'Storage', shelf_life_days: 'Keeps, days', conditions: 'Works when', compatibility: 'Compatibility', ppe: 'Protection',
 };
 const PHOTO_KIND = [['label', 'Front label'], ['back', 'Back label'], ['leaflet', 'Leaflet'], ['sds', 'Safety data sheet'], ['pack', 'Pack'], ['other', 'Other']];
 const PACK = [['bottle', 'Bottle'], ['can', 'Can'], ['drum', 'Drum'], ['bag', 'Bag'], ['sachet', 'Sachet'], ['box', 'Box'], ['bucket', 'Bucket'], ['card', 'Card'], ['other', 'Other']];
-const UNIT_CHOICES = { ml: [['L', 'L'], ['ml', 'ml']], g: [['kg', 'kg'], ['g', 'g']] };
+const UNIT_CHOICES = { ml: [['L', 'L'], ['ml', 'ml']], g: [['kg', 'kg'], ['g', 'g']], kg: [['kg', 'kg'], ['g', 'g']] };
+// one pack into the store's unit (0.7.289: a product counted in kg takes packs in kg or g)
+const packFactor = (pu, unit) => pu === unit ? 1 : unit === 'ml' && pu === 'L' ? 1000 : unit === 'g' && pu === 'kg' ? 1000
+  : unit === 'kg' && pu === 'g' ? 0.001 : 1;
 const ACTION = {
   ai_read: 'Read by the AI', accepted: 'Validated as the AI read it', modified: 'Changed', rejected: 'Kept, the AI\'s reading refused',
   edited: 'Edited', checked: 'Validated against the label', unchecked: 'No longer validated', undone: 'Undone',
@@ -62,7 +80,7 @@ const day = s => !s ? '—' : String(s).length <= 10
   : new Date(s).toLocaleDateString('en-GB', { timeZone: FARM_TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
 const daysTo = s => Math.round((new Date(String(s).slice(0, 10) + 'T12:00:00') - new Date()) / 864e5);
 const show = v => v == null || v === '' || (Array.isArray(v) && !v.length) ? '—' : Array.isArray(v) ? v.join(', ') : String(v);
-const qtyText = (q, unit) => q == null ? '—' : unit === 'ml' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} kg`
+const qtyText = (q, unit) => q == null ? '—' : unit === 'kg' && Math.abs(q) < 1 && q !== 0 ? `${num(q * 1000, Math.abs(q) < 0.01 ? 2 : 0)} g` : unit === 'ml' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} kg`
   : `${num(q, Math.abs(q) < 10 ? 2 : Math.abs(q) < 100 ? 1 : 0)} ${unit || ''}`.trim();
 const n2 = v => num(v, Number(v) % 1 ? 2 : 0);
 const errText = e => String(e?.message || e).replace(/^\d+ /, '');
@@ -141,6 +159,7 @@ export function openProduct(farm, p, label, opts = {}) {
     if (det.check) mount.append(reviewBlock(det.check));
     if (!pr.perishable && pr.item_id) mount.append(stockBlock(pr));
     else if (pr.perishable) mount.append(el('div', 'note', 'A living product: ordered for each application, never stocked.'));
+    if (SPRAY.includes(pr.kind) || pr.kind === 'beneficial') mount.append(effectsBlock(pr));
     mount.append(historyBlock());
     footer();
     // a new product with its photos: the AI reads them as soon as the drawer is open
@@ -188,14 +207,14 @@ export function openProduct(farm, p, label, opts = {}) {
     const SECTIONS = [
       ['Identity', ['name', 'supplier', 'kind', 'reg_no', 'active_ingredient', 'formulation', 'moa_group']],
       ['Use', ['targets', 'targets_text', 'crops']],
-      ['Rate', ['rate_text', 'rate_value', 'rate_unit', 'rate_per', 'water_l_per_ha']],
+      ['Rate', ['rate_text', 'rate_value', 'rate_unit', 'rate_per', 'water_l_per_ha', 'water_l_min', 'water_l_max', 'dose_min_per_ha', 'dose_max_per_ha']],
       ['Safety', ['phi_days', 'rei_hours', 'max_applications', 'interval_days']],
       ['Packs and storage', ['pack_sizes', 'storage', 'shelf_life_days']],
       ['Notes', ['conditions', 'compatibility', 'ppe', 'notes', 'label_url']],
     ];
     // figures in a text box with a decimal keyboard: "1,5" reaches the database as typed (a number box sends nothing
     // for it on a South African computer, and the figure would be cleared)
-    const NUM = new Set(['rate_value', 'water_l_per_ha', 'rei_hours', 'phi_days', 'max_applications', 'interval_days', 'shelf_life_days']);
+    const NUM = new Set(['rate_value', 'water_l_per_ha', 'water_l_min', 'water_l_max', 'dose_min_per_ha', 'dose_max_per_ha', 'rei_hours', 'phi_days', 'max_applications', 'interval_days', 'shelf_life_days']);
     const LABEL = { ...FIELD, targets_text: 'Against, as printed', label_url: 'Label link (https://…)' };
     const count = el('span', 'hint');
     const recount = () => { const n = rows.filter(r => r.changed()).length; count.textContent = n ? `${n} change${n === 1 ? '' : 's'}` : 'No change yet'; };
@@ -247,9 +266,9 @@ export function openProduct(farm, p, label, opts = {}) {
         }
         if (f === 'kind') {
           const k0 = String(start ?? '').toLowerCase();
-          box = selectBox([...Object.entries(KIND), ...(KIND[k0] || !k0 ? [] : [[k0, k0]])], k0 || 'chemical');
+          box = kindBox(k0 || 'chemical', KIND[k0] || !k0 ? [] : [[k0, k0 + ' (not a kind: choose one)']]);
         }
-        else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
+        else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['kg', 'kg'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
         else if (f === 'rate_per') box = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], start ?? '');
         else if (LONG.has(f)) { box = el('textarea'); box.rows = 2; box.value = start ?? ''; }
         else {
@@ -305,6 +324,9 @@ export function openProduct(farm, p, label, opts = {}) {
     fact('Rate', pr.rate_text);
     fact('Worked out as', pr.rate_value != null && pr.rate_per ? `${pr.rate_value} ${pr.rate_unit || ''} per ${pr.rate_per}` : 'not a figure the console can multiply — measure from the label');
     fact('Spray volume', pr.water_l_per_ha != null ? pr.water_l_per_ha + ' L/ha' : null);
+    const range = (lo, hi, unit) => lo != null && hi != null ? `${lo}–${hi} ${unit}` : hi != null ? `at most ${hi} ${unit}` : lo != null ? `at least ${lo} ${unit}` : null;
+    fact('Spray volume on the label', range(pr.water_l_min, pr.water_l_max, 'L/ha'));
+    fact('Per hectare', range(pr.dose_min_per_ha, pr.dose_max_per_ha, (pr.rate_unit || '') + '/ha'));
     fact('Withholding period', pr.phi_days != null ? pr.phi_days + ' days (the longest of its crops)' : 'not found — read the label');
     fact('Re-entry', pr.rei_hours != null ? pr.rei_hours + ' h' : null);
     fact('At most', pr.max_applications != null ? pr.max_applications + ' applications' : null);
@@ -452,9 +474,9 @@ export function openProduct(farm, p, label, opts = {}) {
       let box;
       if (f === 'kind') {
         const k = String(start ?? 'chemical').trim().toLowerCase();
-        box = selectBox([...Object.entries(KIND), ...(KIND[k] ? [] : [[k, k + ' (not a kind: choose one)']])], k);
+        box = kindBox(k, KIND[k] ? [] : [[k, k + ' (not a kind: choose one)']]);
       }
-      else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
+      else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['kg', 'kg'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
       else if (f === 'rate_per') box = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], start ?? '');
       else box = input({ value: Array.isArray(start) ? start.join(', ') : start ?? '' });
       box.disabled = !det.may_label;
@@ -589,7 +611,7 @@ export function openProduct(farm, p, label, opts = {}) {
       };
       const total = el('div', 'hint');
       const sum = () => {
-        const k = pu.value === 'L' || pu.value === 'kg' ? 1000 : 1;
+        const k = packFactor(pu.value, unit);
         const q = Number(packs.value) * Number(size.value) * k;
         total.textContent = q > 0 ? `= ${qtyText(q, unit)} into the store` : '';
       };
@@ -603,6 +625,95 @@ export function openProduct(farm, p, label, opts = {}) {
   }
 
   // ── the history ──
+  // ── Side effects on beneficials (0267): read on their own, so the drawer opens without waiting for them ──
+  function effectsBlock(pr) {
+    const ben = pr.kind === 'beneficial';
+    const w = el('section', 'lb-sec lb-effects');
+    const head = el('div', 'lb-head');
+    head.append(el('div', 'pd-hlabel', ben ? 'Sprays known to touch it' : 'Side effects on beneficials'));
+    const body = el('div');
+    w.append(head, body);
+    body.append(loading('Reading the side effects…'));
+    const paintFx = fx => {
+      body.textContent = '';
+      head.querySelectorAll('button').forEach(b => b.remove());
+      const may = !ben && (fx.may_change || fx.may_catalogue);
+      const rows = ben ? fx.on_this : fx.as_spray;
+      if (!rows.length) {
+        body.append(el('div', 'hint', ben ? 'No spray has a side effect recorded on it yet.'
+          : 'None recorded yet. Where beneficials are released, the treatment\'s preview says "not known yet" for a chemical, mineral or adjuvant spray.'));
+      } else {
+        body.append(table([
+          { key: ben ? 'product' : 'beneficial', label: ben ? 'Spray' : 'Beneficial', fmt: (v, r) => {
+            const s = el('span');
+            s.append(v || el('i', null, `${r.species} (every product)`));
+            if (r.own) s.append(' ', el('span', 'pill info', 'ours'));
+            return s;
+          } },
+          { key: 'rating', label: 'Effect', fmt: v => el('span', 'pill ' + (EFFECT_PILL[v] || 'info'), EFFECT[v] || v) },
+          { key: 'persistence_days', label: 'Lasts', align: 'right', fmt: v => v == null ? '—' : v + ' d' },
+          { key: 'source', label: 'Read in', fmt: (v, r) => [v, r.note].filter(Boolean).join(' · ') || '—' },
+          { key: 'checked_at', label: 'By', fmt: (v, r) => [r.checked_name, v ? day(v) : null].filter(Boolean).join(', ') },
+          ...(may ? [{ key: 'id', label: '', fmt: (v, r) => {
+            if (r.own ? !fx.may_change : !fx.may_catalogue) return '';
+            const b = el('span');
+            const ed = el('button', 'btn btn-sm btn-ghost', 'Change');
+            ed.onclick = () => effectForm(fx, r);
+            const rm = el('button', 'btn btn-sm btn-ghost', 'Remove');
+            rm.onclick = async () => {
+              if (!await confirmDrawer('Remove this side effect?', `${r.beneficial || r.species}: ${EFFECT[r.rating] || r.rating}${r.own ? '' : ' — the catalogue\'s, for every farm'}.`, 'Remove', true)) return;
+              busy(rm, true, 'Removing…');
+              try { paintFx(await rpc('remove_side_effect', { p_farm: farm.id, p_id: r.id })); toast('Removed', 'ok'); }
+              catch (e) { busy(rm, false); toast(errText(e), 'bad'); }
+            };
+            b.append(ed, rm);
+            return b;
+          } }] : []),
+        ], rows));
+      }
+      if (may) {
+        const add = el('button', 'btn btn-sm', 'Add a side effect');
+        add.onclick = () => effectForm(fx, null);
+        head.append(add);
+      }
+    };
+    // one side effect: a beneficial product or every product of its species, the effect, how long, where it was read
+    const effectForm = (fx, r) => {
+      const e = drawer(r ? 'Change a side effect' : 'Add a side effect', `${pr.name} on a beneficial`);
+      const species = [...new Set(fx.beneficials.map(b => b.species).filter(Boolean))].sort();
+      const who = selectBox([['', 'Choose…'], ...fx.beneficials.map(b => [b.id, b.name + (b.species ? ` — ${b.species}` : '')]),
+        ...species.map(s => ['sp:' + s, `Every product of ${s}`])], r ? (r.beneficial_id || 'sp:' + r.species) : '');
+      const rating = selectBox(Object.entries(EFFECT), r?.rating || 'harmful');
+      const days = input({ type: 'number', min: 0, max: 365, step: 1, value: r?.persistence_days ?? '' });
+      const source = input({ placeholder: 'e.g. the supplier\'s side-effects list, 2026; the label', value: r?.source || '' });
+      const note = el('textarea'); note.rows = 2; note.value = r?.note || '';
+      const cat = input({ type: 'checkbox' });
+      const cw = el('label', 'lb-check');
+      cw.append(cat, el('span', null, 'For the catalogue: every farm sees it'));
+      e.body.append(field('Beneficial', who), field('Effect', rating), field('It lasts, days', days), field('Read in', source), field('Note', note));
+      if (!r && fx.may_catalogue && fx.may_change) e.body.append(cw);
+      if (!r && !fx.may_change) cat.checked = true;
+      const save = el('button', 'btn btn-primary', 'Save');
+      save.onclick = async () => {
+        if (!who.value) { toast('Choose the beneficial', 'bad'); return; }
+        const sp = who.value.startsWith('sp:') ? who.value.slice(3) : null;
+        busy(save, true, 'Saving…');
+        try {
+          paintFx(await rpc('save_side_effect', { p_farm: farm.id, p: { id: r?.id, product_id: pr.id, beneficial_id: sp ? null : who.value, species: sp,
+            rating: rating.value, persistence_days: days.value, source: source.value, note: note.value, catalogue: r ? !r.own : cat.checked } }));
+          toast('Saved', 'ok');
+          e.close();
+        } catch (er) { busy(save, false); toast(errText(er), 'bad'); }
+      };
+      const cancel = el('button', 'btn', 'Cancel');
+      cancel.onclick = e.close;
+      e.footer.append(save, el('span', 'spacer'), cancel);
+    };
+    rpc('product_side_effects', { p_farm: farm.id, p_product: pr.id }).then(paintFx)
+      .catch(e => { body.textContent = ''; body.append(el('div', 'note bad', errText(e))); });
+    return w;
+  }
+
   function historyBlock() {
     const w = el('section', 'lb-sec lb-history');
     w.append(el('div', 'pd-hlabel', 'History'));
@@ -695,8 +806,8 @@ export function openNewProduct(farm, products, onCreated, onOpenExisting) {
   const d = drawer('New product', 'A product of our own: give it a name, or just add the photos of its label — the AI reads them');
   const name = input({ placeholder: 'as on the label (empty: the AI reads it from the photos)' });
   const supplier = input({ placeholder: 'optional' });
-  const kind = selectBox(Object.entries(KIND), 'chemical');
-  const unit = selectBox([['ml', 'ml (a liquid)'], ['g', 'g (a powder, granules)'], ['units', 'units (traps, sachets, cards)'], ['individuals', 'individuals (living)']], 'ml');
+  const kind = kindBox('chemical', []);
+  const unit = selectBox([['ml', 'ml (a liquid)'], ['g', 'g (a powder, granules)'], ['kg', 'kg (a solid in bulk)'], ['units', 'units (traps, sachets, cards)'], ['individuals', 'individuals (living)']], 'ml');
   const living = input({ type: 'checkbox' });
   const lw = el('label', 'lb-check'); lw.append(living, el('span', null, 'A living product (predators, parasitoids): ordered for each use, never stocked'));
   kind.onchange = () => { if (kind.value === 'beneficial') { living.checked = true; unit.value = 'individuals'; } };

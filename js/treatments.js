@@ -14,23 +14,26 @@
 //     for those tables, what the store holds and what must be ordered, and its warnings. Nothing
 //     is written until Start.
 //   renderIpmPrograms / renderIpmProducts — the library's two tabs.
+//   Spray volume (0.7.290, migration 0269): each application has its own volume, from each table's crop phase and the
+//   label's range; it can be changed per application in the preview. Products › Spray volumes: the unit's own, by crop
+//   and phase (openSprayVolumes).
 // The system proposes: a treatment starts when the Admin, the Farm manager or the Agronomist says so.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer } from './ui.js';
 import { openProduct, openChangeLog, openNewProduct, expiryPill } from './product.js';
+import { KIND, GROUPS, kindOk } from './kinds.js';
 
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const METHOD = { biological: 'Biological', chemical: 'Chemical', integrated: 'Integrated', cultural: 'Cultural', mechanical: 'Mechanical' };
-const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
 const CATEGORY = { leafy: 'Leafy', mixed_leafy: 'Mixed leafy', herbs: 'Herbs', microgreens: 'Microgreens', fruiting_vines: 'Fruiting vines', fruiting_bush: 'Fruiting bush' };
 // one colour and one letter per product, in the order the database gives (the same product keeps its colour)
 const hueOf = i => Math.round((28 + i * 137.5) % 360);
 const letterOf = i => String.fromCharCode(65 + (i % 26));
-const qtyText = (q, unit) => q == null ? '—' : unit === 'ml' && q >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && q >= 1000 ? `${num(q / 1000, 2)} kg`
+const qtyText = (q, unit) => q == null ? '—' : unit === 'kg' && Math.abs(q) < 1 && q !== 0 ? `${num(q * 1000, Math.abs(q) < 0.01 ? 2 : 0)} g` : unit === 'ml' && q >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && q >= 1000 ? `${num(q / 1000, 2)} kg`
   : `${num(q, q < 10 ? 2 : q < 100 ? 1 : 0)} ${unit || ''}`.trim();
 
 function mark(i, name, status) {
@@ -164,7 +167,7 @@ export async function openApply(farm, z, opts = {}) {
   if (!lib.templates.length && !lib.products.length) { d.body.append(el('div', 'note warn', 'The IPM library is empty: the catalogue has not been loaded into this database yet.')); return; }
 
   const state = { mode: 'program', target: opts.target || opts.cases?.[0]?.code || '', method: '', template: null, product: null,
-    applications: 1, interval: 7, positions: null, start: '', water: '', issue: opts.cases?.[0]?.id || '', pv: null };
+    applications: 1, interval: 7, positions: null, start: '', water: '', waterBy: {}, issue: opts.cases?.[0]?.id || '', pv: null };
   const targets = [...new Map(lib.templates.map(t => [t.target, t.target_label])).entries()];
   const targetSel = selectBox([['', 'Every pest and disease'], ...targets], state.target);
   const methodSel = selectBox([['', 'Any method'], ['biological', 'Biological'], ['chemical', 'Chemical'], ['integrated', 'Integrated']], '');
@@ -188,7 +191,7 @@ export async function openApply(farm, z, opts = {}) {
   top.append(field('What', modeSeg), field('Against', targetSel), field('Method', methodSel));
   const when = el('div', 'tr-form');
   when.append(field('First day', startIn, 'Empty = today; a closed day moves to the next working day'),
-              field('Spray volume, L/ha', waterIn, 'For a rate per 100 L; empty = the label\'s, else 1 000'),
+              field('Spray volume, L/ha', waterIn, 'For every application; empty = each one by its tables\' crop phase, inside the label\'s range'),
               field('For the case', caseSel));
   d.body.append(top, choice, el('div', 'pd-hlabel', 'Tables'), tablesBox, when, out);
   d.footer.append(cancel, go);
@@ -207,7 +210,7 @@ export async function openApply(farm, z, opts = {}) {
         c.append(h, el('div', 'hint', t.steps.map(s => `${s.product} ×${s.applications}${s.applications > 1 ? ' every ' + s.interval_days + ' d' : ''}`).join(' → ')
           + ` · ${t.days || 0} days` + (t.withholding ? ` · withholding up to ${t.withholding} d` : '')));
         if (t.summary) c.append(el('div', 'tr-tpl-sum', t.summary));
-        c.onclick = () => { state.template = t.id; paintChoice(); refresh(); };
+        c.onclick = () => { state.template = t.id; state.waterBy = {}; paintChoice(); refresh(); };
         choice.append(c);
       });
     } else {
@@ -216,7 +219,7 @@ export async function openApply(farm, z, opts = {}) {
       const sel = selectBox([['', 'Choose a product…'], ...list.map(p => [p.id, `${p.name} — ${p.supplier}${p.verified_at ? '' : ' (not validated)'}${p.own ? ' · ours' : ''}`])], state.product || '');
       const apps = input({ type: 'number', min: 1, max: 52, value: state.applications });
       const intv = input({ type: 'number', min: 1, max: 90, value: state.interval });
-      sel.onchange = () => { state.product = sel.value || null; const p = lib.products.find(x => x.id === state.product);
+      sel.onchange = () => { state.product = sel.value || null; state.waterBy = {}; const p = lib.products.find(x => x.id === state.product);
         if (p) { state.applications = p.applications || 1; state.interval = p.interval_days || 7; apps.value = state.applications; intv.value = state.interval; } info(); refresh(); };
       apps.onchange = () => { state.applications = Math.max(1, Number(apps.value) || 1); refresh(); };
       intv.onchange = () => { state.interval = Math.max(1, Number(intv.value) || 7); refresh(); };
@@ -268,7 +271,7 @@ export async function openApply(farm, z, opts = {}) {
   }
 
   const args = () => ({ farm_id: farm.id, zone_id: z.zone_id, system_id: z.system_id || null,
-    position_ids: state.positions || [], start_date: state.start || null, water_l_per_ha: state.water || null, issue_id: state.issue || null,
+    position_ids: state.positions || [], start_date: state.start || null, water_l_per_ha: state.water || null, water_by: state.waterBy, issue_id: state.issue || null,
     ...(state.mode === 'program' ? { template_id: state.template }
       : { steps: [{ seq: 1, product_id: state.product, applications: state.applications, interval_days: state.interval }], target: state.target || null }) });
   const ready = () => state.mode === 'program' ? !!state.template : !!state.product;
@@ -297,6 +300,25 @@ export async function openApply(farm, z, opts = {}) {
     finally { if (mine === seq) out.classList.remove('stale'); }
   }
 
+  // one application's volume: its figure, changed in place; why it is that figure under it
+  function volumeBox(r) {
+    const key = `${r.step_seq}/${r.rep}`;
+    const w = r.water || {};
+    const box = input({ type: 'text', value: String(Math.round(Number(r.water_l_per_ha))) });
+    box.inputMode = 'decimal'; box.size = 5; box.className = 'tr-vol' + (w.outside ? ' bad' : '');
+    const range = w.min != null || w.max != null ? `label ${w.min ?? '…'}–${w.max ?? '…'} L/ha` : 'no range on the label';
+    box.title = `${range}. Empty: back to ${state.water ? 'the treatment\'s' : 'the crop phase\'s'}.`;
+    box.onchange = () => {
+      const val = box.value.trim().replace(',', '.');
+      if (!val) delete state.waterBy[key]; else state.waterBy[key] = val;
+      refresh();
+    };
+    const why = { farm: 'your volume', default: 'share of the label\'s most', product: 'the product\'s', treatment: 'typed', application: 'typed', mixed: 'mixed' }[w.source] || '';
+    const s = el('span');
+    s.append(box, el('div', 'hint', [w.text && w.text !== 'as typed' ? w.text : null, why, w.clamped ? 'kept in the label\'s range' : null].filter(Boolean).join(' · ')));
+    return s;
+  }
+
   function paintPreview(pv) {
     out.textContent = '';
     (pv.warnings || []).forEach(w => out.append(el('div', 'note ' + (w.level === 'bad' ? 'bad' : 'warn') + ' tr-note', w.text)));
@@ -306,7 +328,15 @@ export async function openApply(farm, z, opts = {}) {
       { key: 'date', label: 'Day', fmt: v => longDay(v) },
       { key: 'product', label: 'Product', fmt: (v, r) => { const s = el('span', 'tr-lg'); s.append(mark(names.indexOf(v), v, 'done'), el('span', null, v)); return s; } },
       { key: 'rate_text', label: 'Label rate' },
-      { key: 'qty', label: 'For these tables', align: 'right', fmt: (v, r) => v == null ? 'measure from the label' : qtyText(Number(v), r.qty_unit) },
+      { key: 'qty', label: 'For these tables', align: 'right', fmt: (v, r) => {
+        if (v == null) return 'measure from the label';
+        const s = el('span');
+        s.append(qtyText(Number(v), r.qty_unit));
+        if (r.qty_capped) { const c = el('span', 'pill warn', r.qty_capped === 'max' ? 'label\'s most/ha' : 'label\'s least/ha'); c.title = 'Held to the label\'s limit per hectare'; s.append(' ', c); }
+        if (r.per_l != null) s.append(el('div', 'hint', `${num(Number(r.per_l), 3)} ${r.qty_unit || ''} per L`));
+        return s;
+      } },
+      { key: 'water_l_per_ha', label: 'L/ha', align: 'right', fmt: (v, r) => v == null ? '—' : volumeBox(r) },
       { key: 'water_l', label: 'Water', align: 'right', fmt: v => v == null ? '—' : `${num(v, 1)} L` },
       { key: 'harvest_after', label: 'No harvest before', fmt: v => v ? shortDay(v) : '—' },
       { key: 'rei_hours', label: 'Re-entry', align: 'right', fmt: v => v == null ? '—' : `${num(v)} h` },
@@ -447,7 +477,10 @@ function paintProducts() {
   const logBtn = el('button', 'btn btn-sm', 'Change log');
   logBtn.onclick = () => openChangeLog(cFarm, id => { const p = lib.products.find(x => x.id === id); if (p) openOne(p); });
   // a product of our own, by hand or from its label photos (0.7.285)
-  const head = [logBtn];
+  const volBtn = el('button', 'btn btn-sm', 'Spray volumes');
+  volBtn.title = 'What your sprayer puts on, by crop and phase';
+  volBtn.onclick = () => openSprayVolumes(cFarm);
+  const head = [volBtn, logBtn];
   if (lib.may_label) {
     const add = el('button', 'btn btn-sm btn-primary', 'New product');
     add.onclick = () => openNewProduct(cFarm, lib.products, p => openOne(p), p => openOne(p));
@@ -461,7 +494,8 @@ function paintProducts() {
   const stSel = selectBox([['', 'In the store or not'], ['in', 'In the store'], ['out', 'Not in the store'], ['soon', 'Expires within 90 days'],
     ['living', 'Living (never stocked)']], cf.stock);
   const sSel = selectBox([['', 'Every supplier'], ...[...new Set(lib.products.map(p => p.supplier))].sort().map(s => [s, s])], cf.supplier);
-  const kSel = selectBox([['', 'Any kind'], ...Object.entries(KIND)], cf.kind);
+  const kSel = selectBox([['', 'Any kind'], ...Object.entries(GROUPS).map(([k, g]) => [k, g.label]), ...Object.entries(KIND)], cf.kind);
+  kSel.title = 'Low-residue: mineral, physical, botanical, microbial, elicitor and semiochemical';
   const tSel = selectBox([['', 'Any target'], ...[...new Set(lib.products.flatMap(p => p.targets || []))].map(c => [c, label(c)]).sort((a, b) => a[1].localeCompare(b[1]))], cf.target);
   const vSel = selectBox([['', 'Validated or not'], ['yes', 'Validated'], ['no', 'Not validated'], ['ai', 'AI reading to review'], ['photos', 'With label photos'], ['nophotos', 'No label photo yet']], cf.check);
   const oSel = selectBox([['', 'Catalogue and ours'], ['catalogue', 'The catalogue'], ['own', 'Our own']], cf.origin);
@@ -478,7 +512,7 @@ function paintProducts() {
     cf.stock = stSel.value; cf.supplier = sSel.value; cf.kind = kSel.value; cf.target = tSel.value; cf.check = vSel.value; cf.origin = oSel.value;
     cf.q = q.value.trim().toLowerCase();
     const rows = lib.products.filter(p => keep.stock(p) && keep.check(p) && keep.origin(p)
-      && (!cf.supplier || p.supplier === cf.supplier) && (!cf.kind || p.kind === cf.kind)
+      && (!cf.supplier || p.supplier === cf.supplier) && kindOk(cf.kind, p.kind)
       && (!cf.target || (p.targets || []).includes(cf.target))
       && (!cf.q || (p.name + ' ' + (p.active_ingredient || '') + ' ' + p.supplier).toLowerCase().includes(cf.q)));
     list.textContent = '';
@@ -518,4 +552,70 @@ function paintProducts() {
   parts.push(['Search', q]);
   cMount.append(filterBar(parts, draw), list);
   draw();
+}
+
+// ── Spray volumes (0.7.290, migration 0269): what the unit's sprayer puts on, L/ha, by crop and phase ──
+const PHASE = { germination: 'Germination', nursery: 'Nursery', transplant: 'Transplant', vegetative: 'Vegetative', flowering: 'Flowering',
+  harvest_window: 'Harvest window', cleanup: 'Clean-up' };
+export function openSprayVolumes(farm) {
+  const d = drawer('Spray volumes', 'What your sprayer puts on, by crop and phase — the plan keeps it inside each label\'s range');
+  const close = el('button', 'btn', 'Close'); close.onclick = d.close;
+  d.footer.append(close);
+  d.body.append(loading('Reading the volumes…'));
+  const paint = sv => {
+    d.body.textContent = '';
+    d.body.append(el('div', 'hint', 'Until a volume is set here, a product whose label gives a range gets a share of its most: '
+      + Object.entries(PHASE).map(([k, l]) => `${l.toLowerCase()} ${Math.round(Number(sv.shares[k]) * 100)} %`).join(', ')
+      + ' (a table with no crop 100 %), never below its least. A product with no range keeps its own figure, else 1 000 L/ha. '
+      + 'The most precise line wins: a phase before any phase, a crop before its category.'));
+    if (!sv.rows.length) d.body.append(el('div', 'note', 'No volume set yet.'));
+    else d.body.append(table([
+      { key: 'crop', label: 'Crop', fmt: (v, r) => v || (r.crop_category ? `${CATEGORY[r.crop_category] || r.crop_category} (every crop)` : 'Any crop') },
+      { key: 'phase_type', label: 'Phase', fmt: v => v ? PHASE[v] || v : 'Any phase' },
+      { key: 'l_per_ha', label: 'L/ha', align: 'right', fmt: v => num(Number(v)) },
+      { key: 'note', label: 'Note', fmt: v => v || '—' },
+      { key: 'set_at', label: 'Set', fmt: (v, r) => [r.set_name, v ? shortDay(v) : null].filter(Boolean).join(', ') },
+      ...(sv.may_change ? [{ key: 'id', label: '', fmt: (v, r) => {
+        const b = el('span');
+        const ed = el('button', 'btn btn-sm btn-ghost', 'Change'); ed.onclick = () => form(sv, r);
+        const rm = el('button', 'btn btn-sm btn-ghost', 'Remove');
+        rm.onclick = async () => {
+          if (!await confirmDrawer('Remove this volume?', 'Applications planned from now on take the next line, or the label\'s share. Planned ones keep theirs.', 'Remove', true)) return;
+          busy(rm, true, 'Removing…');
+          try { paint(await rpc('remove_spray_volume', { p_farm: farm.id, p_id: r.id })); toast('Removed', 'ok'); }
+          catch (e) { busy(rm, false); toast(e.message, 'bad'); }
+        };
+        b.append(ed, rm);
+        return b;
+      } }] : []),
+    ], sv.rows));
+    if (sv.may_change) {
+      const add = el('button', 'btn btn-primary', 'Add a volume');
+      add.onclick = () => form(sv, null);
+      d.body.append(add);
+    } else d.body.append(el('div', 'hint', 'Set by the unit\'s Admin, Farm manager or Agronomist.'));
+  };
+  const form = (sv, r) => {
+    const f = drawer(r ? 'Change a volume' : 'Add a volume', 'Litres per hectare, as your sprayer puts it on');
+    const cats = [...new Set(sv.crops.map(c => c.category).filter(Boolean))].sort();
+    const crop = selectBox([['', 'Any crop'], ...cats.map(c => ['cat:' + c, `${CATEGORY[c] || c} (every crop)`]), ...sv.crops.map(c => [c.id, c.name])],
+      r ? (r.crop_id || (r.crop_category ? 'cat:' + r.crop_category : '')) : '');
+    const phase = selectBox([['', 'Any phase'], ...Object.entries(PHASE)], r?.phase_type || '');
+    const lha = input({ type: 'text', value: r ? String(Number(r.l_per_ha)) : '', placeholder: 'e.g. 600' }); lha.inputMode = 'decimal';
+    const note = input({ value: r?.note || '', placeholder: 'e.g. boom at 1 m, 3 bar' });
+    f.body.append(field('Crop', crop), field('Phase', phase), field('L/ha', lha), field('Note', note));
+    const save = el('button', 'btn btn-primary', 'Save');
+    save.onclick = async () => {
+      const c = crop.value;
+      busy(save, true, 'Saving…');
+      try {
+        paint(await rpc('save_spray_volume', { p_farm: farm.id, p: { id: r?.id, crop_id: c && !c.startsWith('cat:') ? c : null,
+          crop_category: c.startsWith('cat:') ? c.slice(4) : null, phase_type: phase.value || null, l_per_ha: lha.value.trim(), note: note.value } }));
+        toast('Saved', 'ok'); f.close();
+      } catch (e) { busy(save, false); toast(e.message, 'bad'); }
+    };
+    const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = f.close;
+    f.footer.append(save, el('span', 'spacer'), cancel);
+  };
+  rpc('spray_volumes', { p_farm: farm.id }).then(paint).catch(e => { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); });
 }

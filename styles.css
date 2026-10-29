@@ -2599,3 +2599,11 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .fg-uses a { color: var(--accent); }
 .fg-drawer textarea { width: 100%; resize: vertical; }
 @media (max-width: 640px) { .fg-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); } }
+/* a product's Edit form (0.7.287) */
+.lb-edit .lb-wide { grid-column: 1 / -1; }
+.lb-edit textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--field-bg); color: var(--text); font: inherit; resize: vertical; }
+.lb-edit .field.lb-changed input, .lb-edit .field.lb-changed select, .lb-edit .field.lb-changed textarea { border-color: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
+.lb-edit .field.lb-changed > label::after { content: ' · changed'; color: var(--warning); font-weight: 600; }
+.lb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; max-height: 180px; overflow: auto; }
+.lb-chip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.lb-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }

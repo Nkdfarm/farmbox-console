@@ -442,7 +442,7 @@ function paintProducts() {
   const label = code => lib.catalog.find(k => k.code === code)?.label || code;
   // the product's drawer (js/product.js); what it changed shows in the list when it closes
   const again = () => { libs.delete(cFarm.id); if (cMount?.isConnected) renderIpmProducts(cMount, cFarm); };
-  const openOne = p => openProduct(cFarm, p, label, { farmName: cFarm.name, onChanged: again, autoRead: !!p._autoRead });
+  const openOne = p => openProduct(cFarm, p, label, { farmName: cFarm.name, catalog: lib.catalog, onChanged: again, autoRead: !!p._autoRead });
   // the catalogue's log (0.7.284): every reading of the AI, every validation and change
   const logBtn = el('button', 'btn btn-sm', 'Change log');
   logBtn.onclick = () => openChangeLog(cFarm, id => { const p = lib.products.find(x => x.id === id); if (p) openOne(p); });

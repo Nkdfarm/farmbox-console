@@ -15,7 +15,10 @@
 //     • Read the label with AI (edge function label-check) → a review, field by field: Now · Label says (what differs
 //       highlighted) · the value to keep, editable · a tick. A changed safety figure (rate, withholding, re-entry,
 //       applications, interval) is never ticked for you. Validate saves the ticked ones and marks the product validated
-//       against the label; Correct by hand opens the same review without the AI
+//       against the label
+//     • Edit (0.7.287, migration 0266, owner 29 Oct 2026: "before we need to be able to edit/modify each product"): every
+//       field a person may change, in sections; Save keeps it as it is checked, Save and validate marks it validated
+//       against the label. A label field saved without validating makes a validated product "not validated" again
 //     • In the store: what is held, the lots still there (first in, first out) with their expiry, Add stock (packs ×
 //       size, the pack, the lot, the expiry) and Correct the count; the Stock page shows the same movements
 //     • History: every change, the AI's and the people's, dd/mm/yyyy, with Undo
@@ -34,7 +37,7 @@ import { pickFromGallery } from './gallery.js';
 const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
 const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
 export const FIELD = {
-  name: 'Name', supplier: 'Supplier', kind: 'Kind',
+  name: 'Name', supplier: 'Supplier', kind: 'Kind', targets: 'Against', notes: 'Notes', label_url: 'Label link',
   active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Mode-of-action group',
   targets_text: 'Against', crops: 'Crops on the label', rate_text: 'Rate as written', rate_value: 'Rate, a figure',
   rate_unit: 'Rate unit', rate_per: 'Rate per', water_l_per_ha: 'Spray volume, L/ha', phi_days: 'Withholding, days',
@@ -45,7 +48,7 @@ const PHOTO_KIND = [['label', 'Front label'], ['back', 'Back label'], ['leaflet'
 const PACK = [['bottle', 'Bottle'], ['can', 'Can'], ['drum', 'Drum'], ['bag', 'Bag'], ['sachet', 'Sachet'], ['box', 'Box'], ['bucket', 'Bucket'], ['card', 'Card'], ['other', 'Other']];
 const UNIT_CHOICES = { ml: [['L', 'L'], ['ml', 'ml']], g: [['kg', 'kg'], ['g', 'g']] };
 const ACTION = {
-  ai_read: 'Read by the AI', accepted: 'Validated as the AI read it', modified: 'Modified by hand', rejected: 'Kept, the AI\'s reading refused',
+  ai_read: 'Read by the AI', accepted: 'Validated as the AI read it', modified: 'Changed', rejected: 'Kept, the AI\'s reading refused',
   edited: 'Edited', checked: 'Validated against the label', unchecked: 'No longer validated', undone: 'Undone',
   created: 'Added as a product of our own', archived: 'Taken off the list',
   photo_added: 'Label photo added', photo_removed: 'Label photo removed',
@@ -145,6 +148,12 @@ export function openProduct(farm, p, label, opts = {}) {
   }
   function footer() {
     d.footer.textContent = '';
+    if (det.may_label) {
+      const ed = el('button', 'btn btn-primary', 'Edit');
+      ed.title = 'Change any field of this product, for your unit and its sister units';
+      ed.onclick = () => openEditor();
+      d.footer.append(ed);
+    }
     if (det.may_archive) {
       const off = el('button', 'btn btn-ghost', 'Take off the list');
       off.title = 'A product of our own: it leaves the list, its history and stock movements stay.';
@@ -153,9 +162,135 @@ export function openProduct(farm, p, label, opts = {}) {
         try { await rpc('archive_own_product', { p_farm: farm.id, p_product: p.id }); changed = true; toast('Taken off the list', 'ok'); d.close(); }
         catch (e) { toast(errText(e), 'bad'); }
       };
-      d.footer.append(off, el('span', 'spacer'));
+      d.footer.append(off);
     }
-    d.footer.append(close);
+    d.footer.append(el('span', 'spacer'), close);
+  }
+
+  // ── Edit: every field a person may change, in sections ──
+  async function openEditor() {
+    const pr = det.product;
+    const allowed = new Set(det.edit_fields || det.fields);
+    const safety = new Set(det.safety);
+    const here = [opts.farmName || 'this unit', ...(det.sisters || [])].join(', ');
+    const rows = [];
+    const dirty = () => rows.some(r => r.changed());
+    // a stray click outside, or Escape, does not throw away what was typed (review 29 Oct 2026)
+    const e = drawer(`Edit · ${pr.name}`, pr.group_id ? `Our own product — for ${here}` : `Your changes hold for ${here}; the other farms keep the catalogue's`,
+                     { guard: () => !dirty() || confirm('Close without saving your changes?') });
+    e.box.classList.add('tr-drawer');
+    // the pest list: from the list page, or read here (a product opened from the gallery has none)
+    let catalog = opts.catalog || [];
+    if (!catalog.length && allowed.has('targets')) { try { catalog = await rpc('pest_catalog', {}) || []; } catch { catalog = []; } }
+    catalog = catalog.slice().sort((a, b) => a.label.localeCompare(b.label));
+    if (det.check) e.body.append(el('div', 'note', 'An AI reading of the label is waiting to be reviewed: it stays open below. Saving here does not answer it.'));
+    const LONG = new Set(['targets_text', 'rate_text', 'storage', 'conditions', 'compatibility', 'ppe', 'notes']);
+    const SECTIONS = [
+      ['Identity', ['name', 'supplier', 'kind', 'reg_no', 'active_ingredient', 'formulation', 'moa_group']],
+      ['Use', ['targets', 'targets_text', 'crops']],
+      ['Rate', ['rate_text', 'rate_value', 'rate_unit', 'rate_per', 'water_l_per_ha']],
+      ['Safety', ['phi_days', 'rei_hours', 'max_applications', 'interval_days']],
+      ['Packs and storage', ['pack_sizes', 'storage', 'shelf_life_days']],
+      ['Notes', ['conditions', 'compatibility', 'ppe', 'notes', 'label_url']],
+    ];
+    // figures in a text box with a decimal keyboard: "1,5" reaches the database as typed (a number box sends nothing
+    // for it on a South African computer, and the figure would be cleared)
+    const NUM = new Set(['rate_value', 'water_l_per_ha', 'rei_hours', 'phi_days', 'max_applications', 'interval_days', 'shelf_life_days']);
+    const LABEL = { ...FIELD, targets_text: 'Against, as printed', label_url: 'Label link (https://…)' };
+    const count = el('span', 'hint');
+    const recount = () => { const n = rows.filter(r => r.changed()).length; count.textContent = n ? `${n} change${n === 1 ? '' : 's'}` : 'No change yet'; };
+    let uid = 0;
+    SECTIONS.forEach(([title, fields]) => {
+      const fs = fields.filter(f => allowed.has(f));
+      if (!fs.length) return;
+      e.body.append(el('div', 'pd-hlabel', title));
+      const grid = el('div', 'tr-form lb-edit');
+      fs.forEach(f => {
+        const start = pr[f];
+        let box, read, wrap;
+        if (f === 'targets') {
+          // against: chips of the pest list, the product's own first; a tick changes the chip in place
+          const chosen = new Set(start || []);
+          const chips = el('div', 'lb-chips');
+          chips.setAttribute('role', 'group');
+          const find = input({ type: 'search', placeholder: 'find a pest or disease' });
+          find.setAttribute('aria-label', 'Find a pest or disease');
+          const known = new Set(catalog.map(k => k.code));
+          const listed = () => [...catalog.filter(k => chosen.has(k.code)), ...[...chosen].filter(c => !known.has(c)).map(c => ({ code: c, label: c })),
+                                ...catalog.filter(k => !chosen.has(k.code))];
+          const paintChips = () => {
+            chips.textContent = '';
+            const t = find.value.trim().toLowerCase();
+            const shown = listed().filter(k => chosen.has(k.code) || !t || k.label.toLowerCase().includes(t));
+            if (!shown.length) chips.append(el('span', 'hint', catalog.length ? 'Nothing of that name in the pest list.' : 'The pest list could not be read.'));
+            shown.forEach(k => {
+              const c = el('button', 'lb-chip' + (chosen.has(k.code) ? ' on' : ''), k.label);
+              c.type = 'button';
+              c.setAttribute('aria-pressed', String(chosen.has(k.code)));
+              c.onclick = () => {
+                chosen.has(k.code) ? chosen.delete(k.code) : chosen.add(k.code);
+                c.classList.toggle('on', chosen.has(k.code)); c.setAttribute('aria-pressed', String(chosen.has(k.code)));
+                mark();
+              };
+              chips.append(c);
+            });
+          };
+          find.oninput = paintChips; paintChips();
+          box = el('div'); box.append(find, chips);
+          read = () => [...chosen].sort();
+          const was = JSON.stringify(read());
+          const mark = () => { wrap.classList.toggle('lb-changed', JSON.stringify(read()) !== was); recount(); };
+          wrap = field(LABEL[f], box); wrap.classList.add('lb-wide');
+          rows.push({ f, read, changed: () => JSON.stringify(read()) !== was });
+          grid.append(wrap);
+          return;
+        }
+        if (f === 'kind') {
+          const k0 = String(start ?? '').toLowerCase();
+          box = selectBox([...Object.entries(KIND), ...(KIND[k0] || !k0 ? [] : [[k0, k0]])], k0 || 'chemical');
+        }
+        else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
+        else if (f === 'rate_per') box = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], start ?? '');
+        else if (LONG.has(f)) { box = el('textarea'); box.rows = 2; box.value = start ?? ''; }
+        else {
+          box = input({ type: 'text', value: Array.isArray(start) ? start.join(', ') : start ?? '' });
+          if (NUM.has(f)) box.inputMode = 'decimal';
+        }
+        box.id = 'lbe-' + (++uid);
+        const list = f === 'crops' || f === 'pack_sizes';
+        read = () => list ? box.value.split(',').map(x => x.trim()).filter(Boolean) : box.value.trim();
+        const now = () => list ? read().join(', ') : read();
+        // the start is what the box shows, so nothing counts as changed before a person changes it
+        const was = now();
+        wrap = field(LABEL[f] || f, box, safety.has(f) ? 'safety: read it on the label' : (list ? 'comma between each' : null));
+        if (LONG.has(f) || f === 'label_url') wrap.classList.add('lb-wide');
+        box.oninput = box.onchange = () => { wrap.classList.toggle('lb-changed', now() !== was); recount(); };
+        rows.push({ f, read, changed: () => now() !== was });
+        grid.append(wrap);
+      });
+      e.body.append(grid);
+    });
+    e.body.append(el('div', 'hint', 'Save keeps your change and logs it. Save and validate also says you read it against the label: '
+      + 'a label field saved without validating makes a validated product "not validated" again.'));
+    recount();
+    const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = () => e.close();
+    const sv = el('button', 'btn', 'Save');
+    const ok = el('button', 'btn btn-primary', 'Save and validate');
+    ok.title = 'I read these figures on the label';
+    const save = async (btn, validate) => {
+      const changes = rows.filter(r => r.changed()).map(r => ({ field: r.f, value: r.read() }));
+      if (!changes.length && !validate) { toast('Nothing changed', ''); return; }
+      busy(btn, true, 'Saving…'); [sv, ok].forEach(b => { b.disabled = true; });
+      try {
+        const r = await rpc('apply_label_check', { p_farm: farm.id, p_product: p.id, p: { changes, validate } });
+        toast(validate ? 'Saved and validated against the label' : `Saved ${changes.length} change${changes.length === 1 ? '' : 's'}`, 'ok');
+        rows.length = 0;   // saved: closing asks nothing
+        e.close(); took(r);
+      } catch (er) { busy(btn, false); [sv, ok].forEach(b => { b.disabled = false; }); toast(errText(er), 'bad'); }
+    };
+    sv.onclick = () => save(sv, false);
+    ok.onclick = () => save(ok, true);
+    e.footer.append(count, el('span', 'spacer'), cancel, sv, ok);
   }
 
   // ── what the catalogue says ──
@@ -186,15 +321,15 @@ export function openProduct(farm, p, label, opts = {}) {
     if (pr.group_id) w.prepend(el('div', 'hint', `Our own product — seen by ${[opts.farmName || 'this unit', ...(det.sisters || [])].join(', ')} only.`));
     const st = el('div', 'note ' + (pr.verified_at ? 'ok' : 'warn'), pr.verified_at
       ? `Validated against the label by ${pr.verified_name || 'the franchisor'} on ${day(pr.verified_at)}.`
-      : pr.group_id ? 'A product of our own, not validated against its label yet: add its photos and have the AI read them, or correct it by hand.'
+      : pr.group_id ? 'A product of our own, not validated against its label yet: add its photos and have the AI read them, or edit it.'
       : `Read from ${CONF[pr.confidence] || pr.confidence}; nobody has validated it against the label yet. The label on the pack is the law — this page is a copy.`);
     w.append(st);
     // what this unit and its sisters corrected is theirs: the other franchise farms keep the catalogue's figures (0263)
     const here = [opts.farmName || 'this unit', ...(det.sisters || [])].join(', ');
-    if ((pr.corrected || []).length) w.append(el('div', 'hint', `Corrected against the label for ${here}: ${pr.corrected.map(f => FIELD[f] || f).join(', ')}. The other farms of the franchise keep the catalogue's figures.`));
+    if ((pr.corrected || []).length) w.append(el('div', 'hint', `Changed for ${here}: ${pr.corrected.map(f => FIELD[f] || f).join(', ')}. The other farms of the franchise keep the catalogue's figures.`));
     else if (det.may_label) w.append(el('div', 'hint', `What you validate here holds for ${here} — the other farms of the franchise keep the catalogue's figures.`));
     const links = el('div', 'tr-links');
-    [pr.label_url, ...(pr.source_urls || [])].filter((u, i, a) => u && a.indexOf(u) === i).forEach((u, i) => {
+    [pr.label_url, ...(pr.source_urls || [])].filter((u, i, a) => u && /^https?:\/\//i.test(u) && a.indexOf(u) === i).forEach((u, i) => {
       const a = el('a', null, i === 0 && pr.label_url ? 'Label' : (() => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return 'source'; } })());
       a.href = u; a.target = '_blank'; a.rel = 'noopener'; links.append(a);
     });
@@ -290,12 +425,7 @@ export function openProduct(farm, p, label, opts = {}) {
           mount.querySelector('.lb-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) { busy(read, false); toast(errText(e), 'bad'); }
       };
-      const hand = el('button', 'btn btn-sm btn-ghost', 'Correct by hand');
-      hand.onclick = () => { const old = mount.querySelector('.lb-review'); old?.remove(); const b = reviewBlock(null); mount.insertBefore(b, mount.querySelector('.lb-stock, .lb-history')); b.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-      // with a reading open, its review already lets every field be typed: no second form beside it
-      acts.append(field('Photo of', kind), add, gal, pick, el('span', 'spacer'));
-      if (!det.check) acts.append(hand);
-      acts.append(read);
+      acts.append(field('Photo of', kind), add, gal, pick, el('span', 'spacer'), read);
       w.append(acts);
     }
     return w;
@@ -480,7 +610,7 @@ export function openProduct(farm, p, label, opts = {}) {
     if (!det.history.length) { w.append(el('div', 'hint', 'Nothing changed on this product yet.')); return w; }
     const list = el('ol', 'lb-log');
     det.history.slice(0, 60).forEach(h => list.append(logLine(h, unit, async btn => {
-      if (!await confirmDrawer('Undo this change?', `${FIELD[h.field] || h.field} goes back to ${show(h.old)}. The product stays validated against the label, now in your name.`, 'Undo')) return;
+      if (!await confirmDrawer('Undo this change?', `${FIELD[h.field] || h.field} goes back to ${show(h.old)}. If the product was validated against the label it stays so, now in your name.`, 'Undo')) return;
       busy(btn, true, 'Undoing…');
       try { took(await rpc('undo_product_change', { p_farm: farm.id, p_change: h.id })); toast('Undone', 'ok'); }
       catch (e) { busy(btn, false); toast(errText(e), 'bad'); }
@@ -606,7 +736,7 @@ export function openNewProduct(farm, products, onCreated, onOpenExisting) {
   f.append(field('Name', name), field('Supplier', supplier), field('Kind', kind), field('The store counts it in', unit));
   d.body.append(f, like, lw, el('div', 'pd-hlabel', 'Label photos'), el('div', 'row lb-acts'), picked);
   d.body.lastChild.previousSibling.append(field('First photo is the', kindPhoto), choose, gallery, pick);
-  d.body.append(el('div', 'hint', 'It is seen by your unit and its sister units only. Everything else — rate, withholding, re-entry, packs — comes from its label: read by the AI, validated by you, or corrected by hand.'));
+  d.body.append(el('div', 'hint', 'It is seen by your unit and its sister units only. Everything else — rate, withholding, re-entry, packs — comes from its label: read by the AI and validated by you, or typed in with Edit.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Add the product');
   let made = null;   // the product, once it exists: a retry sends the photos only

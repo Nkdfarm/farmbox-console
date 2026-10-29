@@ -335,7 +335,7 @@ async function openUsedProduct(farm, productId) {
   const [{ openProduct }, lib, cat] = await Promise.all([import('./product.js'), rpc('ipm_library', { p_farm: farm.id }), rpc('pest_catalog', {})]);
   const p = (lib.products || []).find(x => x.id === productId);
   if (!p) throw new Error('That product is no longer on the list');
-  openProduct(farm, p, code => (cat || []).find(k => k.code === code)?.label || code, { farmName: farm.name });
+  openProduct(farm, p, code => (cat || []).find(k => k.code === code)?.label || code, { farmName: farm.name, catalog: cat || [] });
 }
 
 // ── choose from the gallery (the one drawer every "From the gallery" button opens) ──

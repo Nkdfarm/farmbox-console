@@ -87,10 +87,12 @@ export function drawer(title, subtitle, opts = {}) {
     document.removeEventListener('keydown', onKey);
   };
   drawerStack.push(close);
-  const onKey = e => { if (e.key === 'Escape' && drawerStack[drawerStack.length - 1] === close) { e.stopImmediatePropagation(); close(); } };
+  // opts.guard (0.7.287): a drawer with unsaved work asks before Escape, the scrim or ✕ close it
+  const tryClose = () => { if (!opts.guard || opts.guard()) close(); };
+  const onKey = e => { if (e.key === 'Escape' && drawerStack[drawerStack.length - 1] === close) { e.stopImmediatePropagation(); tryClose(); } };
   document.addEventListener('keydown', onKey);
-  scrim.onclick = close;
-  x.onclick = close;
+  scrim.onclick = tryClose;
+  x.onclick = tryClose;
   // the first field, not the header's ✕ (Enter used to close the drawer)
   setTimeout(() => (body.querySelector('input:not([type=hidden]), select, textarea') || x).focus(), 30);
 

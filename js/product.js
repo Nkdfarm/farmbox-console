@@ -12,12 +12,16 @@
 //       Agronomist (product-labels bucket, <farm>/<product>/<uuid>.jpg), seen by everyone
 //     • Read the label with AI (edge function label-check) → a review, field by field: Now · Label says (what differs
 //       highlighted) · the value to keep, editable · a tick. A changed safety figure (rate, withholding, re-entry,
-//       applications, interval) is never ticked for you. Validate saves the ticked ones and marks the product checked
+//       applications, interval) is never ticked for you. Validate saves the ticked ones and marks the product validated
 //       against the label; Correct by hand opens the same review without the AI
 //     • In the store: what is held, the lots still there (first in, first out) with their expiry, Add stock (packs ×
 //       size, the pack, the lot, the expiry) and Correct the count; the Stock page shows the same movements
 //     • History: every change, the AI's and the people's, dd/mm/yyyy, with Undo
 //   openChangeLog(farm, onOpen) — the log of the whole catalogue
+//   openNewProduct(farm, products, onCreated, onOpenExisting) — a product of our own (0.7.285, migration 0264, owner
+//     29 Oct 2026: "add the possibility to add a product manually just adding photos as well"): a name, or none when
+//     its label photos follow; with photos the drawer opens and the AI reads them at once, name, supplier and kind
+//     included. A name like one already in the list says so first. Seen by this unit and its sister units only
 // The system proposes, a person validates: nothing the AI read is saved until somebody presses Validate.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
@@ -26,6 +30,7 @@ import { el, num, drawer, toast, busy, input, field, selectBox, table, loading, 
 const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
 const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
 export const FIELD = {
+  name: 'Name', supplier: 'Supplier', kind: 'Kind',
   active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Mode-of-action group',
   targets_text: 'Against', crops: 'Crops on the label', rate_text: 'Rate as written', rate_value: 'Rate, a figure',
   rate_unit: 'Rate unit', rate_per: 'Rate per', water_l_per_ha: 'Spray volume, L/ha', phi_days: 'Withholding, days',
@@ -37,7 +42,8 @@ const PACK = [['bottle', 'Bottle'], ['can', 'Can'], ['drum', 'Drum'], ['bag', 'B
 const UNIT_CHOICES = { ml: [['L', 'L'], ['ml', 'ml']], g: [['kg', 'kg'], ['g', 'g']] };
 const ACTION = {
   ai_read: 'Read by the AI', accepted: 'Validated as the AI read it', modified: 'Modified by hand', rejected: 'Kept, the AI\'s reading refused',
-  edited: 'Edited', checked: 'Checked against the label', unchecked: 'No longer checked', undone: 'Undone',
+  edited: 'Edited', checked: 'Validated against the label', unchecked: 'No longer validated', undone: 'Undone',
+  created: 'Added as a product of our own', archived: 'Taken off the list',
   photo_added: 'Label photo added', photo_removed: 'Label photo removed',
 };
 
@@ -98,7 +104,7 @@ async function photoUrl(path) {
 }
 
 export function openProduct(farm, p, label, opts = {}) {
-  let changed = false;
+  let changed = !!p._new;   // a product just added is in the list when the drawer closes
   const d = drawer(p.name, `${p.supplier} · ${KIND[p.kind] || p.kind}`, { onClose: () => { if (changed) opts.onChanged?.(); } });
   d.box.classList.add('tr-drawer');
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;
@@ -113,7 +119,10 @@ export function openProduct(farm, p, label, opts = {}) {
     catch (e) { mount.textContent = ''; mount.append(el('div', 'note bad', errText(e))); }
   };
   // every write answers with the whole product again
-  const took = r => { det = r; changed = true; Object.assign(p, r.product); paint(); };
+  const took = r => { det = r; changed = true; Object.assign(p, r.product); const h = d.box.querySelector('header h2'); if (h) h.textContent = r.product.name;
+    const sub = d.box.querySelector('header .hint'); if (sub) sub.textContent = `${r.product.supplier} · ${KIND[r.product.kind] || r.product.kind}`;
+    d.box.setAttribute('aria-label', r.product.name); paint(); };
+  let readBtn = null, autoRead = !!opts.autoRead;
 
   function paint() {
     const pr = det.product;
@@ -124,6 +133,23 @@ export function openProduct(farm, p, label, opts = {}) {
     if (!pr.perishable && pr.item_id) mount.append(stockBlock(pr));
     else if (pr.perishable) mount.append(el('div', 'note', 'A living product: ordered for each application, never stocked.'));
     mount.append(historyBlock());
+    footer();
+    // a new product with its photos: the AI reads them as soon as the drawer is open
+    if (autoRead && readBtn && !readBtn.disabled && !det.check) { autoRead = false; readBtn.click(); }
+  }
+  function footer() {
+    d.footer.textContent = '';
+    if (det.may_archive) {
+      const off = el('button', 'btn btn-ghost', 'Take off the list');
+      off.title = 'A product of our own: it leaves the list, its history and stock movements stay.';
+      off.onclick = async () => {
+        if (!await confirmDrawer('Take this product off the list?', `${det.product.name} leaves Products for your unit and its sister units. Its history and its stock movements stay.`, 'Take it off', true)) return;
+        try { await rpc('archive_own_product', { p_farm: farm.id, p_product: p.id }); changed = true; toast('Taken off the list', 'ok'); d.close(); }
+        catch (e) { toast(errText(e), 'bad'); }
+      };
+      d.footer.append(off, el('span', 'spacer'));
+    }
+    d.footer.append(close);
   }
 
   // ── what the catalogue says ──
@@ -151,9 +177,11 @@ export function openProduct(farm, p, label, opts = {}) {
       w.append(table([{ key: 'crop', label: 'Crop' }, { key: 'targets_text', label: 'Against' }, { key: 'rate_text', label: 'Rate' },
         { key: 'phi_days', label: 'Withholding', align: 'right', fmt: v => v == null ? '?' : v + ' d' }], pr.per_crop));
     }
+    if (pr.group_id) w.prepend(el('div', 'hint', `Our own product — seen by ${[opts.farmName || 'this unit', ...(det.sisters || [])].join(', ')} only.`));
     const st = el('div', 'note ' + (pr.verified_at ? 'ok' : 'warn'), pr.verified_at
-      ? `Checked against the label by ${pr.verified_name || 'the franchisor'} on ${day(pr.verified_at)}.`
-      : `Read from ${CONF[pr.confidence] || pr.confidence}; nobody has checked it against the label yet. The label on the pack is the law — this page is a copy.`);
+      ? `Validated against the label by ${pr.verified_name || 'the franchisor'} on ${day(pr.verified_at)}.`
+      : pr.group_id ? 'A product of our own, not validated against its label yet: add its photos and have the AI read them, or correct it by hand.'
+      : `Read from ${CONF[pr.confidence] || pr.confidence}; nobody has validated it against the label yet. The label on the pack is the law — this page is a copy.`);
     w.append(st);
     // what this unit and its sisters corrected is theirs: the other franchise farms keep the catalogue's figures (0263)
     const here = [opts.farmName || 'this unit', ...(det.sisters || [])].join(', ');
@@ -224,6 +252,7 @@ export function openProduct(farm, p, label, opts = {}) {
         if (r) took(r);
       };
       const read = el('button', 'btn btn-sm btn-primary', det.check ? 'Read the label again' : 'Read the label with AI');
+      readBtn = read;
       read.disabled = !det.photos.length;
       read.title = det.photos.length ? 'The AI reads every field from the photos and proposes; nothing is saved until you validate.' : 'Add a photo of the label first.';
       read.onclick = async () => {
@@ -267,7 +296,11 @@ export function openProduct(farm, p, label, opts = {}) {
       const readable = check ? !!a.readable : true;
       const start = check && readable ? a.value : cur(f);
       let box;
-      if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
+      if (f === 'kind') {
+        const k = String(start ?? 'chemical').trim().toLowerCase();
+        box = selectBox([...Object.entries(KIND), ...(KIND[k] ? [] : [[k, k + ' (not a kind: choose one)']])], k);
+      }
+      else if (f === 'rate_unit') box = selectBox([['', '—'], ['ml', 'ml'], ['g', 'g'], ['individuals', 'individuals'], ['units', 'units']], start ?? '');
       else if (f === 'rate_per') box = selectBox([['', '—'], ['m2', 'per m²'], ['ha', 'per ha'], ['100L', 'per 100 L'], ['L', 'per L'], ['plant', 'per plant']], start ?? '');
       else box = input({ value: Array.isArray(start) ? start.join(', ') : start ?? '' });
       box.disabled = !det.may_label;
@@ -324,12 +357,12 @@ export function openProduct(farm, p, label, opts = {}) {
             changes: on.map(r => ({ field: r.f, value: valueOf(r) })),
             rejected: rows.filter(r => r.differs && !r.tick.checked).map(r => r.f),
             note: note.value || null } });
-          toast(on.length ? `Saved ${on.length} field${on.length === 1 ? '' : 's'} — checked against the label` : 'Checked against the label', 'ok');
+          toast(on.length ? `Saved ${on.length} field${on.length === 1 ? '' : 's'} — validated against the label` : 'Validated against the label', 'ok');
           took(r);
         } catch (e) { busy(btn, false); toast(errText(e), 'bad'); }
       };
       const acts = el('div', 'row lb-acts');
-      const val = el('button', 'btn btn-primary', check ? 'Validate the ticked fields' : 'Save — I checked the label');
+      const val = el('button', 'btn btn-primary', check ? 'Validate the ticked fields' : 'Save and validate');
       val.onclick = () => send(val, false);
       acts.append(field('Note for the log', note), el('span', 'spacer'));
       if (check) {
@@ -343,7 +376,7 @@ export function openProduct(farm, p, label, opts = {}) {
         const x = el('button', 'btn btn-ghost', 'Cancel'); x.onclick = () => w.remove(); acts.append(x);
       }
       acts.append(val);
-      w.append(el('div', 'hint', 'Ticked: the value in “Keep” is saved. Unticked: the product keeps what it has. Saving marks the product as checked against the label, with your name and the day.'), acts);
+      w.append(el('div', 'hint', 'Ticked: the value in “Keep” is saved. Unticked: the product keeps what it has. Saving marks the product as validated against the label, with your name and the day.'), acts);
     }
     return w;
   }
@@ -423,7 +456,7 @@ export function openProduct(farm, p, label, opts = {}) {
     if (!det.history.length) { w.append(el('div', 'hint', 'Nothing changed on this product yet.')); return w; }
     const list = el('ol', 'lb-log');
     det.history.slice(0, 60).forEach(h => list.append(logLine(h, unit, async btn => {
-      if (!await confirmDrawer('Undo this change?', `${FIELD[h.field] || h.field} goes back to ${show(h.old)}. The product stays checked against the label, now in your name.`, 'Undo')) return;
+      if (!await confirmDrawer('Undo this change?', `${FIELD[h.field] || h.field} goes back to ${show(h.old)}. The product stays validated against the label, now in your name.`, 'Undo')) return;
       busy(btn, true, 'Undoing…');
       try { took(await rpc('undo_product_change', { p_farm: farm.id, p_change: h.id })); toast('Undone', 'ok'); }
       catch (e) { busy(btn, false); toast(errText(e), 'bad'); }
@@ -501,4 +534,73 @@ export async function openChangeLog(farm, onOpen) {
   kinds.onchange = who.onchange = draw; q.oninput = draw;
   d.body.append(bar, list);
   draw();
+}
+
+// ── a product of our own ──
+export function openNewProduct(farm, products, onCreated, onOpenExisting) {
+  const d = drawer('New product', 'A product of our own: give it a name, or just add the photos of its label — the AI reads them');
+  const name = input({ placeholder: 'as on the label (empty: the AI reads it from the photos)' });
+  const supplier = input({ placeholder: 'optional' });
+  const kind = selectBox(Object.entries(KIND), 'chemical');
+  const unit = selectBox([['ml', 'ml (a liquid)'], ['g', 'g (a powder, granules)'], ['units', 'units (traps, sachets, cards)'], ['individuals', 'individuals (living)']], 'ml');
+  const living = input({ type: 'checkbox' });
+  const lw = el('label', 'lb-check'); lw.append(living, el('span', null, 'A living product (predators, parasitoids): ordered for each use, never stocked'));
+  kind.onchange = () => { if (kind.value === 'beneficial') { living.checked = true; unit.value = 'individuals'; } };
+  // a name like one already in the list: open that one instead of adding it twice
+  const like = el('div', 'lb-like');
+  name.oninput = () => {
+    const t = name.value.trim().toLowerCase();
+    like.textContent = '';
+    if (t.length < 3) return;
+    const hits = products.filter(x => x.name.toLowerCase().includes(t) || t.includes(x.name.toLowerCase())).slice(0, 4);
+    if (!hits.length) return;
+    like.append(el('span', 'hint', 'Already in the list: '));
+    hits.forEach((x, i) => {
+      const a = el('a', null, `${x.name} (${x.supplier})`); a.href = '#';
+      a.onclick = e => { e.preventDefault(); d.close(); onOpenExisting?.(x); };
+      if (i) like.append(document.createTextNode(' · '));
+      like.append(a);
+    });
+  };
+  const kindPhoto = selectBox(PHOTO_KIND, 'label');
+  const pick = input({ type: 'file', accept: 'image/*', multiple: true }); pick.hidden = true;
+  const choose = el('button', 'btn btn-sm', 'Choose photos'); choose.onclick = () => pick.click();
+  const picked = el('div', 'hint');
+  pick.onchange = () => { picked.textContent = pick.files.length ? `${pick.files.length} photo${pick.files.length === 1 ? '' : 's'} chosen — the AI reads them once the product is added` : ''; };
+  const f = el('div', 'tr-form');
+  f.append(field('Name', name), field('Supplier', supplier), field('Kind', kind), field('The store counts it in', unit));
+  d.body.append(f, like, lw, el('div', 'pd-hlabel', 'Label photos'), el('div', 'row lb-acts'), picked);
+  d.body.lastChild.previousSibling.append(field('First photo is the', kindPhoto), choose, pick);
+  d.body.append(el('div', 'hint', 'It is seen by your unit and its sister units only. Everything else — rate, withholding, re-entry, packs — comes from its label: read by the AI, validated by you, or corrected by hand.'));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Add the product');
+  let made = null;   // the product, once it exists: a retry sends the photos only
+  go.onclick = async () => {
+    const files = [...pick.files];
+    if (!name.value.trim() && !files.length) { toast('Give it a name, or add the photos of its label', 'bad'); name.focus(); return; }
+    busy(go, true, 'Adding…');
+    try {
+      let r = made || await rpc('create_own_product', { p_farm: farm.id, p: { name: name.value, supplier: supplier.value, kind: kind.value,
+        unit: unit.value, perishable: living.checked, from_photos: files.length > 0 } });
+      made = r;
+      const p = r.product;
+      for (let i = 0; i < files.length; i++) {
+        busy(go, true, `Sending photo ${i + 1} of ${files.length}…`);
+        const path = `${farm.id}/${p.id}/${crypto.randomUUID()}.jpg`;
+        await api('/storage/v1/object/product-labels/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: await shrink(files[i]) });
+        r = await rpc('add_product_photo', { p_farm: farm.id, p_product: p.id, p_path: path, p_kind: i === 0 ? kindPhoto.value : 'back' });
+      }
+      toast(files.length ? 'Added — the AI is reading its label' : 'Added', 'ok');
+      d.close();
+      onCreated?.({ ...r.product, _new: true, _autoRead: files.length > 0 });
+    } catch (e) {
+      busy(go, false);
+      if (!made) { toast(errText(e), 'bad'); return; }
+      // the product is there, a photo did not go: open it — its photos can be added from its own window
+      toast(`Added, but a photo did not go: ${errText(e)}. Add it from the product.`, 'bad');
+      d.close();
+      onCreated?.({ ...made.product, _new: true });
+    }
+  };
+  d.footer.append(cancel, go);
 }

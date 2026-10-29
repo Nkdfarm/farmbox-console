@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer } from './ui.js';
-import { openProduct, openChangeLog, expiryPill } from './product.js';
+import { openProduct, openChangeLog, openNewProduct, expiryPill } from './product.js';
 
 const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -203,7 +203,7 @@ export async function openApply(farm, z, opts = {}) {
         const c = el('button', 'tr-tpl' + (t.id === state.template ? ' on' : '')); c.type = 'button';
         const h = el('div', 'tr-tpl-head');
         h.append(el('b', null, t.name), el('span', 'pill', METHOD[t.method] || t.method), el('span', 'pill', t.approach));
-        if (t.unverified) { const u = el('span', 'pill warn', 'to verify'); u.title = `${t.unverified} of its products were not yet checked against the label by a person`; h.append(u); }
+        if (t.unverified) { const u = el('span', 'pill warn', 'not validated'); u.title = `${t.unverified} of its products were not yet validated against the label by a person`; h.append(u); }
         c.append(h, el('div', 'hint', t.steps.map(s => `${s.product} ×${s.applications}${s.applications > 1 ? ' every ' + s.interval_days + ' d' : ''}`).join(' → ')
           + ` · ${t.days || 0} days` + (t.withholding ? ` · withholding up to ${t.withholding} d` : '')));
         if (t.summary) c.append(el('div', 'tr-tpl-sum', t.summary));
@@ -213,7 +213,7 @@ export async function openApply(farm, z, opts = {}) {
     } else {
       const list = lib.products.filter(p => (!state.target || (p.targets || []).includes(state.target))
         && (!state.method || p.method === state.method || state.method === 'integrated'));
-      const sel = selectBox([['', 'Choose a product…'], ...list.map(p => [p.id, `${p.name} — ${p.supplier}${p.verified_at ? '' : ' (to verify)'}`])], state.product || '');
+      const sel = selectBox([['', 'Choose a product…'], ...list.map(p => [p.id, `${p.name} — ${p.supplier}${p.verified_at ? '' : ' (not validated)'}${p.own ? ' · ours' : ''}`])], state.product || '');
       const apps = input({ type: 'number', min: 1, max: 52, value: state.applications });
       const intv = input({ type: 'number', min: 1, max: 90, value: state.interval });
       sel.onchange = () => { state.product = sel.value || null; const p = lib.products.find(x => x.id === state.product);
@@ -381,7 +381,7 @@ function paintPrograms() {
     list.textContent = '';
     list.append(el('div', 'hint tr-count', `${rows.length} program${rows.length === 1 ? '' : 's'}`));
     list.append(table([
-      { key: 'name', label: 'Program', fmt: (v, r) => { const b = el('b', null, v); const w = el('span'); w.append(b); if (r.unverified) { const u = el('span', 'pill warn', 'to verify'); u.title = 'Not yet checked against the label by a person'; u.style.marginLeft = '6px'; w.append(u); } return w; } },
+      { key: 'name', label: 'Program', fmt: (v, r) => { const b = el('b', null, v); const w = el('span'); w.append(b); if (r.unverified) { const u = el('span', 'pill warn', 'not validated'); u.title = 'Not yet validated against the label by a person'; u.style.marginLeft = '6px'; w.append(u); } return w; } },
       { key: 'target_label', label: 'Against' },
       { key: 'method', label: 'Method', fmt: v => METHOD[v] || v },
       { key: 'approach', label: 'Approach' },
@@ -421,7 +421,8 @@ function openProgram(t) {
 
 // ── the library: products ────────────────────────────────────────────────────
 let cMount = null, cFarm = null, cLib = null;
-const cf = { supplier: '', kind: '', target: '', q: '', check: '' };
+const cf = { stock: '', supplier: '', kind: '', target: '', q: '', check: '', origin: '' };
+const soonDays = r => r.expires_on ? (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 : Infinity;
 export async function renderIpmProducts(container, farm) {
   cMount = container; cFarm = farm;
   const here = container;
@@ -436,29 +437,60 @@ export async function renderIpmProducts(container, farm) {
 function paintProducts() {
   const lib = cLib; cMount.textContent = '';
   const checked = lib.products.filter(p => p.verified_at).length;
+  const own = lib.products.filter(p => p.own).length;
+  if (!own) cf.origin = '';   // its select is shown only when there is one of our own
+  const label = code => lib.catalog.find(k => k.code === code)?.label || code;
+  // the product's drawer (js/product.js); what it changed shows in the list when it closes
+  const again = () => { libs.delete(cFarm.id); if (cMount?.isConnected) renderIpmProducts(cMount, cFarm); };
+  const openOne = p => openProduct(cFarm, p, label, { farmName: cFarm.name, onChanged: again, autoRead: !!p._autoRead });
   // the catalogue's log (0.7.284): every reading of the AI, every validation and change
   const logBtn = el('button', 'btn btn-sm', 'Change log');
   logBtn.onclick = () => openChangeLog(cFarm, id => { const p = lib.products.find(x => x.id === id); if (p) openOne(p); });
-  cMount.append(pageHead(null, `${lib.products.length} crop-protection products of ${new Set(lib.products.map(p => p.supplier)).size} suppliers, from their labels; `
-    + `${checked} checked by a person. Each is also a stock item on Office › Stock. Open one to add its label photos, have the AI read them and add stock.`, logBtn));
-  const label = code => lib.catalog.find(k => k.code === code)?.label || code;
-  // the product's drawer (js/product.js); what it changed shows in the list when it closes
-  const openOne = p => openProduct(cFarm, p, label, { farmName: cFarm.name, onChanged: () => { libs.delete(cFarm.id); if (cMount?.isConnected) renderIpmProducts(cMount, cFarm); } });
+  // a product of our own, by hand or from its label photos (0.7.285)
+  const head = [logBtn];
+  if (lib.may_label) {
+    const add = el('button', 'btn btn-sm btn-primary', 'New product');
+    add.onclick = () => openNewProduct(cFarm, lib.products, p => openOne(p), p => openOne(p));
+    head.unshift(add);
+  }
+  cMount.append(pageHead(null, `${lib.products.length} crop-protection products of ${new Set(lib.products.map(p => p.supplier)).size} suppliers`
+    + `${own ? `, ${own} of them our own` : ''}; ${checked} validated against the label by a person. Each is also a stock item on Office › Stock. `
+    + 'Open one to add its label photos, have the AI read them and add stock.', ...head));
+
+  // the store first (owner 29 Oct 2026: "add a filter on top (on stock)"), then validated or not
+  const stSel = selectBox([['', 'In the store or not'], ['in', 'In the store'], ['out', 'Not in the store'], ['soon', 'Expires within 90 days'],
+    ['living', 'Living (never stocked)']], cf.stock);
   const sSel = selectBox([['', 'Every supplier'], ...[...new Set(lib.products.map(p => p.supplier))].sort().map(s => [s, s])], cf.supplier);
   const kSel = selectBox([['', 'Any kind'], ...Object.entries(KIND)], cf.kind);
   const tSel = selectBox([['', 'Any target'], ...[...new Set(lib.products.flatMap(p => p.targets || []))].map(c => [c, label(c)]).sort((a, b) => a[1].localeCompare(b[1]))], cf.target);
-  const vSel = selectBox([['', 'Checked or not'], ['no', 'To verify'], ['yes', 'Checked']], cf.check);
+  const vSel = selectBox([['', 'Validated or not'], ['yes', 'Validated'], ['no', 'Not validated'], ['ai', 'AI reading to review'], ['photos', 'With label photos'], ['nophotos', 'No label photo yet']], cf.check);
+  const oSel = selectBox([['', 'Catalogue and ours'], ['catalogue', 'The catalogue'], ['own', 'Our own']], cf.origin);
   const q = input({ type: 'search', placeholder: 'name or active', value: cf.q });
   const list = el('div');
+  const has = p => !p.perishable && Number(p.on_hand) > 0;
+  const keep = {
+    stock: p => !cf.stock || (cf.stock === 'in' ? has(p) : cf.stock === 'out' ? !p.perishable && !has(p) : cf.stock === 'soon' ? has(p) && soonDays(p) < 90 : p.perishable),
+    check: p => !cf.check || (cf.check === 'yes' ? !!p.verified_at : cf.check === 'no' ? !p.verified_at : cf.check === 'ai' ? !!p.open_check
+      : cf.check === 'photos' ? Number(p.photos) > 0 : !Number(p.photos)),
+    origin: p => !cf.origin || (cf.origin === 'own') === !!p.own,
+  };
   const draw = () => {
-    cf.supplier = sSel.value; cf.kind = kSel.value; cf.target = tSel.value; cf.check = vSel.value; cf.q = q.value.trim().toLowerCase();
-    const rows = lib.products.filter(p => (!cf.supplier || p.supplier === cf.supplier) && (!cf.kind || p.kind === cf.kind)
-      && (!cf.target || (p.targets || []).includes(cf.target)) && (!cf.check || (cf.check === 'yes') === !!p.verified_at)
-      && (!cf.q || (p.name + ' ' + (p.active_ingredient || '')).toLowerCase().includes(cf.q)));
+    cf.stock = stSel.value; cf.supplier = sSel.value; cf.kind = kSel.value; cf.target = tSel.value; cf.check = vSel.value; cf.origin = oSel.value;
+    cf.q = q.value.trim().toLowerCase();
+    const rows = lib.products.filter(p => keep.stock(p) && keep.check(p) && keep.origin(p)
+      && (!cf.supplier || p.supplier === cf.supplier) && (!cf.kind || p.kind === cf.kind)
+      && (!cf.target || (p.targets || []).includes(cf.target))
+      && (!cf.q || (p.name + ' ' + (p.active_ingredient || '') + ' ' + p.supplier).toLowerCase().includes(cf.q)));
     list.textContent = '';
-    list.append(el('div', 'hint tr-count', `${rows.length} product${rows.length === 1 ? '' : 's'}`));
+    const count = el('div', 'hint tr-count', `${rows.length} of ${lib.products.length} product${lib.products.length === 1 ? '' : 's'}`);
+    if (Object.values(cf).some(Boolean)) {
+      const clear = el('button', 'btn btn-sm btn-ghost', 'Clear the filters');
+      clear.onclick = () => { Object.keys(cf).forEach(k => { cf[k] = ''; }); paintProducts(); };
+      count.append(' ', clear);
+    }
+    list.append(count);
     list.append(table([
-      { key: 'name', label: 'Product', fmt: v => el('b', null, v) },
+      { key: 'name', label: 'Product', fmt: (v, r) => { const w = el('span'); w.append(el('b', null, v)); if (r.own) w.append(' ', el('span', 'pill info', 'ours')); return w; } },
       { key: 'supplier', label: 'Supplier' },
       { key: 'kind', label: 'Kind', fmt: v => KIND[v] || v },
       { key: 'active_ingredient', label: 'Active' },
@@ -471,16 +503,19 @@ function paintProducts() {
           if (!Number(v)) return '—';
           const w = el('span', 'tr-store', qtyText(Number(v), r.unit));
           // an expiry within 90 days, beside the quantity (0.7.284)
-          if (r.expires_on && (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 < 90) w.append(' ', expiryPill(r.expires_on));
+          if (soonDays(r) < 90) w.append(' ', expiryPill(r.expires_on));
           return w; } },
       { key: 'verified_at', label: 'Label', fmt: (v, r) => {
           const w = el('span', 'tr-label');
-          w.append(el('span', 'pill ' + (v ? 'ok' : 'warn'), v ? 'checked' : 'to verify'));
+          w.append(el('span', 'pill ' + (v ? 'ok' : 'warn'), v ? 'validated' : 'not validated'));
           if (r.open_check) { const a = el('span', 'pill info', 'AI reading to review'); a.title = 'The AI read the label; a person has not validated it yet.'; w.append(' ', a); }
           if (Number(r.photos)) { const c = el('span', 'hint', ` · ${r.photos} photo${r.photos === 1 ? '' : 's'}`); w.append(c); }
           return w; } },
-    ], rows, { onRow: openOne, empty: 'No product matches.' }));
+    ], rows, { onRow: openOne, empty: 'No product matches these filters.' }));
   };
-  cMount.append(filterBar([['Supplier', sSel], ['Kind', kSel], ['Against', tSel], ['Label', vSel], ['Search', q]], draw), list);
+  const parts = [['In the store', stSel], ['Validated', vSel], ['Supplier', sSel], ['Kind', kSel], ['Against', tSel]];
+  if (own) parts.push(['Origin', oSel]);
+  parts.push(['Search', q]);
+  cMount.append(filterBar(parts, draw), list);
   draw();
 }

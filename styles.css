@@ -2560,6 +2560,7 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .lb-prod { font-weight: 600; color: var(--accent); }
 .lb-undone .lb-what b { text-decoration: line-through; }
 .tr-label, .tr-store { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.tr-label { justify-content: flex-start; }
 @media (max-width: 640px) {
   .lb-grid { grid-template-columns: 1fr 34px; }
   .lb-grid .lb-gh { display: none; }
@@ -2567,3 +2568,6 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
   .lb-grid .lb-now, .lb-grid .lb-says { grid-column: 1 / 3; border-bottom: 0; padding-top: 2px; padding-bottom: 2px; }
   .lb-grid .lb-keep { grid-column: 1 / 2; }
 }
+.lb-like { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+.lb-like a { color: var(--accent); }
+.lb-check { display: flex; gap: 8px; align-items: flex-start; margin: var(--space-2) 0; font-size: var(--text-sm); }

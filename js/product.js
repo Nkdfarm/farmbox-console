@@ -9,7 +9,9 @@
 //   openProduct(farm, p, label, opts) — the drawer of Scouting › Products:
 //     • what the catalogue says (read only)
 //     • Label photos: front, back, leaflet, safety data sheet, pack — added by the Admin, Farm manager, Office and
-//       Agronomist (product-labels bucket, <farm>/<product>/<uuid>.jpg), seen by everyone
+//       Agronomist (product-labels bucket, <farm>/<product>/<uuid>.jpg), seen by everyone; or picked from the farm
+//       gallery ("From the gallery", 0.7.286, migration 0265: the same file, signed from its own bucket, farm-gallery;
+//       taking it off the product leaves the file in the gallery)
 //     • Read the label with AI (edge function label-check) → a review, field by field: Now · Label says (what differs
 //       highlighted) · the value to keep, editable · a tick. A changed safety figure (rate, withholding, re-entry,
 //       applications, interval) is never ticked for you. Validate saves the ticked ones and marks the product validated
@@ -21,11 +23,13 @@
 //   openNewProduct(farm, products, onCreated, onOpenExisting) — a product of our own (0.7.285, migration 0264, owner
 //     29 Oct 2026: "add the possibility to add a product manually just adding photos as well"): a name, or none when
 //     its label photos follow; with photos the drawer opens and the AI reads them at once, name, supplier and kind
-//     included. A name like one already in the list says so first. Seen by this unit and its sister units only
+//     included. A name like one already in the list says so first. Seen by this unit and its sister units only.
+//     Its photos are chosen on this computer or picked from the gallery (0.7.286)
 // The system proposes, a person validates: nothing the AI read is saved until somebody presses Validate.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE } from './api.js';
 import { el, num, drawer, toast, busy, input, field, selectBox, table, loading, confirmDrawer, FARM_TZ } from './ui.js';
+import { pickFromGallery } from './gallery.js';
 
 const KIND = { beneficial: 'Beneficial', biopesticide: 'Biopesticide', chemical: 'Chemical', botanical: 'Botanical', adjuvant: 'Adjuvant', monitoring: 'Monitoring' };
 const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
@@ -92,13 +96,15 @@ async function shrink(file) {
   return new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88));
 }
 const encPath = path => path.split('/').map(encodeURIComponent).join('/');
+// a photo is signed from its own bucket: product-labels, or farm-gallery for one picked from the gallery (0265)
 const signed = new Map();
-async function photoUrl(path) {
-  if (signed.has(path)) return signed.get(path);
+async function photoUrl(ph) {
+  const bucket = ph.bucket || 'product-labels', key = bucket + '/' + ph.path;
+  if (signed.has(key)) return signed.get(key);
   try {
-    const r = await api('/storage/v1/object/sign/product-labels/' + encPath(path), { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
+    const r = await api(`/storage/v1/object/sign/${bucket}/` + encPath(ph.path), { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }), quiet: true });
     const u = r?.signedURL ? URL_BASE + '/storage/v1' + r.signedURL : null;
-    if (u) signed.set(path, u);
+    if (u) signed.set(key, u);
     return u;
   } catch { return null; }
 }
@@ -207,16 +213,18 @@ export function openProduct(farm, p, label, opts = {}) {
       const fig = el('figure', 'lb-photo');
       const img = el('img'); img.alt = (PHOTO_KIND.find(k => k[0] === ph.kind) || [, ph.kind])[1]; img.loading = 'lazy';
       const a = el('a'); a.target = '_blank'; a.rel = 'noopener'; a.append(img);
-      photoUrl(ph.path).then(u => { if (u) { img.src = u; a.href = u; } });
+      photoUrl(ph).then(u => { if (u) { img.src = u; a.href = u; } });
       const cap = el('figcaption', null, `${img.alt} · ${ph.by || '?'} · ${day(ph.at)}`);
       fig.append(a, cap);
       if (ph.may_remove) {
         const x = el('button', 'btn btn-sm btn-ghost lb-x', '✕'); x.title = 'Remove this photo';
         x.onclick = async () => {
-          if (!await confirmDrawer('Remove this photo?', 'It goes from this product for your unit and its sister units. The log keeps a line that it was removed.', 'Remove', true)) return;
+          if (!await confirmDrawer('Remove this photo?', 'It goes from this product for your unit and its sister units. The log keeps a line that it was removed.'
+            + (ph.bucket === 'farm-gallery' ? ' The photo stays in the gallery.' : ''), 'Remove', true)) return;
           try {
             const r = await rpc('remove_product_photo', { p_farm: farm.id, p_photo: ph.id });
-            api('/storage/v1/object/product-labels/' + encPath(r.removed_path), { method: 'DELETE' }).catch(() => {});
+            // a photo picked from the gallery answers removed_path null: its file stays in the gallery, nothing to delete
+            if (r.removed_path) api('/storage/v1/object/product-labels/' + encPath(r.removed_path), { method: 'DELETE' }).catch(() => {});
             took(r);
           } catch (e) { toast(errText(e), 'bad'); }
         };
@@ -235,6 +243,22 @@ export function openProduct(farm, p, label, opts = {}) {
       const pick = input({ type: 'file', accept: 'image/*', multiple: true }); pick.hidden = true;
       const add = el('button', 'btn btn-sm', 'Add label photos');
       add.onclick = () => pick.click();
+      // the farm gallery (0.7.286): photos the phones sent, tagged "label" first; the same file is linked, not copied
+      const gal = el('button', 'btn btn-sm', 'From the gallery');
+      gal.title = 'Choose photos the farm already sent from the phone (Office › Gallery)';
+      gal.onclick = async () => {
+        const chosen = await pickFromGallery(farm, { tag: 'label', multiple: true });
+        if (!chosen.length) return;
+        let r = null;
+        try {
+          for (let i = 0; i < chosen.length; i++) {
+            busy(gal, true, `Adding ${i + 1} of ${chosen.length}…`);
+            r = await rpc('add_product_photo_from_gallery', { p_farm: farm.id, p_product: p.id, p_photo: chosen[i].id, p_kind: kind.value });
+          }
+          busy(gal, false); toast(chosen.length === 1 ? 'Photo added' : `${chosen.length} photos added`, 'ok');
+        } catch (e) { busy(gal, false); toast(errText(e), 'bad'); }
+        if (r) took(r);
+      };
       pick.onchange = async () => {
         const files = [...pick.files]; pick.value = '';
         if (!files.length) return;
@@ -269,7 +293,7 @@ export function openProduct(farm, p, label, opts = {}) {
       const hand = el('button', 'btn btn-sm btn-ghost', 'Correct by hand');
       hand.onclick = () => { const old = mount.querySelector('.lb-review'); old?.remove(); const b = reviewBlock(null); mount.insertBefore(b, mount.querySelector('.lb-stock, .lb-history')); b.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
       // with a reading open, its review already lets every field be typed: no second form beside it
-      acts.append(field('Photo of', kind), add, pick, el('span', 'spacer'));
+      acts.append(field('Photo of', kind), add, gal, pick, el('span', 'spacer'));
       if (!det.check) acts.append(hand);
       acts.append(read);
       w.append(acts);
@@ -566,22 +590,33 @@ export function openNewProduct(farm, products, onCreated, onOpenExisting) {
   const pick = input({ type: 'file', accept: 'image/*', multiple: true }); pick.hidden = true;
   const choose = el('button', 'btn btn-sm', 'Choose photos'); choose.onclick = () => pick.click();
   const picked = el('div', 'hint');
-  pick.onchange = () => { picked.textContent = pick.files.length ? `${pick.files.length} photo${pick.files.length === 1 ? '' : 's'} chosen — the AI reads them once the product is added` : ''; };
+  let fromGallery = [];   // the photos picked from the gallery (0.7.286), linked once the product exists
+  const paintPicked = () => {
+    const n = pick.files.length + fromGallery.length;
+    picked.textContent = n ? `${n} photo${n === 1 ? '' : 's'} chosen${fromGallery.length ? ` (${fromGallery.length} from the gallery)` : ''} — the AI reads them once the product is added` : '';
+  };
+  pick.onchange = paintPicked;
+  const gallery = el('button', 'btn btn-sm', 'From the gallery');
+  gallery.title = 'Choose photos the farm already sent from the phone (Office › Gallery)';
+  gallery.onclick = async () => {
+    const chosen = await pickFromGallery(farm, { tag: 'label', multiple: true });
+    if (chosen.length) { fromGallery = chosen; paintPicked(); }
+  };
   const f = el('div', 'tr-form');
   f.append(field('Name', name), field('Supplier', supplier), field('Kind', kind), field('The store counts it in', unit));
   d.body.append(f, like, lw, el('div', 'pd-hlabel', 'Label photos'), el('div', 'row lb-acts'), picked);
-  d.body.lastChild.previousSibling.append(field('First photo is the', kindPhoto), choose, pick);
+  d.body.lastChild.previousSibling.append(field('First photo is the', kindPhoto), choose, gallery, pick);
   d.body.append(el('div', 'hint', 'It is seen by your unit and its sister units only. Everything else — rate, withholding, re-entry, packs — comes from its label: read by the AI, validated by you, or corrected by hand.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Add the product');
   let made = null;   // the product, once it exists: a retry sends the photos only
   go.onclick = async () => {
-    const files = [...pick.files];
-    if (!name.value.trim() && !files.length) { toast('Give it a name, or add the photos of its label', 'bad'); name.focus(); return; }
+    const files = [...pick.files], total = files.length + fromGallery.length;
+    if (!name.value.trim() && !total) { toast('Give it a name, or add the photos of its label', 'bad'); name.focus(); return; }
     busy(go, true, 'Adding…');
     try {
       let r = made || await rpc('create_own_product', { p_farm: farm.id, p: { name: name.value, supplier: supplier.value, kind: kind.value,
-        unit: unit.value, perishable: living.checked, from_photos: files.length > 0 } });
+        unit: unit.value, perishable: living.checked, from_photos: total > 0 } });
       made = r;
       const p = r.product;
       for (let i = 0; i < files.length; i++) {
@@ -590,9 +625,14 @@ export function openNewProduct(farm, products, onCreated, onOpenExisting) {
         await api('/storage/v1/object/product-labels/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: await shrink(files[i]) });
         r = await rpc('add_product_photo', { p_farm: farm.id, p_product: p.id, p_path: path, p_kind: i === 0 ? kindPhoto.value : 'back' });
       }
-      toast(files.length ? 'Added — the AI is reading its label' : 'Added', 'ok');
+      // the gallery's photos: the same files, linked (twice for the same product is one row)
+      for (let i = 0; i < fromGallery.length; i++) {
+        busy(go, true, `Adding gallery photo ${i + 1} of ${fromGallery.length}…`);
+        r = await rpc('add_product_photo_from_gallery', { p_farm: farm.id, p_product: p.id, p_photo: fromGallery[i].id, p_kind: !files.length && i === 0 ? kindPhoto.value : 'back' });
+      }
+      toast(total ? 'Added — the AI is reading its label' : 'Added', 'ok');
       d.close();
-      onCreated?.({ ...r.product, _new: true, _autoRead: files.length > 0 });
+      onCreated?.({ ...r.product, _new: true, _autoRead: total > 0 });
     } catch (e) {
       busy(go, false);
       if (!made) { toast(errText(e), 'bad'); return; }

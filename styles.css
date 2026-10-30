@@ -2324,7 +2324,8 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-post.r-red { border-left-color: var(--error); }
 .pd-post.r-orange { border-left-color: var(--warning); }
 .pd-post.r-green { border-left-color: var(--success); }
-.pd-post img { width: 88px; height: 88px; object-fit: cover; border-radius: var(--radius-sm); background: var(--surface-offset); display: block; }
+/* the post's own picture only: a bare `img` also caught the 18 px faces in its comments, blown up to 88 px and cut */
+.pd-post > img { width: 88px; height: 88px; object-fit: cover; border-radius: var(--radius-sm); background: var(--surface-offset); display: block; }
 .pd-post-info { display: grid; gap: 4px; min-width: 0; font-size: var(--text-xs); }
 .pd-post-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-sm); }
 .pd-post .vw-verified { padding: 4px 8px; font-size: 12px; }

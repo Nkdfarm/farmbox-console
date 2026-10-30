@@ -451,7 +451,7 @@ function openProgram(t) {
 
 // ── the library: products ────────────────────────────────────────────────────
 let cMount = null, cFarm = null, cLib = null;
-const cf = { stock: '', supplier: '', kind: '', target: '', q: '', check: '', origin: '' };
+const cf = { stock: '', supplier: '', kind: '', target: '', group: '', q: '', check: '', origin: '' };
 const soonDays = r => r.expires_on ? (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 : Infinity;
 export async function renderIpmProducts(container, farm) {
   cMount = container; cFarm = farm;
@@ -497,6 +497,10 @@ function paintProducts() {
   const kSel = selectBox([['', 'Any kind'], ...Object.entries(GROUPS).map(([k, g]) => [k, g.label]), ...Object.entries(KIND)], cf.kind);
   kSel.title = 'Low-residue: mineral, physical, botanical, microbial, elicitor and semiochemical';
   const tSel = selectBox([['', 'Any target'], ...[...new Set(lib.products.flatMap(p => p.targets || []))].map(c => [c, label(c)]).sort((a, b) => a[1].localeCompare(b[1]))], cf.target);
+  // a mixture is in each of its groups; 4A and 4D are both group 4 (0270: app.moa_keys)
+  const gSel = selectBox([['', 'Any group'], ...[...new Set(lib.products.flatMap(p => p.groups || []))]
+    .sort((a, b) => a.split(' ').pop().localeCompare(b.split(' ').pop()) || a.localeCompare(b, 'en', { numeric: true })).map(g => [g, g])], cf.group);
+  gSel.title = 'A mixture is under each of its groups. 4A and 4D are one group (4), a miticide is with the insecticides, a bactericide with the fungicides.';
   const vSel = selectBox([['', 'Validated or not'], ['yes', 'Validated'], ['no', 'Not validated'], ['ai', 'AI reading to review'], ['photos', 'With label photos'], ['nophotos', 'No label photo yet']], cf.check);
   const oSel = selectBox([['', 'Catalogue and ours'], ['catalogue', 'The catalogue'], ['own', 'Our own']], cf.origin);
   const q = input({ type: 'search', placeholder: 'name or active', value: cf.q });
@@ -509,11 +513,12 @@ function paintProducts() {
     origin: p => !cf.origin || (cf.origin === 'own') === !!p.own,
   };
   const draw = () => {
-    cf.stock = stSel.value; cf.supplier = sSel.value; cf.kind = kSel.value; cf.target = tSel.value; cf.check = vSel.value; cf.origin = oSel.value;
+    cf.stock = stSel.value; cf.supplier = sSel.value; cf.kind = kSel.value; cf.target = tSel.value; cf.group = gSel.value; cf.check = vSel.value; cf.origin = oSel.value;
     cf.q = q.value.trim().toLowerCase();
     const rows = lib.products.filter(p => keep.stock(p) && keep.check(p) && keep.origin(p)
       && (!cf.supplier || p.supplier === cf.supplier) && kindOk(cf.kind, p.kind)
       && (!cf.target || (p.targets || []).includes(cf.target))
+      && (!cf.group || (p.groups || []).includes(cf.group))
       && (!cf.q || (p.name + ' ' + (p.active_ingredient || '') + ' ' + p.supplier).toLowerCase().includes(cf.q)));
     list.textContent = '';
     const count = el('div', 'hint tr-count', `${rows.length} of ${lib.products.length} product${lib.products.length === 1 ? '' : 's'}`);
@@ -528,7 +533,7 @@ function paintProducts() {
       { key: 'supplier', label: 'Supplier' },
       { key: 'kind', label: 'Kind', fmt: v => KIND[v] || v },
       { key: 'active_ingredient', label: 'Active' },
-      { key: 'moa_group', label: 'Group' },
+      { key: 'moa_group', label: 'Resistance group' },
       { key: 'targets', label: 'Against', fmt: v => (v || []).map(label).join(', ') },
       { key: 'rate_text', label: 'Label rate' },
       { key: 'phi_days', label: 'Withholding', align: 'right', fmt: v => v == null ? '?' : v + ' d' },
@@ -548,6 +553,7 @@ function paintProducts() {
     ], rows, { onRow: openOne, empty: 'No product matches these filters.' }));
   };
   const parts = [['In the store', stSel], ['Validated', vSel], ['Supplier', sSel], ['Kind', kSel], ['Against', tSel]];
+  if (lib.products.some(p => (p.groups || []).length)) parts.push(['Resistance group', gSel]);
   if (own) parts.push(['Origin', oSel]);
   parts.push(['Search', q]);
   cMount.append(filterBar(parts, draw), list);

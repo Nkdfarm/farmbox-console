@@ -51,7 +51,7 @@ const kindBox = (k, extra) => {
 const CONF = { label: 'the label', supplier_page: 'the supplier\'s page', secondary: 'another site', unverified: 'not verified' };
 export const FIELD = {
   name: 'Name', supplier: 'Supplier', kind: 'Kind', targets: 'Against', notes: 'Notes', label_url: 'Label link',
-  active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Mode-of-action group',
+  active_ingredient: 'Active', formulation: 'Formulation', reg_no: 'Registration (Act 36)', moa_group: 'Resistance group',
   targets_text: 'Against', crops: 'Crops on the label', rate_text: 'Rate as written', rate_value: 'Rate, a figure',
   rate_unit: 'Rate unit', rate_per: 'Rate per', water_l_per_ha: 'Spray volume, L/ha', phi_days: 'Withholding, days',
   water_l_min: 'Spray volume, least L/ha', water_l_max: 'Spray volume, most L/ha', dose_min_per_ha: 'Least per ha (rate unit)',
@@ -274,6 +274,8 @@ export function openProduct(farm, p, label, opts = {}) {
         else {
           box = input({ type: 'text', value: Array.isArray(start) ? start.join(', ') : start ?? '' });
           if (NUM.has(f)) box.inputMode = 'decimal';
+          // as South African labels print it; the database writes it so, or says why not (0270)
+          if (f === 'moa_group') box.placeholder = 'as on the label: Group 11 fungicide, Group 11 & 3 fungicide';
         }
         box.id = 'lbe-' + (++uid);
         const list = f === 'crops' || f === 'pack_sizes';
@@ -317,7 +319,7 @@ export function openProduct(farm, p, label, opts = {}) {
     const w = el('div');
     const facts = el('dl', 'tr-facts');
     const fact = (k, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) return; facts.append(el('dt', null, k), el('dd', null, Array.isArray(v) ? v.join(', ') : String(v))); };
-    fact('Active', pr.active_ingredient); fact('Formulation', pr.formulation); fact('Mode-of-action group', pr.moa_group);
+    fact('Active', pr.active_ingredient); fact('Formulation', pr.formulation); fact('Resistance group', pr.moa_group);
     fact('Registration (Act 36 of 1947)', pr.reg_no);
     fact('Against', (pr.targets || []).map(label)); fact('As the source names them', pr.targets_text);
     fact('Crops on the label', pr.crops);

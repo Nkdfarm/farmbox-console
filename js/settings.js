@@ -353,7 +353,7 @@ function layout(ctx, touched) {
   const pick = el('select');
   pick.setAttribute('aria-label', 'Start page');
   [['dashboard', 'Dashboard'], ['week', 'Tasks'], ['grow', 'Grow'], ['ipm', 'Scouting'], ['office', 'Office'],
-   ['maintenance', 'Maintenance'], ['connect', 'Connections'], ['farm', 'Farm setup']].forEach(([v, label]) => {
+   ['maintenance', 'Maintenance'], ['farmnet', 'FarmNet'], ['connect', 'Connections'], ['farm', 'Farm setup']].forEach(([v, label]) => {
     const o = el('option', null, label);
     o.value = v;
     pick.append(o);

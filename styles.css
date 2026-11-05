@@ -1656,7 +1656,39 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .cx-val .cx-l { grid-column: 1 / -1; font-size: 11px; color: var(--text-muted); }
 .cx-val.watch { border-color: var(--warning); background: var(--warning-bg); }
 .cx-val.alarm { border-color: var(--error); background: var(--error-bg); }
+/* FarmNet control (0272) */
+.fc-card { margin-bottom: var(--space-3); }
+.fc-card > h3, .fc-title { margin: 0 0 8px; font-size: var(--text-base); }
+.fc-title { margin-top: var(--space-4); }
+.fc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.fc-head h3 { margin: 0; font-size: var(--text-base); }
+.fc-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); }
+.fc-unit { border: 1px solid var(--divider); border-radius: var(--radius-md, 10px); padding: 10px; }
+.fc-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+.fc-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fc-sub { margin: var(--space-4) 0 6px; font-size: var(--text-sm, 13px); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.fc-table table { min-width: 560px; }
+.fc-devs { display: flex; flex-wrap: wrap; gap: 4px; }
+.fc-params { margin-top: var(--space-3); }
+.fc-param { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--divider); }
+.fc-param .input, .fc-param select { width: 110px; }
 .cx-val.alarm .cx-v { color: var(--error); }
+/* FarmNet page (farmnet.js) */
+.fn-tiles .tile.ok .tile-value { color: var(--success); }
+.fn-tiles a.tile { cursor: pointer; }
+.fn-tiles .tile-value { font-size: var(--text-xl, 1.25rem); overflow-wrap: anywhere; }
+.fn-zones { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
+.fn-zones .fc-unit > b { display: block; margin-bottom: 4px; }
+.fc-next { margin: -2px 0 6px; }
+.fc-subhead { margin: var(--space-4) 0 6px; }
+.fc-subhead .fc-sub { margin: 0; }
+.fn-kinds { margin-bottom: 10px; }
+.fn-search { width: min(320px, 100%); }
+.fn-sources { display: grid; gap: 8px; }
+.fn-group > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.fn-dev { padding: 4px 0 8px 12px; border-left: 2px solid var(--divider); margin: 4px 0 8px 4px; }
+.fn-src { display: inline-flex; align-items: center; gap: 6px; margin: 2px 14px 2px 0; font-size: var(--text-sm); cursor: pointer; }
+.fn-src .hint { font-size: 11px; }
 .cx-chart-card { margin-bottom: var(--space-3); }
 .cx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .cx-chart-title { font-weight: 700; margin-bottom: 4px; }

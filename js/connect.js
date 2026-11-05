@@ -180,7 +180,7 @@ function paintFarmnet(mount, farm, d, hours) {
 }
 
 // a small line chart: several series on one time axis, the watch band and the alarm lines
-function lineChart(series, lim, title, dp) {
+export function lineChart(series, lim, title, dp) {   // also the FarmNet page's sensors (farmnet.js)
   const W = 900, H = 260, L = 48, R = 12, T = 16, B = 28;
   const all = series.flatMap(s => s.pts);
   const box = el('div', 'cx-chart');

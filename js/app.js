@@ -33,6 +33,7 @@ import { renderForecast } from './forecast.js';
 import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
+import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant } from './assistant.js';
 import { liveOpen } from './live.js';
 import { loadCatalog } from './catalog.js';
@@ -160,6 +161,10 @@ const SECTIONS = {
   connect: { title: 'Connections', tabs: [
     ['farmnet', 'FarmNet & sensors', renderFarmnet], ['heatmap', 'Heat map', renderHeatmap], ['growth', 'Crop growth', renderGrowth],
     ['counting', 'Counting', renderCounting], ['devices', 'Devices & API', renderDevices]] },
+  // FarmNet (0272, 5 Nov 2026): the controller itself, live, through the edge function farmnet; its admin and farm manager send commands
+  farmnet: { title: 'FarmNet', tabs: [
+    ['overview', 'Overview', renderFnOverview], ['irrigation', 'Irrigation', renderFnIrrigation], ['mixing', 'Mixing', renderFnMixing],
+    ['climate', 'Climate', renderFnClimate], ['sensors', 'Sensors', renderFnSensors], ['alarms', 'Alarms', renderFnAlarms], ['commands', 'Commands', renderFnCommands]] },
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
 };
@@ -188,6 +193,9 @@ const PAGE_KIND = {
   'ipm/scouting': 'overview', 'office/money': 'overview', 'office/orders': 'overview',
   'connect/farmnet': 'overview', 'connect/heatmap': 'overview', 'connect/growth': 'overview', 'connect/counting': 'overview',
   'grow/planner': 'work', 'maintenance/equipment': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
+  // FarmNet: one controller per unit (the farm's code names its secrets), so one unit at a time
+  'farmnet/overview': 'work', 'farmnet/irrigation': 'work', 'farmnet/mixing': 'work', 'farmnet/climate': 'work',
+  'farmnet/sensors': 'work', 'farmnet/alarms': 'work', 'farmnet/commands': 'work',
 };
 // Both loads the page's module once per unit (./x.js?unit=…): each copy keeps its own state
 const PAGE_MOD = {

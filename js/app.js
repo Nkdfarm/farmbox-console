@@ -211,7 +211,8 @@ const unitsOf = f => f?.site ? f.units : f ? [f] : [];
 
 async function renderUnits(page, site, key, tab, kind) {
   const units = site.units;
-  const pk = 'fbc_unit_' + key;
+  // FarmNet's tabs share one choice: the unit chosen on one stays chosen on the others (owner, 5 Nov 2026)
+  const pk = 'fbc_unit_' + (key.startsWith('farmnet/') ? 'farmnet' : key);
   let choice = pref.get(pk) || (kind === 'overview' ? 'both' : units[0].id);
   if (choice === 'both' ? kind !== 'overview' : !units.some(u => u.id === choice)) choice = kind === 'overview' ? 'both' : units[0].id;
   page.textContent = '';

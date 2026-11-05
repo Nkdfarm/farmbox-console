@@ -324,19 +324,24 @@ async function realOf(farm, ids) {
 // ═══ The bay plan ═══════════════════════════════════════════════════════════
 // Which of FarmNet's sources belong to which bay. FarmNet groups by its own climate zones; the bays are the
 // farm's (FarmBox1: 8 bays of 9.6 × 52 m, supabase/data/farmbox1.sql). Owner, 5 Nov 2026: "FN_ETH_33 and
-// FN_ASM_2 is bay 7, FN_ETH_31 are bay 5-6-7, FN_ETH_32 is bay 1-2-3-4, other i do not know now" — Bay 8 has no
-// sensor placed yet, FN_ASM_1 is not on the plan. The vents are ASSUMED two a bay, in FarmNet's order (Win1–2 over
-// the zone's first bay…): each one shows its own name, so a wrong guess shows on screen and is corrected here.
+// FN_ASM_2 is bay 7, FN_ETH_31 are bay 5-6-7, FN_ETH_32 is bay 1-2-3-4, other i do not know now". Corrected the
+// same day: "strawberry air temp is eth33 … s3 win1 and win2 are the windows, custom equipment is the strawberry
+// position 0% bottom, 100% top. EBB and flow and NFT: eth2 [FN_ETH_32] air sensor, screen s2 win1,2,3,4; vines air
+// and medium sensor asm2 and eth31 only air sensor". FN_ASM_2 (air and soil) serves the vines and the strawberries; FN_ASM_1 is not on the plan. The vines' six vents are still
+// ASSUMED two a bay, in FarmNet's order: each one shows its own name, so a wrong guess shows and is corrected here.
 const PLANS = {
   FB1: {
     bays: [[1, 'Ebb & flow'], [2, 'NFT'], [3, 'NFT'], [4, 'NFT'], [5, 'Vines'], [6, 'Vines'], [7, 'Vines'], [8, 'Strawberries']],
     zones: [
-      { fn: 'NFT E&F', bays: [1, 2, 3, 4], vents: ['S2_Win1', 'S2_Win2', 'S2_Win3', 'S2_Win4', 'S2_Win5', 'S2_Win6', 'S2_Win7', 'S2_Win8'], shade: 'S2_Shade' },
+      { fn: 'NFT E&F', bays: [1, 2, 3, 4], vents: ['S2_Win1', 'S2_Win2', 'S2_Win3', 'S2_Win4'], shade: 'S2_Shade' },
       { fn: 'Vine crops', bays: [5, 6, 7], vents: ['S1_Win1', 'S1_Win2', 'S1_Win3', 'S1_Win4', 'S1_Win5', 'S1_Win6'], shade: 'S1_Shade' },
-      { fn: 'Strawberries', bays: [8], vents: ['S3_Win1', 'S3_Win2'], shade: 'S3_Shade' },
+      // the zone's custom equipment is the height of the strawberries: 0 % at the bottom, 100 % at the top
+      { fn: 'Strawberries', bays: [8], vents: ['S3_Win1', 'S3_Win2'], shade: 'S3_Shade', lift: 'Strawberry position' },
     ],
     // the first sensor of a bay is the one shown big; one that serves several bays is marked "zone sensor"
-    sensors: { 1: ['FN_ETH_32'], 2: ['FN_ETH_32'], 3: ['FN_ETH_32'], 4: ['FN_ETH_32'], 5: ['FN_ETH_31'], 6: ['FN_ETH_31'], 7: ['FN_ETH_33', 'FN_ASM_2', 'FN_ETH_31'], 8: [] },
+    sensors: { 1: ['FN_ETH_32'], 2: ['FN_ETH_32'], 3: ['FN_ETH_32'], 4: ['FN_ETH_32'], 5: ['FN_ETH_31', 'FN_ASM_2'], 6: ['FN_ETH_31', 'FN_ASM_2'], 7: ['FN_ETH_31', 'FN_ASM_2'], 8: ['FN_ETH_33', 'FN_ASM_2'] },
+    // the sensors that also read the growing medium: every other value of theirs is shown as the medium's
+    medium: ['FN_ASM_2'],
     valves: { 1: ['EBB 1A', 'EBB 1B'], 2: ['NFT Bay234'], 3: ['NFT Bay234'], 4: ['NFT Bay234'], 5: ['Bay 5'], 6: ['Bay 6'], 7: ['Bay 7'], 8: ['Bay 8'] },
   },
 };
@@ -349,13 +354,21 @@ function planOf(P, src) {
   const clim = (zone, dev, label) => take(src.find(s => s.group === 'climate' && s.path[0] === zone && s.path[1] === dev && s.path[2] === 'Status' && s.label === label));
   const sensorOf = name => ({ name,
     t: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Air Temp')),
-    rh: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Relative RH')) });
+    rh: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Relative RH')),
+    medium: (P.medium || []).includes(name)
+      ? src.filter(s => s.group === 'general' && last(s) === name && s.label !== 'Air Temp' && s.label !== 'Relative RH').map(take) : [] });
   const valveOf = name => ({ name, s: take(src.find(s => s.group === 'irrigate' && s.path[1] === 'Valve' && s.path[2] === name && s.label === 'Switch Status')) });
   const zones = P.zones.map(z => {
     // every switched device of the zone (fans, fogging, cooling), from FarmNet's own list
     const devs = [...new Set(src.filter(s => s.group === 'climate' && s.path[0] === z.fn && s.path[2] === 'Status' && s.label === 'Switch Status').map(s => s.path[1]))]
       .map(d => ({ name: d, s: clim(z.fn, d, 'Switch Status') }));
-    return { ...z, shadeS: clim(z.fn, z.shade, 'Actual Position'), devs };
+    // the zone's custom equipment (FB1's strawberries: their height), its position read like a vent's
+    let liftS = null;
+    if (z.lift) {
+      const pos = src.filter(s => s.group === 'climate' && s.path[0] === z.fn && s.path[1] !== z.shade && !z.vents.includes(s.path[1]) && /position/i.test(s.label));
+      liftS = take(pos.find(s => /custom/i.test(s.path[1]) && s.label === 'Actual Position') || pos.find(s => /custom/i.test(s.path[1])) || pos.find(s => s.label === 'Actual Position'));
+    }
+    return { ...z, shadeS: clim(z.fn, z.shade, 'Actual Position'), liftS, devs };
   });
   const uses = {};
   Object.values(P.sensors).forEach(l => l.forEach(n => { uses[n] = (uses[n] || 0) + 1; }));
@@ -397,6 +410,11 @@ function planView(ctx, plan, real) {
     const shade = v(z.shadeS);
     const on = z.devs.filter(d => (v(d.s) || 0) > 0);
     zb.append(el('b', null, z.fn), el('span', 'bp-chip' + (shade ? ' on' : ''), `Shade ${shade === null ? '—' : Math.round(shade) + ' %'}`));
+    if (z.lift) {
+      const h = v(z.liftS), c = el('span', 'bp-chip', `Plants ${h === null ? '—' : Math.round(h) + ' %'}`);
+      c.title = `${z.lift}${z.liftS ? ` (${z.liftS.path[1]})` : ''}: 0 % at the bottom, 100 % at the top`;
+      zb.append(c);
+    }
     if (on.length) on.forEach(d => zb.append(el('span', 'bp-chip on', `${d.name} on`)));
     else if (z.devs.length) zb.append(el('span', 'bp-chip', `fans & cooling off`));
     grid.append(zb);
@@ -435,7 +453,7 @@ function planView(ctx, plan, real) {
   wrap.append(grid);
   const legend = el('div', 'bp-legend');
   const scale = el('span', 'bp-scale'); scale.append(el('i'), el('small', null, '12°'), el('small', null, '22°'), el('small', null, '32°'));
-  legend.append(scale, el('span', 'hint', 'On top of each bay its roof vents, filled as far as they are open · the drop turns blue while the bay is watered · click a bay for its details and its last 24 h. Which vents are over which bay is assumed (two a bay, in order): hover one for its name.'));
+  legend.append(scale, el('span', 'hint', 'On top of each bay its roof vents, filled as far as they are open · the drop turns blue while the bay is watered · click a bay for its details and its last 24 h. The vines\' vents are assumed two a bay, in order: hover one for its name.'));
   wrap.append(legend);
   return wrap;
 }
@@ -447,8 +465,14 @@ async function bayDrawer(ctx, b, real, readAt) {
   const row = (a, b2) => { const r = el('div', 'fc-param'); r.append(el('span', null, a), el('b', null, b2)); return r; };
   sec('Air', b.sensors.length ? b.sensors.map(x => row(x.name, `${v(x.t) === null ? '—' : v(x.t).toFixed(1) + ' °C'} · ${v(x.rh) === null ? '—' : Math.round(v(x.rh)) + ' % RH'}`))
                               : [el('div', 'hint', 'No sensor is placed in this bay yet.')]);
+  b.sensors.filter(x => x.medium.length).forEach(x => sec(`Growing medium · ${x.name}`, x.medium.map(s => {
+    const n = v(s);
+    return row(s.label, n === null ? '—' : `${n.toFixed(Math.min(Math.max(s.dec, 0), 2))} ${s.unit}`.trim());
+  })));
   sec('Roof vents', b.vents.length ? b.vents.map(x => row(x.name, v(x.s) === null ? '—' : `${Math.round(v(x.s))} % open`)) : [el('div', 'hint', 'None.')]);
   if (b.zone) sec(`Zone ${b.zone.fn}`, [row(`${b.zone.shade} (shade screen)`, v(b.zone.shadeS) === null ? '—' : `at ${Math.round(v(b.zone.shadeS))} %`),
+    ...(b.zone.lift ? [row(`${b.zone.lift}${b.zone.liftS ? ` (${b.zone.liftS.path[1]})` : ''}`,
+      !b.zone.liftS ? 'not in FarmNet\'s list' : v(b.zone.liftS) === null ? '—' : `${Math.round(v(b.zone.liftS))} % (0 bottom · 100 top)`)] : []),
     ...b.zone.devs.map(x => row(x.name, v(x.s) === null ? '—' : v(x.s) > 0 ? 'on' : 'off'))]);
   sec('Irrigation', b.valves.length ? b.valves.map(x => row(x.name, v(x.s) === null ? '—' : v(x.s) > 0 ? 'watering' : 'closed')) : [el('div', 'hint', 'No valve.')]);
   const srcs = b.sensors.flatMap(x => [x.t, x.rh]).filter(Boolean);

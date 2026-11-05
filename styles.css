@@ -1689,6 +1689,43 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .fn-dev { padding: 4px 0 8px 12px; border-left: 2px solid var(--divider); margin: 4px 0 8px 4px; }
 .fn-src { display: inline-flex; align-items: center; gap: 6px; margin: 2px 14px 2px 0; font-size: var(--text-sm); cursor: pointer; }
 .fn-src .hint { font-size: 11px; }
+/* FarmNet › Overview: the bays seen from above (farmnet.js planView) */
+.bp-weather { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--text-sm); color: var(--text-muted); }
+.bp-grid { display: grid; gap: 6px; overflow-x: auto; }
+.bp-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 8px; border-radius: 10px;
+  background: var(--surface-2, rgba(127,127,127,.08)); border: 1px dashed var(--border); font-size: var(--text-xs, 12px); min-width: 0; }
+.bp-zone > b { margin-right: 4px; }
+.bp-chip { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
+.bp-chip.on { border-color: var(--success); color: var(--success); background: var(--success-bg); font-weight: 600; }
+.bp-bay { --h: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 84px; min-height: 250px;
+  padding: 8px 4px 10px; border-radius: 12px; cursor: pointer; text-align: center; font: inherit; color: var(--text);
+  border: 1px solid var(--border); background: var(--surface); transition: transform var(--transition), border-color var(--transition); }
+.bp-bay.has-t { background: linear-gradient(180deg, hsl(var(--h) 75% 50% / .30), hsl(var(--h) 75% 50% / .10));
+  border-color: hsl(var(--h) 70% 45% / .7); }
+.bp-bay:hover { transform: translateY(-1px); border-color: var(--border-strong); }
+.bp-bay:focus-visible { outline: 2px solid var(--accent, #1bbfa8); outline-offset: 2px; }
+.bp-vents { display: flex; justify-content: center; gap: 6px; min-height: 46px; margin-bottom: 4px; }
+.bp-vent { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bp-vent i { --open: 0%; display: block; width: 16px; height: 30px; border-radius: 3px 3px 1px 1px; border: 1px solid var(--text-muted);
+  background: linear-gradient(to top, hsl(195 80% 55%) var(--open), transparent var(--open)); }
+.bp-vent.open i { border-color: hsl(195 80% 45%); }
+.bp-vent small { font-size: 10px; color: var(--text-muted); }
+.bp-name { font-weight: 750; }
+.bp-kind { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.bp-t { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.bp-rh { font-size: var(--text-sm); font-weight: 600; }
+.bp-src { font-size: 10px; color: var(--text-muted); min-height: 14px; }
+.bp-water { margin-top: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; color: var(--text-muted); border: 1px solid var(--border); }
+.bp-water svg { width: 14px; height: 14px; }
+.bp-water.on { color: #fff; background: hsl(205 80% 50%); border-color: hsl(205 80% 45%); font-weight: 700; animation: bp-pulse 1.6s ease-in-out infinite; }
+@keyframes bp-pulse { 50% { box-shadow: 0 0 0 5px hsl(205 80% 50% / .25); } }
+@media (prefers-reduced-motion: reduce) { .bp-water.on { animation: none; } }
+.bp-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 10px; }
+.bp-scale { display: inline-grid; grid-template-columns: repeat(3, auto); column-gap: 30px; position: relative; padding-top: 12px; }
+.bp-scale i { position: absolute; top: 0; left: 0; right: 0; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, hsl(210 75% 50%), hsl(105 75% 50%), hsl(0 75% 50%)); }
+.bp-scale small { font-size: 10px; color: var(--text-muted); }
 .cx-chart-card { margin-bottom: var(--space-3); }
 .cx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .cx-chart-title { font-weight: 700; margin-bottom: 4px; }

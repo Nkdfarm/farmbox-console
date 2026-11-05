@@ -1726,6 +1726,22 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .bp-scale i { position: absolute; top: 0; left: 0; right: 0; height: 8px; border-radius: 4px;
   background: linear-gradient(90deg, hsl(210 75% 50%), hsl(105 75% 50%), hsl(0 75% 50%)); }
 .bp-scale small { font-size: 10px; color: var(--text-muted); }
+/* FarmNet › Overview: the site in 3D (farmnet3d.js) */
+.f3-box { position: relative; }
+.f3-stage { position: relative; height: min(62vh, 560px); min-height: 320px; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-2, #222) 70%, #7fb2d9 30%), var(--surface-2, #1c1c1c)); }
+.f3-stage canvas { display: block; touch-action: none; }
+.f3-labels { position: absolute; inset: 0; pointer-events: none; }
+.f3-tag { pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 3px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text);
+  font: inherit; font-size: 11px; line-height: 1.25; cursor: pointer; white-space: nowrap; touch-action: none; }
+.f3-tag b { font-size: 12px; }
+.f3-tag small { color: var(--text-muted); font-size: 10px; }
+.f3-tag.wet { border-color: hsl(205 80% 50%); box-shadow: 0 0 0 2px hsl(205 80% 50% / .35); }
+.f3-bar { position: absolute; top: 8px; left: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.f3-bar .btn { background: color-mix(in srgb, var(--surface) 85%, transparent); }
+.f3-note { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: var(--text-sm); pointer-events: none; }
+.f3-note.bad { color: var(--error); }
 .cx-chart-card { margin-bottom: var(--space-3); }
 .cx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .cx-chart-title { font-weight: 700; margin-bottom: 4px; }

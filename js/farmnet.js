@@ -26,6 +26,7 @@
 import { fn, rpc } from './api.js';
 import { el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, icon, loading, farmDate, farmLocal, pref, addDays } from './ui.js';
 import { lineChart } from './connect.js';
+import { site3d } from './farmnet3d.js';
 
 const FN = 'farmnet';
 const ask = (farm, action, args = {}) => fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => r?.data);
@@ -117,7 +118,7 @@ async function page(mount, farm, blurb, draw, opts = {}) {
     return;
   }
   const ctx = {
-    farm, may: !!h.may_control, actions: h.actions || {},
+    farm, may: !!h.may_control, actions: h.actions || {}, fresh: !opts.quiet,
     live: () => mount.isConnected && my === token,
     // after a command: in place, no "Asking…"; even if a minute's re-read started meanwhile (it may have read FarmNet before the command)
     redraw: () => { if (mount.isConnected) again(true); },
@@ -396,8 +397,23 @@ function planView(ctx, plan, real) {
   head.append(el('h3', null, `${ctx.farm.name} from above`));
   const wx = el('div', 'bp-weather');
   plan.weather.forEach(([label, s, dp]) => { if (!s) return; const x = v(s); wx.append(el('span', null, `${label} ${x === null ? '—' : x.toFixed(dp)} ${s.unit}`)); });
-  head.append(el('div', 'spacer'), wx);
+  // the plan or the site in 3D (0273), chosen on this computer
+  const view = pref.get('fbc_fn_view') === 'plan' ? 'plan' : '3d';
+  const seg = el('div', 'seg');
+  [['3d', '3D'], ['plan', 'Plan']].forEach(([k, label]) => {
+    const b = el('button', 'seg-btn', label); b.type = 'button'; b.setAttribute('aria-pressed', String(k === view));
+    b.onclick = () => { if (k === view) return; pref.set('fbc_fn_view', k); wrap.replaceWith(planView(ctx, plan, real)); };
+    seg.append(b);
+  });
+  head.append(el('div', 'spacer'), wx, seg);
   wrap.append(head);
+  const openBay = n => { const b = plan.bays.find(x => x.n === n); if (b) bayDrawer(ctx, b, real, readAt); };
+  if (view === '3d') {
+    const v3 = site3d(ctx.farm, ctx.fresh);
+    v3.update(plan, real, openBay);
+    wrap.append(v3.el, el('div', 'hint bp-legend', 'Drag to turn, scroll or pinch to zoom, right-drag to move. Each bay is tinted by its temperature (blue 12° · green 22° · red 32°), its roof vents bluer the more they are open; click a bay or its label for its details. Roof & walls hides the film to see inside.'));
+    return wrap;
+  }
 
   const grid = el('div', 'bp-grid');
   grid.style.gridTemplateColumns = `repeat(${plan.bays.length}, minmax(0, 1fr))`;

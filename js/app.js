@@ -33,6 +33,7 @@ import { renderForecast } from './forecast.js';
 import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
+import { drop3d } from './farmnet3d.js';
 import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant } from './assistant.js';
 import { liveOpen } from './live.js';
@@ -312,7 +313,7 @@ addEventListener('fbc:stale', e => {
 });
 addEventListener('fbc:session-ended', () => {
   if ($('shell').hidden) return;
-  warmed.clear(); forgetConversations(); signOut(); resetState(); location.hash = '';
+  warmed.clear(); forgetConversations(); drop3d(); signOut(); resetState(); location.hash = '';
   showSignin('Your session has ended. Sign in again.');
 });
 

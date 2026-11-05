@@ -178,6 +178,7 @@ export async function pruneData(maxDays = 45) {
 
 function forgetAll() {
   try { caches.delete(DATA_CACHE); } catch { /* nothing kept */ }
+  try { caches.delete(DATA_CACHE + '-models'); } catch { /* nothing kept */ }   // the FarmNet 3D model (farmnet3d.js)
 }
 
 // ── connected / connecting / offline ───────────────────────────────────────

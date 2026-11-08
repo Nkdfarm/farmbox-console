@@ -357,7 +357,8 @@ function planOf(P, src) {
     t: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Air Temp')),
     rh: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Relative RH')),
     medium: (P.medium || []).includes(name)
-      ? src.filter(s => s.group === 'general' && last(s) === name && s.label !== 'Air Temp' && s.label !== 'Relative RH').map(take) : [] });
+      // an FN_ASM also reads the light ("Light Intensity", Klux): that is the air's, not the soil's
+      ? src.filter(s => s.group === 'general' && last(s) === name && s.label !== 'Air Temp' && s.label !== 'Relative RH' && !/light|lux|co2|batter|signal|rssi/i.test(s.label)).map(take) : [] });
   const valveOf = name => ({ name, s: take(src.find(s => s.group === 'irrigate' && s.path[1] === 'Valve' && s.path[2] === name && s.label === 'Switch Status')) });
   const zones = P.zones.map(z => {
     // every switched device of the zone (fans, fogging, cooling), from FarmNet's own list

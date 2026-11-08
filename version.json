@@ -1,5 +1,5 @@
 {
-  "version": "0.7.297",
-  "released": "2026-11-05",
-  "note": "FarmBox1 in 3D on the FarmNet page"
+  "version": "0.7.298",
+  "released": "2026-11-08",
+  "note": "Soil readings on FarmNet leave out light, CO2, battery and signal"
 }

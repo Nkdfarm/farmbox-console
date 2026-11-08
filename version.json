@@ -1,5 +1,5 @@
 {
-  "version": "0.8.1",
+  "version": "0.9.0",
   "released": "2026-11-08",
-  "note": "The assistant warns about conflicts, growers can report a batch within a limit, and the manager decides the rest"
+  "note": "The assistant can draft a new crop from an existing one, and the platform learns how long each phase really lasts"
 }

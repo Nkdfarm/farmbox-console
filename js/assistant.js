@@ -16,7 +16,7 @@ import { el, toast, pref, g1Face } from './ui.js';
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
-  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment']);
+  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop']);
 const OPEN_KEY = 'fbc_ai_open';
 const SUGGEST = [
   'Explain this page',
@@ -124,13 +124,19 @@ async function paintSettings(my) {
   const days = num('Most days a reported harvest may differ from the forecast:', s.tolerance_days);
   const pct = num('Most % a reported yield may differ:', s.tolerance_yield_pct);
   form.append(el('div', 'ai-card-state', 'Empty means no limit. Above a limit the change waits for a manager or the agronomist.'));
+  // learning from finished batches (0278): off until a manager turns it on, because the planner then uses what was learned
+  form.append(el('div', 'ai-impact-head', 'Learning from finished batches'));
+  const learn = box('Learn how long each phase really lasts from the dates observed on finished batches (once enough batches agree, the planner uses it for new batches)', s.learning);
+  const ltol = num('Propose a change to a crop\'s phase days when they differ by more than (days):', s.learned_tolerance_days);
+  form.append(el('div', 'ai-card-state', 'Empty means no proposals. A proposal waits in To decide for a manager or the agronomist; nothing changes until they accept it. Turning learning off goes back to each crop\'s own days.'));
   if (s.may_edit) {
     const save = el('button', 'btn btn-sm btn-primary', 'Save');
     save.onclick = async () => {
       save.disabled = true;
       try {
         await rpc('save_ai_settings', { p_farm: f.id, p: { impact: imp.checked, class_b_growers: grow.checked,
-          tolerance_days: days.value === '' ? null : Number(days.value), tolerance_yield_pct: pct.value === '' ? null : Number(pct.value) } });
+          tolerance_days: days.value === '' ? null : Number(days.value), tolerance_yield_pct: pct.value === '' ? null : Number(pct.value),
+          learning: learn.checked, learned_tolerance_days: ltol.value === '' ? null : Number(ltol.value) } });
         toast('Saved', 'ok');
       } catch (e) { toast(e.message, 'bad'); }
       save.disabled = false;
@@ -176,6 +182,9 @@ const NOUN = {
   sales_order_line: ['order line', 'order lines'], farm_holiday: ['closed day', 'closed days'], steady_group: ['steady group', 'steady groups'],
   issue: ['issue', 'issues'], asset: ['piece of equipment', 'pieces of equipment'], maintenance_rule: ['maintenance routine', 'maintenance routines'],
   market_price: ['price', 'prices'], sop: ['procedure', 'procedures'], crop: ['crop', 'crops'],
+  crop_phase: ['phase of the cycle', 'phases of the cycle'], crop_phase_sop: ['procedure on a phase', 'procedures on phases'],
+  crop_task_template: ['task template', 'task templates'], crop_bom: ['material line', 'material lines'],
+  crop_system_compat: ['growing-system fit', 'growing-system fits'], crop_target: ['climate target', 'climate targets'],
 };
 const noun = (t, n) => (NOUN[t] || [t.replace(/_/g, ' '), t.replace(/_/g, ' ') + ' rows'])[n === 1 ? 0 : 1];
 const CLASS_NOTE = { A: 'records a fact', B: 'adjusts one batch', C: 'touches other work', D: 'changes a definition' };
@@ -231,6 +240,8 @@ function card(v) {
   const box = el('div', 'ai-card ' + (v.state || 'open'));
   box.append(el('div', 'ai-card-sum', v.summary || v.rpc));
   if (v.impact) box.append(impactBlock(v.impact));
+  // a forked crop is a draft that carries ANOTHER crop's numbers (0277): the card says so, whatever the model wrote
+  if (v.rpc === 'fork_crop') box.append(el('div', 'ai-impact-warn', 'This makes a draft crop, not an approved one. Its days, yields, climate targets and quantities are copied from the other crop and are not measured for this one: a person checks them and approves the crop in the crop library.'));
   const det = el('details', 'ai-card-det');
   det.append(el('summary', null, v.rpc), el('pre', null, JSON.stringify(v.args, null, 1)));
   box.append(det);

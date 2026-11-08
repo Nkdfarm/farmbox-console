@@ -341,8 +341,10 @@ const PLANS = {
     ],
     // the first sensor of a bay is the one shown big; one that serves several bays is marked "zone sensor"
     sensors: { 1: ['FN_ETH_32'], 2: ['FN_ETH_32'], 3: ['FN_ETH_32'], 4: ['FN_ETH_32'], 5: ['FN_ETH_31', 'FN_ASM_2'], 6: ['FN_ETH_31', 'FN_ASM_2'], 7: ['FN_ETH_31', 'FN_ASM_2'], 8: ['FN_ETH_33', 'FN_ASM_2'] },
-    // the sensors that also read the growing medium: every other value of theirs is shown as the medium's
+    // the sensors that also read the growing medium: of the rest of their values, light and CO2 are the air's, battery and signal the sensor's own, the others the medium's
     medium: ['FN_ASM_2'],
+    // what each sensor reads (owner, 5 and 8 Nov: "asm2 air and soil, eth31 air", "eth33 air", "eth2 air"). They hang at different heights, so two in one bay read a little apart
+    kinds: { FN_ETH_31: 'air', FN_ETH_32: 'air', FN_ETH_33: 'air', FN_ASM_2: 'air and soil' },
     valves: { 1: ['EBB 1A', 'EBB 1B'], 2: ['NFT Bay234'], 3: ['NFT Bay234'], 4: ['NFT Bay234'], 5: ['Bay 5'], 6: ['Bay 6'], 7: ['Bay 7'], 8: ['Bay 8'] },
   },
 };
@@ -353,12 +355,18 @@ function planOf(P, src) {
   const take = s => { if (s) ids.push(s.id); return s || null; };
   const last = s => s.path[s.path.length - 1];
   const clim = (zone, dev, label) => take(src.find(s => s.group === 'climate' && s.path[0] === zone && s.path[1] === dev && s.path[2] === 'Status' && s.label === label));
-  const sensorOf = name => ({ name,
-    t: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Air Temp')),
-    rh: take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Relative RH')),
-    medium: (P.medium || []).includes(name)
-      // an FN_ASM also reads the light ("Light Intensity", Klux): that is the air's, not the soil's
-      ? src.filter(s => s.group === 'general' && last(s) === name && s.label !== 'Air Temp' && s.label !== 'Relative RH' && !/light|lux|co2|batter|signal|rssi/i.test(s.label)).map(take) : [] });
+  const sensorOf = name => {
+    const t = take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Air Temp'));
+    const rh = take(src.find(s => s.group === 'general' && last(s) === name && s.label === 'Relative RH'));
+    // an FN_ASM is one body that reads the air and the soil at once. Its other values are sorted by what they read:
+    // light and CO2 are the air's, battery and signal the sensor's own, the rest the growing medium's
+    const rest = (P.medium || []).includes(name) ? src.filter(s => s.group === 'general' && last(s) === name && s.label !== 'Air Temp' && s.label !== 'Relative RH') : [];
+    const isDevice = s => /batter|signal|rssi/i.test(s.label);
+    const device = rest.filter(isDevice).map(take);
+    const air = rest.filter(s => !isDevice(s) && /light|lux|co2/i.test(s.label)).map(take);
+    const medium = rest.filter(s => !air.includes(s) && !device.includes(s)).map(take);
+    return { name, kind: (P.kinds || {})[name] || '', t, rh, air, device, medium };
+  };
   const valveOf = name => ({ name, s: take(src.find(s => s.group === 'irrigate' && s.path[1] === 'Valve' && s.path[2] === name && s.label === 'Switch Status')) });
   const zones = P.zones.map(z => {
     // every switched device of the zone (fans, fogging, cooling), from FarmNet's own list
@@ -480,12 +488,18 @@ async function bayDrawer(ctx, b, real, readAt) {
   const d = drawer(`Bay ${b.n} · ${b.kind}`, `${b.zone ? `FarmNet climate zone ${b.zone.fn} · ` : ''}as read at ${readAt}`);
   const sec = (title, kids) => { const x = el('div', 'fc-params'); x.append(el('div', 'cx-kind-label', title), ...kids); d.body.append(x); };
   const row = (a, b2) => { const r = el('div', 'fc-param'); r.append(el('span', null, a), el('b', null, b2)); return r; };
-  sec('Air', b.sensors.length ? b.sensors.map(x => row(x.name, `${v(x.t) === null ? '—' : v(x.t).toFixed(1) + ' °C'} · ${v(x.rh) === null ? '—' : Math.round(v(x.rh)) + ' % RH'}`))
-                              : [el('div', 'hint', 'No sensor is placed in this bay yet.')]);
-  b.sensors.filter(x => x.medium.length).forEach(x => sec(`Growing medium · ${x.name}`, x.medium.map(s => {
-    const n = v(s);
-    return row(s.label, n === null ? '—' : `${n.toFixed(Math.min(Math.max(s.dec, 0), 2))} ${s.unit}`.trim());
-  })));
+  const show = s => { const n = v(s); return n === null ? '—' : `${n.toFixed(Math.min(Math.max(s.dec, 0), 2))} ${s.unit}`.trim(); };
+  // every sensor says what it reads: "FN_ASM_2 · air and soil sensor"; a combined one lists its air values here and its soil values below
+  const air = [];
+  b.sensors.forEach(x => {
+    const who = x.kind ? `${x.name} · ${x.kind} sensor` : x.name;
+    air.push(row(who, `${v(x.t) === null ? '—' : v(x.t).toFixed(1) + ' °C'} · ${v(x.rh) === null ? '—' : Math.round(v(x.rh)) + ' % RH'}`));
+    x.air.forEach(s => air.push(row(`${x.name} · ${s.label}`, show(s))));
+  });
+  if (b.sensors.filter(x => v(x.t) !== null).length > 1) air.push(el('div', 'hint', 'The sensors of one bay hang at different heights, so their air readings differ a little.'));
+  sec('Air', b.sensors.length ? air : [el('div', 'hint', 'No sensor is placed in this bay yet.')]);
+  b.sensors.filter(x => x.medium.length).forEach(x => sec(`Soil and growing medium · ${x.name}`, x.medium.map(s => row(s.label, show(s)))));
+  b.sensors.filter(x => x.device.length).forEach(x => sec(`The sensor itself · ${x.name}`, x.device.map(s => row(s.label, show(s)))));
   sec('Roof vents', b.vents.length ? b.vents.map(x => row(x.name, v(x.s) === null ? '—' : `${Math.round(v(x.s))} % open`)) : [el('div', 'hint', 'None.')]);
   if (b.zone) sec(`Zone ${b.zone.fn}`, [row(`${b.zone.shade} (shade screen)`, v(b.zone.shadeS) === null ? '—' : `at ${Math.round(v(b.zone.shadeS))} %`),
     ...(b.zone.lift ? [row(`${b.zone.lift}${b.zone.liftS ? ` (${b.zone.liftS.path[1]})` : ''}`,

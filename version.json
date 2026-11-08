@@ -1,5 +1,5 @@
 {
-  "version": "0.7.298",
+  "version": "0.7.299",
   "released": "2026-11-08",
-  "note": "Soil readings on FarmNet leave out light, CO2, battery and signal"
+  "note": "FarmNet bay details say what each sensor reads"
 }

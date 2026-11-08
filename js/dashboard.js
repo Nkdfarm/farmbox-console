@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
+import { showAssistantWaiting } from './assistant.js';
 import { cameraTiles } from './cameras.js';
 import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate } from './ui.js';
 
@@ -637,6 +638,7 @@ const DECIDE = [
   ['forecast', 'batch due for the forecast review', 'batches due for the forecast review', '#/grow/forecast', ''],
   ['camera', 'camera estimate to decide', 'camera estimates to decide', '#/connect/growth', ''],
   ['corrections', 'field correction to decide', 'field corrections to decide', '#/grow/validation', ''],
+  ['ai_cards', 'change from the assistant waiting for you', 'changes from the assistant waiting for you', '#ai-waiting', 'warn'],
 ];
 function decideStrip() {
   const box = el('div', 'dc-strip');
@@ -647,6 +649,7 @@ function decideStrip() {
       const n = Number(j[k] || 0);
       if (!n) return;
       const a = el('a', 'dc-item ' + tone); a.href = href;
+      if (k === 'ai_cards') a.onclick = ev => { ev.preventDefault(); showAssistantWaiting(); };
       a.append(el('b', null, String(n)), el('span', null, n === 1 ? one : many));
       box.append(a);
     });

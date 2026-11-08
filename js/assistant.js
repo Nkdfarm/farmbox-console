@@ -16,7 +16,7 @@ import { el, toast, pref, g1Face } from './ui.js';
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
-  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday']);
+  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment']);
 const OPEN_KEY = 'fbc_ai_open';
 const SUGGEST = [
   'Explain this page',
@@ -73,7 +73,77 @@ function md(text) {
   return box;
 }
 
+// ── what waits for a manager, and the farm's settings for the cards (0276) ─────────────────────────────────────────
+let mode = 'chat';   // 'chat' | 'waiting' | 'settings'
+let paintSeq = 0;    // a slow answer for a view that has been left must not draw under the one now shown
+const backBtn = () => { const b = el('button', 'btn btn-sm btn-ghost', '← Back to the conversation'); b.onclick = () => { mode = 'chat'; paint(); }; return b; };
+
+async function paintWaiting(my) {
+  list.textContent = ''; chips.hidden = true;
+  const f = ctx.farm();
+  list.append(backBtn(), el('div', 'ai-impact-head', 'Waiting for you'));
+  let cards = [];
+  try { cards = await rpc('ai_cards_waiting', { p_farm: f.id }, { quiet: true }) || []; }
+  catch (e) { if (my === paintSeq) list.append(el('div', 'ai-msg error', e.message)); return; }
+  if (my !== paintSeq) return;
+  if (!cards.length) list.append(el('div', 'ai-hello', 'Nothing is waiting for a decision.'));
+  cards.forEach(k => {
+    const box = el('div', 'ai-card open');
+    box.append(el('div', 'ai-card-sum', k.summary || k.rpc), el('div', 'ai-card-state', (k.who || 'Someone') + ' asked' + (k.result ? ' — ' + k.result : '')));
+    if (k.impact) box.append(impactBlock(k.impact));
+    const row = el('div', 'row');
+    const go = el('button', 'btn btn-sm btn-primary', 'Apply as me');
+    const no = el('button', 'btn btn-sm btn-ghost', 'Dismiss');
+    go.onclick = async () => {
+      if (!ALLOWED.has(k.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
+      go.disabled = true;
+      try { await rpc(k.rpc, k.rpc === 'apply_batch_adjustment' ? { ...k.args, p_card: k.card_id } : k.args); toast('Applied: ' + (k.summary || k.rpc), 'ok'); ctx.refresh(); }
+      catch (e) { toast(e.message, 'bad'); }
+      paint();
+    };
+    no.onclick = async () => {
+      try { await rpc('ai_card_decide', { p_card: k.card_id, p_state: 'dismissed' }, { quiet: true }); ctx.refresh(); } catch (e) { toast(e.message, 'bad'); }
+      paint();
+    };
+    row.append(go, no); box.append(row); list.append(box);
+  });
+}
+
+async function paintSettings(my) {
+  list.textContent = ''; chips.hidden = true;
+  const f = ctx.farm();
+  list.append(backBtn(), el('div', 'ai-impact-head', 'What the assistant\'s cards do on this FarmBox'));
+  let s;
+  try { s = await rpc('ai_settings', { p_farm: f.id }, { quiet: true }); } catch (e) { if (my === paintSeq) list.append(el('div', 'ai-msg error', e.message)); return; }
+  if (my !== paintSeq) return;
+  const form = el('div', 'ai-card open');
+  const box = (label, on) => { const l = el('label', 'ai-set'); const i = el('input'); i.type = 'checkbox'; i.checked = !!on; i.disabled = !s.may_edit; l.append(i, ' ' + label); form.append(l); return i; };
+  const num = (label, v) => { const l = el('label', 'ai-set'); const i = el('input', 'input'); i.type = 'number'; i.min = 0; i.placeholder = 'no limit'; i.value = v == null ? '' : v; i.disabled = !s.may_edit; l.append(label + ' ', i); form.append(l); return i; };
+  const imp = box('Show what a change would do on each card', s.impact);
+  const grow = box('A grower may apply a change to one running batch (class B)', s.class_b_growers);
+  const days = num('Most days a reported harvest may differ from the forecast:', s.tolerance_days);
+  const pct = num('Most % a reported yield may differ:', s.tolerance_yield_pct);
+  form.append(el('div', 'ai-card-state', 'Empty means no limit. Above a limit the change waits for a manager or the agronomist.'));
+  if (s.may_edit) {
+    const save = el('button', 'btn btn-sm btn-primary', 'Save');
+    save.onclick = async () => {
+      save.disabled = true;
+      try {
+        await rpc('save_ai_settings', { p_farm: f.id, p: { impact: imp.checked, class_b_growers: grow.checked,
+          tolerance_days: days.value === '' ? null : Number(days.value), tolerance_yield_pct: pct.value === '' ? null : Number(pct.value) } });
+        toast('Saved', 'ok');
+      } catch (e) { toast(e.message, 'bad'); }
+      save.disabled = false;
+    };
+    form.append(save);
+  } else form.append(el('div', 'ai-card-state', 'Only a manager of this FarmBox changes these.'));
+  list.append(form);
+}
+
 function paint() {
+  const my = ++paintSeq;
+  if (mode === 'waiting') { paintWaiting(my); return; }
+  if (mode === 'settings') { paintSettings(my); return; }
   const c = convo();
   list.textContent = '';
   if (!c.view.length) {
@@ -152,7 +222,8 @@ function impactBlock(imp) {
   });
   if (groups.length) box.append(list);
   if (imp.truncated) box.append(el('div', 'ai-impact-line', 'More changes than can be listed here.'));
-  (imp.conflicts || []).forEach(c => box.append(el('div', 'ai-impact-conflict', '! ' + (typeof c === 'string' ? c : c.text || c.message || JSON.stringify(c)))));
+  (imp.conflicts || []).forEach(c => box.append(el('div', 'ai-impact-conflict', '! ' + (typeof c === 'string' ? c : (c.rule ? c.rule + ' · ' : '') + (c.text || c.message || JSON.stringify(c))))));
+  if (imp.needsManager) box.append(el('div', 'ai-impact-warn', 'This is more than the limit set for this FarmBox: a manager will decide it.'));
   return box;
 }
 
@@ -165,6 +236,7 @@ function card(v) {
   box.append(det);
   if (v.state === 'done') box.append(el('div', 'ai-card-state ok', '✓ Done' + (v.result ? ' — ' + v.result : '')));
   else if (v.state === 'dismissed') box.append(el('div', 'ai-card-state', 'Dismissed'));
+  else if (v.state === 'needs_manager') box.append(el('div', 'ai-card-state', '⏳ Waiting for a manager to decide' + (v.result ? ' — ' + v.result : '')));
   else if (v.state === 'failed') box.append(el('div', 'ai-card-state bad', '✕ ' + v.result));
   if (!v.state || v.state === 'failed') {
     const row = el('div', 'row');
@@ -206,7 +278,7 @@ async function hydrate() {
 const short = r => {
   if (r == null) return '';
   if (typeof r !== 'object') return String(r).slice(0, 80);
-  const keys = ['crop', 'zone', 'positions', 'batches', 'validated', 'placed', 'title', 'name', 'version', 'status'];
+  const keys = ['crop', 'zone', 'positions', 'batches', 'validated', 'placed', 'title', 'name', 'version', 'status', 'batch', 'harvest_start'];
   return keys.filter(k => r[k] != null).map(k => `${k} ${r[k]}`).join(' · ').slice(0, 120);
 };
 
@@ -214,9 +286,19 @@ async function doIt(v, btn) {
   if (!ALLOWED.has(v.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
   btn.disabled = true; btn.textContent = 'Doing…';
   try {
-    const r = await rpc(v.rpc, v.args);
+    const r = await rpc(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args);
+    if (r && r.needs_manager && !v.card_id) {   // the card was not kept, so nobody could be asked: say so, and leave it as it is
+      toast(r.message || 'This is above the limit: ask a manager', 'bad');
+      btn.disabled = false; btn.textContent = 'Do it'; return;
+    }
+    if (r && r.needs_manager) {   // above the limit: nothing was applied, the manager decides (the door has marked the card)
+      v.state = 'needs_manager'; v.result = r.message || '';
+      convo().notes.push(`asked a manager: ${v.summary}`);
+      toast('Sent to a manager: it is above the limit', 'ok');
+      save(); paint(); return;
+    }
     v.state = 'done'; v.result = short(r);
-    record(v, 'done');
+    if (v.rpc !== 'apply_batch_adjustment') record(v, 'done');
     convo().notes.push(`did: ${v.summary}` + (v.result ? ` (${v.result})` : ''));
     toast('Done: ' + (v.summary || v.rpc), 'ok');
     ctx.refresh();
@@ -236,6 +318,7 @@ async function send(text) {
   text = (text ?? input.value).trim();
   if (!f) { toast('Choose a FarmBox first', 'bad'); return; }
   if (!text && !files.length) return;
+  if (mode !== 'chat') { mode = 'chat'; paint(); }
   const sent = files.slice(); files = []; paintFiles();
   input.value = '';
   const notes = c.notes.length ? `(Since your last answer I ${c.notes.join('; ')}.)\n` : '';
@@ -299,11 +382,14 @@ export function initAssistant(context) {
   panel.setAttribute('aria-label', 'Assistant');
   const head = el('div', 'ai-head');
   const fresh = el('button', 'btn btn-sm btn-ghost', 'New conversation');
-  fresh.onclick = () => { const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [], chatId: null, fresh: true }); hydrated.add(f?.id); save(); paint(); };
+  fresh.onclick = () => { mode = 'chat'; const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [], chatId: null, fresh: true }); hydrated.add(f?.id); save(); paint(); };
   const x = el('button', 'btn btn-sm btn-ghost', '⟩');
   x.title = 'Fold the assistant away'; x.setAttribute('aria-label', 'Close the assistant');
   x.onclick = () => setOpen(false);
-  head.append(g1Face('', 'The assistant'), el('b', null, 'Assistant'), el('div', 'spacer'), fresh, x);
+  const gear = el('button', 'btn btn-sm btn-ghost', '⚙');
+  gear.title = 'What the cards do on this FarmBox'; gear.setAttribute('aria-label', 'Settings of the cards');
+  gear.onclick = () => { mode = 'settings'; paint(); };
+  head.append(g1Face('', 'The assistant'), el('b', null, 'Assistant'), el('div', 'spacer'), gear, fresh, x);
   list = el('div', 'ai-list');
   chips = el('div', 'ai-chips');
   SUGGEST.forEach(s => { const c = el('button', 'chip', s); c.onclick = () => send(s); chips.append(c); });
@@ -338,5 +424,7 @@ export function initAssistant(context) {
 
 // a farm switch shows that farm's conversation
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
-export function forgetAssistant() { convos.clear(); hydrated.clear(); if (panel && !panel.hidden) paint(); }
-export function assistantFarmChanged() { if (panel && !panel.hidden) { paint(); hydrate(); } }
+// the dashboard's "To decide" tile for cards that wait for a manager opens them here
+export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
+export function forgetAssistant() { mode = 'chat'; convos.clear(); hydrated.clear(); if (panel && !panel.hidden) paint(); }
+export function assistantFarmChanged() { mode = 'chat'; if (panel && !panel.hidden) { paint(); hydrate(); } }

@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.8.1",
   "released": "2026-11-08",
-  "note": "The assistant shows what a change would do before you press Do it, and keeps your conversations"
+  "note": "The assistant warns about conflicts, growers can report a batch within a limit, and the manager decides the rest"
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.299",
+  "version": "0.8.0",
   "released": "2026-11-08",
-  "note": "FarmNet bay details say what each sensor reads"
+  "note": "The assistant shows what a change would do before you press Do it, and keeps your conversations"
 }

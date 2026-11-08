@@ -37,7 +37,7 @@ const convo = () => {
   if (!convos.has(id)) {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem('fbc_ai_' + id) || 'null'); } catch { /* none */ }
-    convos.set(id, saved || { messages: [], view: [], notes: [] });
+    convos.set(id, saved || { messages: [], view: [], notes: [], chatId: null, fresh: false });
   }
   return convos.get(id);
 };
@@ -98,9 +98,68 @@ function item(v, i) {
   return el('div');
 }
 
+// ── what the change would do (0.8.0: public.impact_of, a dry run that is rolled back) ──────────────────────────────
+// a table in the words of the people who use the console: [one, many]
+const NOUN = {
+  crop_plan: ['batch', 'batches'], growing_position: ['position', 'positions'], growing_system: ['zone', 'zones'],
+  task: ['task', 'tasks'], task_item: ['task step', 'task steps'], sales_order: ['order', 'orders'],
+  sales_order_line: ['order line', 'order lines'], farm_holiday: ['closed day', 'closed days'], steady_group: ['steady group', 'steady groups'],
+  issue: ['issue', 'issues'], asset: ['piece of equipment', 'pieces of equipment'], maintenance_rule: ['maintenance routine', 'maintenance routines'],
+  market_price: ['price', 'prices'], sop: ['procedure', 'procedures'], crop: ['crop', 'crops'],
+};
+const noun = (t, n) => (NOUN[t] || [t.replace(/_/g, ' '), t.replace(/_/g, ' ') + ' rows'])[n === 1 ? 0 : 1];
+const CLASS_NOTE = { A: 'records a fact', B: 'adjusts one batch', C: 'touches other work', D: 'changes a definition' };
+const label = c => String(c).replace(/_/g, ' ');
+const val = x => (x == null || x === '' ? '—' : String(x).length > 24 ? String(x).slice(0, 22) + '…' : String(x));
+
+// the first example of a group, as "status active → cancelled" or the batch code created
+function example(g) {
+  const s = g.sample && g.sample[0];
+  if (!s) return '';
+  if (g.op === 'change') {
+    const keys = Object.keys(s.to || {}).filter(k => JSON.stringify(s.to[k]) !== JSON.stringify((s.from || {})[k]));
+    return keys.slice(0, 3).map(k => `${label(k)} ${val((s.from || {})[k])} → ${val(s.to[k])}`).join(', ');
+  }
+  const o = s.to && Object.keys(s.to).length ? s.to : s.from || {};
+  return o.batch_code || o.title || o.name || o.code || o.day || '';
+}
+
+function impactBlock(imp) {
+  const box = el('div', 'ai-impact');
+  if (imp.ok === false) {
+    box.classList.add('bad');
+    box.append(el('div', 'ai-impact-head', imp.tooBig ? 'Too big to preview' : 'Would be refused'),
+               el('div', 'ai-impact-line', imp.error || ''));
+    if (imp.tooBig) box.append(el('div', 'ai-impact-line', 'The check changed nothing. You can still press Do it.'));
+    return box;
+  }
+  const groups = (imp.changes || []).filter(g => !g.quiet);
+  const head = el('div', 'ai-impact-head', groups.length ? 'What it would do' : 'No row would change');
+  if (imp.class) { const c = el('span', 'ai-impact-class', 'class ' + imp.class); c.title = CLASS_NOTE[imp.class] || ''; head.append(' ', c); }
+  box.append(head);
+  const list = el('ul', 'ai-impact-list');
+  groups.forEach(g => {
+    const mark = g.op === 'create' ? '+' : g.op === 'remove' ? '−' : '~';
+    const verb = g.op === 'create' ? 'creates' : g.op === 'remove' ? (g.table === 'crop_plan' ? 'cancels or deletes' : 'removes') : 'changes';
+    const li = el('li', 'ai-impact-' + g.op);
+    li.append(el('b', null, mark + ' '), `${verb} ${g.n} ${noun(g.table, g.n)}`);
+    if (g.scope === 'other') li.append(el('span', 'ai-impact-warn', ' — in another FarmBox'));
+    else if (g.scope === 'unknown') li.append(el('span', 'ai-impact-warn', ' — of a FarmBox that cannot be told'));
+    else if (g.scope === 'shared') li.append(el('span', 'ai-impact-warn', ' — shared by the franchise'));
+    const ex = g.scope === 'other' || g.scope === 'unknown' ? '' : example(g);
+    if (ex) li.append(el('span', 'ai-impact-ex', ' (' + ex + ')'));
+    list.append(li);
+  });
+  if (groups.length) box.append(list);
+  if (imp.truncated) box.append(el('div', 'ai-impact-line', 'More changes than can be listed here.'));
+  (imp.conflicts || []).forEach(c => box.append(el('div', 'ai-impact-conflict', '! ' + (typeof c === 'string' ? c : c.text || c.message || JSON.stringify(c)))));
+  return box;
+}
+
 function card(v) {
   const box = el('div', 'ai-card ' + (v.state || 'open'));
   box.append(el('div', 'ai-card-sum', v.summary || v.rpc));
+  if (v.impact) box.append(impactBlock(v.impact));
   const det = el('details', 'ai-card-det');
   det.append(el('summary', null, v.rpc), el('pre', null, JSON.stringify(v.args, null, 1)));
   box.append(det);
@@ -112,11 +171,36 @@ function card(v) {
     const go = el('button', 'btn btn-sm btn-primary', v.state === 'failed' ? 'Try again' : 'Do it');
     const no = el('button', 'btn btn-sm btn-ghost', 'Dismiss');
     go.onclick = () => doIt(v, go);
-    no.onclick = () => { v.state = 'dismissed'; convo().notes.push(`dismissed: ${v.summary}`); save(); paint(); };
+    no.onclick = () => { v.state = 'dismissed'; convo().notes.push(`dismissed: ${v.summary}`); record(v, 'dismissed'); save(); paint(); };
     row.append(go, no);
     box.append(row);
   }
   return box;
+}
+
+// what became of a card is kept with the conversation (0275); the change itself already ran through its own door, so a
+// failure here changes nothing for the person
+function record(v, state) {
+  if (!v.card_id) return;
+  rpc('ai_card_decide', { p_card: v.card_id, p_state: state, p_result: state === 'dismissed' ? null : (v.result || null) }, { quiet: true }).catch(() => { /* an old card, or offline */ });
+}
+
+// the conversation of this person on this FarmBox, kept in the database, when this browser has none of its own
+const hydrated = new Set();
+async function hydrate() {
+  const f = ctx.farm();
+  if (!f || hydrated.has(f.id)) return;
+  hydrated.add(f.id);
+  const c = convo();
+  if (c.view.length || c.fresh) return;   // `fresh`: the person pressed New conversation here; the old one is not brought back
+  try {
+    const r = await rpc('ai_chat_latest', { p_farm: f.id }, { quiet: true });
+    if (r?.chat_id && !c.view.length && ctx.farm()?.id === f.id) {
+      c.chatId = r.chat_id; c.messages = r.messages || []; c.view = r.view || [];
+      save(f.id);
+      if (!panel.hidden) paint();
+    }
+  } catch { /* offline, or the migration is not applied: the conversation stays in this browser */ }
 }
 
 const short = r => {
@@ -132,11 +216,13 @@ async function doIt(v, btn) {
   try {
     const r = await rpc(v.rpc, v.args);
     v.state = 'done'; v.result = short(r);
+    record(v, 'done');
     convo().notes.push(`did: ${v.summary}` + (v.result ? ` (${v.result})` : ''));
     toast('Done: ' + (v.summary || v.rpc), 'ok');
     ctx.refresh();
   } catch (e) {
     v.state = 'failed'; v.result = e.message;
+    record(v, 'failed');
     convo().notes.push(`tried "${v.summary}" and it failed: ${e.message}`);
   }
   save(); paint();
@@ -158,12 +244,13 @@ async function send(text) {
   paint();
   busyRow.hidden = false; sendBtn.disabled = true; sending = true;
   try {
-    const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent }, { quiet: true });   // it only asks: what it proposes is done by a card
+    const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
+    c.chatId = r.chat_id || null;
     c.notes = [];
     if (r.reply) c.view.push({ role: 'assistant', text: r.reply });
-    (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, rpc: a.rpc, args: a.args, summary: a.summary }));
+    (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null }));
   } catch (e) {
     c.view.push({ role: 'error', text: e.message });
     if (ctx.farm()?.id === f.id) { if (text) input.value = text; if (!files.length) { files = sent; paintFiles(); } }   // the attachments too
@@ -202,7 +289,7 @@ function setOpen(open) {
   panel.hidden = !open;
   document.body.classList.toggle('ai-open', open);
   pref.set(OPEN_KEY, open ? '1' : null);
-  if (open) { paint(); setTimeout(() => input.focus(), 30); }
+  if (open) { paint(); hydrate(); setTimeout(() => input.focus(), 30); }
 }
 
 export function initAssistant(context) {
@@ -212,7 +299,7 @@ export function initAssistant(context) {
   panel.setAttribute('aria-label', 'Assistant');
   const head = el('div', 'ai-head');
   const fresh = el('button', 'btn btn-sm btn-ghost', 'New conversation');
-  fresh.onclick = () => { const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [] }); save(); paint(); };
+  fresh.onclick = () => { const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [], chatId: null, fresh: true }); hydrated.add(f?.id); save(); paint(); };
   const x = el('button', 'btn btn-sm btn-ghost', '⟩');
   x.title = 'Fold the assistant away'; x.setAttribute('aria-label', 'Close the assistant');
   x.onclick = () => setOpen(false);
@@ -251,5 +338,5 @@ export function initAssistant(context) {
 
 // a farm switch shows that farm's conversation
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
-export function forgetAssistant() { convos.clear(); if (panel && !panel.hidden) paint(); }
-export function assistantFarmChanged() { if (panel && !panel.hidden) paint(); }
+export function forgetAssistant() { convos.clear(); hydrated.clear(); if (panel && !panel.hidden) paint(); }
+export function assistantFarmChanged() { if (panel && !panel.hidden) { paint(); hydrate(); } }

@@ -1,10 +1,19 @@
-# FarmBox Console
+# Naked Heart
 
-The desktop front end of the **FarmBox Operations Platform** — the screens a
-franchisee uses to run a FarmBox: farm setup, crops and the crop plan, people,
-and the weekly labour plan.
+The desktop console of the **FarmBox Operations Platform** (called FarmBox Console
+until 25 Sept 2026) — the screens a franchisee and the office use to run a FarmBox:
+dashboard, farm setup, crops and the crop plan, people and the weekly labour plan,
+scouting, purchasing, orders, money, cameras and sensors.
 
-Live: **https://nkdfarm.github.io/farmbox-console/**
+Live: **https://heart.nkd.farm/** (the old address
+https://nkdfarm.github.io/farmbox-console/ redirects there)
+
+The phone app for the floor is **Naked Brain**: https://brain.nkd.farm/
+(repository `Nkdfarm/naked-brain`).
+
+This repository is the published copy. The source is `console/` in the private
+repository `Nkdfarm/FarmBox-Platform`, and it is published here only by the
+owner's script `scripts/deploy-console.ps1` — do not edit these files directly.
 
 It installs: open it in Chrome or Edge and use *Install app*, or *Add to Home
 Screen* on a phone.

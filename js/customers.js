@@ -9,12 +9,12 @@
 // customer took in the last 90 days and when they last had a delivery.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref, curSign } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref, curSign, money as fmtMoney } from './ui.js';
 
 export const CUSTOMER_KINDS = [['direct', 'Direct client'], ['super_user', 'Super user'], ['restaurant', 'Restaurant'],
   ['retailer', 'Retailer'], ['community', 'Community'], ['market_agent', 'Market agent'], ['other', 'Other']];
 const kindLabel = k => (CUSTOMER_KINDS.find(x => x[0] === k) || [k, k])[1];
-const money = n => `${curSign(farm)} ${Math.round(Number(n || 0)).toLocaleString()}`;
+const money = n => fmtMoney(Number(n || 0), farm);
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 let farm = null, mount = null, data = null, showInactive = false, kindFilter = '', q = '';

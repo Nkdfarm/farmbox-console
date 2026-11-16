@@ -10,13 +10,12 @@
 // the Crop planner, where the machine's own proposals make way for them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
-import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays } from './ui.js';
+import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays, ymd, once } from './ui.js';
 
 let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const kg = n => `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`;   // 2.5 kg of herbs is not 3
 const R = () => curSign(farm);
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const KIND_WORD = { direct: 'direct client', super_user: 'super user', restaurant: 'restaurant', retailer: 'retailer', community: 'community', market_agent: 'market agent', other: 'other' };
 const STATUS = { open: ['open', ''], planned: ['planned', 'ok'], short: ['short', 'bad'], delivered: ['delivered', 'ok'], cancelled: ['cancelled', ''] };
 
@@ -151,10 +150,10 @@ function lineRow(o, l) {
       chip.append(el('span', null, `${nice(x.on)} · ${Number(x.kg).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` + (x.price != null ? ` · ${R()} ${Number(x.price).toFixed(2)}/kg = ${R()} ${Math.round(Number(x.amount || 0)).toLocaleString()}` : '')));
       if (data.may_edit) {
         const u = el('button', 'tl-chip-x', '✕'); u.title = 'Undo this delivery';
-        u.onclick = async () => {
+        u.onclick = () => once(u, async () => {
           if (!await confirmDrawer('Undo this delivery?', `${nice(x.on)} · ${kg(x.kg)} — the line opens again.`, 'Undo')) return;
           try { await rpc('undo_delivery', { p_delivery: x.id }); await reload(); } catch (e) { toast(e.message, 'bad'); }
-        };
+        });
         chip.append(u);
       }
       dl.append(chip);

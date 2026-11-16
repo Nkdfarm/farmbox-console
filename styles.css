@@ -1383,7 +1383,7 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .tl-row:hover .tl-track { background: color-mix(in srgb, var(--accent) 4%, transparent); }
 .tl-row.no-fit .tl-track { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(229,72,77,.08) 6px 12px); }
 .tl-row.no-fit .tl-label { opacity: .5; }
-.tl-bar { position: absolute; top: 4px; height: 24px; border-radius: 6px; cursor: pointer; overflow: visible; z-index: 1;
+.tl-bar { touch-action: none; position: absolute; top: 4px; height: 24px; border-radius: 6px; cursor: pointer; overflow: visible; z-index: 1;
   background: hsl(var(--h) 55% 45% / .38); border: 1px solid hsl(var(--h) 55% 50% / .8); }
 .tl-bar.movable { cursor: grab; }
 .tl-bar.dragging { opacity: .35; }
@@ -1403,7 +1403,7 @@ button.vw-tag { cursor: pointer; font: inherit; font-size: 11px; font-weight: 60
 .tl-bar.is-over { outline: 2px dashed var(--warning); outline-offset: 1px; }
 .tl-bar.is-sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tl-bar.bad { outline: 2px solid var(--danger, #e5484d); }
-.tl-handle { position: absolute; right: -3px; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
+.tl-handle { touch-action: none; position: absolute; right: -3px; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
 .tl-bar:hover .tl-handle { background: color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 0 5px 5px 0; }
 .tl-tip { position: absolute; left: 100%; top: -22px; white-space: nowrap; font-size: 11px; padding: 2px 6px; border-radius: 4px;
   background: var(--ink, #111); color: #fff; z-index: 5; }

@@ -19,9 +19,10 @@ import { renderIssues } from './issues.js';
 import { renderFeedback } from './feedback.js';
 import { renderScouting } from './scouting.js';
 import { renderIpmPrograms, renderIpmProducts } from './treatments.js';
-import { rpc as rpcCall, apiBusy } from './api.js';
+import { apiBusy } from './api.js';
 import { renderHarvest, harvestRange } from './harvest.js';
-import { watchForUpdates, VERSION, updateProgress, finishUpdate } from './update.js';
+import { watchForUpdates, VERSION, updateProgress, finishUpdate, checkForUpdate, updateNow } from './update.js';
+import { forgetPass } from './cameras.js';
 import { timelineRange } from './timeline.js';
 import { renderOrders } from './orders.js';
 import { renderCustomers } from './customers.js';
@@ -240,9 +241,29 @@ async function renderUnits(page, site, key, tab, kind) {
     const inner = el('div', 'unit-inner');
     block.append(head, inner);
     body.append(block);
-    try { const m = await import(`${path}?unit=${u.id}`); await m[fn](inner, u, ctx); }
+    // the ?unit= URL is new to this visit, so it comes from the network: after a release, the new page module into
+    // this old page, whose ui.js/api.js may lack what it imports (review 16 Nov 2026) — offer the update, not a fault
+    let m;
+    try { m = await import(`${path}?unit=${u.id}`); }
+    catch (err) { inner.textContent = ''; inner.append(updateOffer(err)); return; }
+    try { await m[fn](inner, u, ctx); }
     catch (err) { inner.textContent = ''; inner.append(el('div', 'note bad', err.message)); }
   }));
+}
+
+function updateOffer(err) {
+  const n = el('div', 'note bad');
+  n.append(el('div', null, 'This view could not load: a newer version of the console is probably out. Update to see it.'),
+           el('div', 'hint', err?.message || String(err)));
+  const go = el('button', 'btn btn-primary', 'Update now');
+  go.type = 'button';
+  go.onclick = async () => {
+    go.disabled = true;
+    const latest = (await checkForUpdate())?.version;
+    if (latest && latest !== VERSION) updateNow(latest); else location.reload();
+  };
+  n.append(go);
+  return n;
 }
 
 const MOVED = {
@@ -294,15 +315,22 @@ function resetState() {
   liveOpen(null);
   const pick = $('farmPick'); if (pick) pick.textContent = '';
 }
-function doSignOut() {
+// Every way a session ends goes through here (review 16 Nov 2026: each path cleared a different part): Sign out, a
+// session refused at start or in the middle of the day, a sign-out or another person's sign-in in another tab.
+function endSession(message) {
   warmed.clear();   // the next person on this tab gets their own offline copies
   forgetConversations();
+  drop3d();
+  forgetPass();     // the camera's pass was the last person's
   signOut();
   resetState();
   location.hash = '';
-  showSignin();
+  showSignin(message);
 }
+function doSignOut() { endSession(); }
 $('signout').addEventListener('click', doSignOut);
+// signed in in another tab while this one shows the form (api.js): this one opens too
+addEventListener('fbc:session-started', () => { if (!$('signin').hidden && getSession()) start(); });
 // a session refused in the middle of the day: back to the form, the offline copies cleared (0.7.112)
 // a page shows the copy kept on this computer because the fresh read was refused (api.js openFast)
 let staleShown = 0;
@@ -313,8 +341,7 @@ addEventListener('fbc:stale', e => {
 });
 addEventListener('fbc:session-ended', () => {
   if ($('shell').hidden) return;
-  warmed.clear(); forgetConversations(); drop3d(); signOut(); resetState(); location.hash = '';
-  showSignin('Your session has ended. Sign in again.');
+  endSession('Your session has ended. Sign in again.');
 });
 
 // ── the gear ───────────────────────────────────────────────────────────────
@@ -564,7 +591,7 @@ async function paintPestDot() {
   // a site: the worst of its units (0.7.158)
   const rank = { red: 3, orange: 2, green: 1 };
   const asked = farm;
-  const ds = await Promise.all(unitsOf(farm).map(u => rpcCall('pest_dot', { p_farm: u.id }).catch(() => null)));
+  const ds = await Promise.all(unitsOf(farm).map(u => rpc('pest_dot', { p_farm: u.id }).catch(() => null)));
   if (farm !== asked) return;              // switched FarmBox meanwhile: that farm's dot is not this one's
   const d = ds.reduce((a, x) => (rank[x] || 0) > (rank[a] || 0) ? x : a, null);
   a.querySelector('.rail-dot')?.remove();
@@ -699,8 +726,7 @@ async function startOnce() {
     // …and only those two: a 400, 404 or 409 from one of the reads above is a fault to show, not a session to throw
     // away (review 13 Oct 2026). A refresh the server refused arrives here as a 401 (api.js doRefresh).
     if (err.status === 401 || err.status === 403) {
-      signOut();
-      showSignin(err.status === 403
+      endSession(err.status === 403
         ? 'That account no longer exists. Sign in again.'
         : 'Your session has ended. Sign in again.');
     } else {

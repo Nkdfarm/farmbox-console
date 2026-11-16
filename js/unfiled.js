@@ -13,19 +13,10 @@
 // Since 0.7.224 (0218) a file can also be deleted for good — from storage, after a confirmation.
 // ═════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, confirmDrawer, farmToday } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer, farmToday, shortDay, farmTime, farmDayOf } from './ui.js';
 
-const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
-const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
 const errText = e => String(e?.message || e).replace(/^\d+ /, '');
 const STATUS = { done: 'done', skipped: 'cancelled', cancelled: 'cancelled', in_progress: 'in progress', assigned: 'open', planned: 'open', generated: 'open' };
-
-// the day of an instant in the farm's zone, as yyyy-mm-dd (for the date field)
-function dayIn(ts, tz) {
-  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'Africa/Johannesburg', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts)); }
-  catch { return String(ts).slice(0, 10); }
-}
 
 // one request signs every file of the list for an hour
 async function signAll(paths, farmId) {
@@ -169,7 +160,7 @@ function openUnfiled(farm, onChange) {
       const im = el('img'); im.alt = ''; im.loading = 'lazy';
       if (url) { im.src = url; im.style.cursor = 'zoom-in'; im.title = 'Open the full photo'; im.onclick = () => window.open(url, '_blank', 'noopener'); }
       const txt = el('div');
-      txt.append(el('b', null, [f.kind === 'trap' ? 'Trap photo' : 'Plant photo', shortDay(dayIn(f.at, farm.timezone)) + ' ' + hhmm(f.at), f.by ? String(f.by).split(/\s+/)[0] : null].filter(Boolean).join(' · ')));
+      txt.append(el('b', null, [f.kind === 'trap' ? 'Trap photo' : 'Plant photo', shortDay(farmDayOf(f.at, farm.timezone)) + ' ' + farmTime(f.at), f.by ? String(f.by).split(/\s+/)[0] : null].filter(Boolean).join(' · ')));
       txt.append(el('div', 'hint', f.task
         ? `From: ${f.task}${f.area ? ' · ' + f.area : ''}${f.task_day ? ' · ' + shortDay(f.task_day) : ''} (${STATUS[f.task_status] || f.task_status})`
         : 'Its task is no longer on the plan'));
@@ -179,7 +170,7 @@ function openUnfiled(farm, onChange) {
       if (r.may_file && !f.discarded) {
         if (f.kind === 'scout') {
           const z = select([['', 'Zone…'], ...units], f.unit_id || ''), s = select([['health', 'Plant health'], ['growth', 'Growth']], 'health');
-          const day = el('input'); day.type = 'date'; day.value = dayIn(f.at, farm.timezone); day.max = dayIn(Date.now(), farm.timezone);
+          const day = el('input'); day.type = 'date'; day.value = farmDayOf(f.at, farm.timezone); day.max = farmDayOf(Date.now(), farm.timezone);
           day.title = 'The day of the report it goes into';
           const go = el('button', 'btn btn-sm btn-primary', 'File');
           go.onclick = async () => {
@@ -259,7 +250,7 @@ function openUnfiled(farm, onChange) {
         const row = el('div', 'pd-removed-row uf-row');
         const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.src = o.photo_data || '';
         const txt = el('div');
-        txt.append(el('b', null, [o.section === 'growth' ? 'Growth' : 'Plant health', shortDay(dayIn(o.at, farm.timezone)) + ' ' + hhmm(o.at), o.by ? String(o.by).split(/\s+/)[0] : null].filter(Boolean).join(' · ')));
+        txt.append(el('b', null, [o.section === 'growth' ? 'Growth' : 'Plant health', shortDay(farmDayOf(o.at, farm.timezone)) + ' ' + farmTime(o.at), o.by ? String(o.by).split(/\s+/)[0] : null].filter(Boolean).join(' · ')));
         if (o.note) txt.append(el('div', 'hint', o.note));
         const acts = el('div', 'uf-acts');
         if (r.may_file) {

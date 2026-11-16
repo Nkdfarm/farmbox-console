@@ -14,10 +14,10 @@
 // Everything is saved with the window's own Save. The database decides who may (mcp_team's may_edit).
 // ═════════════════════════════════════════════════════════════════════
 import { rpc, URL_BASE } from './api.js';
-import { el, toast, confirmDrawer, drawer, busy, farmInstant, farmLocal } from './ui.js';
+import { el, toast, confirmDrawer, drawer, busy, farmInstant, farmLocal, farmWhen } from './ui.js';
 
 export const MCP_URL = URL_BASE + '/functions/v1/mcp';
-const when = iso => iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+const when = iso => iso ? farmWhen(iso) : '';
 const say = e => String(e?.message || e).replace(/^\d+ /, '');
 const sameSet = (a, b) => a.size === b.size && [...a].every(x => b.has(x));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;

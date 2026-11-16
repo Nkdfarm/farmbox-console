@@ -9,10 +9,8 @@
 // dashboard reads it).
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate, parseYmd, curSign } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate, parseYmd, curSign, ymd, hours } from './ui.js';
 
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const h = m => { m = Math.round(Number(m || 0)); return m ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : '—'; };
 // the farm's clock, like the In and Out fields of the window: on a laptop set to another zone the list said one hour
 // and the window another (review 13 Oct 2026)
 const clock = s => farmLocal(s).slice(11);
@@ -62,7 +60,7 @@ function paint() {
   const tot = k => ppl.reduce((a, p) => a + Number(p[k] || 0), 0);
   const tiles = el('div', 'tiles hr-tiles');
   const tile = (v, l, s) => { const x = el('div', 'tile'); const b = el('div', 'tile-body'); b.append(el('div', 'tile-value', v), el('div', 'tile-label', l)); if (s) b.append(el('div', 'tile-sub', s)); x.append(b); return x; };
-  tiles.append(tile(h(tot('clocked')), 'Worked'), tile(h(tot('planned')), 'Tasks planned'), tile(h(tot('done')), 'Tasks done', `${tot('tasks_done')} of ${tot('tasks')} tasks`),
+  tiles.append(tile(hours(tot('clocked')), 'Worked'), tile(hours(tot('planned')), 'Tasks planned'), tile(hours(tot('done')), 'Tasks done', `${tot('tasks_done')} of ${tot('tasks')} tasks`),
                tile(tot('cost') ? `${R} ${Math.round(tot('cost')).toLocaleString()}` : '—', 'Cost of the hours worked'));
   mount.append(tiles);
 
@@ -86,7 +84,7 @@ function paint() {
       b.onclick = e => { e.stopPropagation(); setCost(p); };
       rate.append(b);
     } else rate.textContent = p.hourly_cost != null ? `${R} ${Number(p.hourly_cost)}` : '—';
-    tr.append(who, el('td', 'num', h(p.clocked)), el('td', 'num', h(p.planned)), el('td', 'num', h(p.done)), rt,
+    tr.append(who, el('td', 'num', hours(p.clocked)), el('td', 'num', hours(p.planned)), el('td', 'num', hours(p.done)), rt,
               el('td', 'num', `${p.tasks_done}/${p.tasks}`), rate, el('td', 'num', Number(p.cost) ? `${R} ${Math.round(p.cost).toLocaleString()}` : '—'));
     tr.onclick = () => { open.has(p.worker_id) ? open.delete(p.worker_id) : open.add(p.worker_id); paint(); };
     tb.append(tr);
@@ -95,7 +93,7 @@ function paint() {
       const g = el('div', 'hr-grid');
       (p.days || []).forEach(d => {
         const c = el('div', 'hr-day');
-        c.append(el('b', null, dayShort(d.d)), el('span', null, `worked ${h(d.clocked)}`), el('span', 'hint', `planned ${h(d.planned)}`), el('span', 'hint', `done ${h(d.done)}`));
+        c.append(el('b', null, dayShort(d.d)), el('span', null, `worked ${hours(d.clocked)}`), el('span', 'hint', `planned ${hours(d.planned)}`), el('span', 'hint', `done ${hours(d.done)}`));
         g.append(c);
       });
       td.append(g); dr.append(td); tb.append(dr);
@@ -117,7 +115,7 @@ function paint() {
       const act = el('td');
       if (data.may_edit) { const b = el('button', 'btn btn-sm btn-ghost', 'Edit'); b.onclick = () => editEntry(e); act.append(b); }
       tr.append(el('td', null, e.name), el('td', null, nice(e.clock_in)), el('td', null, e.clock_out ? nice(e.clock_out) : 'still in'),
-                el('td', 'num', h(e.minutes)), el('td', 'hint', e.source + (e.note ? ` · ${e.note}` : '')), act);
+                el('td', 'num', hours(e.minutes)), el('td', 'hint', e.source + (e.note ? ` · ${e.note}` : '')), act);
       b2.append(tr);
     });
     t2.append(b2); rec.append(t2);

@@ -12,9 +12,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
-         num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign } from './ui.js';
+         num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign, once } from './ui.js';
 import { expiryPill } from './product.js';
 
+// a supplier's address in a mailto: link: encoded, so a '?' or '&' in it cannot add a header, but '@' and ',' kept
+const mailAddr = a => encodeURIComponent(String(a).trim()).replace(/%40/g, '@').replace(/%2C/gi, ',');
 let farm = null, data = null, seed = null, mount = null, chosen = new Set(), tab = 'requests', laterOpen = false;
 let stockOnly = false;
 // a phone number for wa.me: digits only, 00 = international, a ten-digit 0… number is South African
@@ -380,10 +382,10 @@ function ordersCard(rows, may) {
       }
       if (po.status !== 'sent') {
         const cx = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel order');
-        cx.onclick = async () => {
+        cx.onclick = () => once(cx, async () => {
           if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel it', true)) return;
           try { await rpc('cancel_purchase_order', { p_po: po.id }); await load(); } catch (e) { toast(e.message, 'bad'); }
-        };
+        });
         acts.append(cx);
       } else acts.append(el('span', 'hint', 'Receive each line under "On the way"; the order closes with the last one.'));
       c.append(acts);
@@ -414,7 +416,7 @@ function sendOrder(po) {
   copy.onclick = async () => { try { await navigator.clipboard.writeText(pre.value); toast('Copied', 'ok'); } catch { pre.select(); } };
   const links = el('div', 'row');
   links.append(copy);
-  if (po.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${po.supplier_email}?subject=${encodeURIComponent(po.number)}&body=${encodeURIComponent(pre.value)}`; links.append(a); }
+  if (po.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${mailAddr(po.supplier_email)}?subject=${encodeURIComponent(po.number)}&body=${encodeURIComponent(pre.value)}`; links.append(a); }
   if (po.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${waNumber(po.supplier_phone)}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; links.append(a); }
   const ref = input({ placeholder: 'their confirmation, or how it was sent' });
   const when = input({ type: 'date', value: po.expected_delivery ? String(po.expected_delivery).slice(0, 10) : '' });
@@ -539,7 +541,7 @@ function seedMessage(o) {
   const copy = el('button', 'btn btn-sm', 'Copy');
   copy.onclick = async () => { try { await navigator.clipboard.writeText(pre.value); toast('Copied', 'ok'); } catch { pre.select(); } };
   row.append(copy);
-  if (o.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${o.supplier_email}?subject=${encodeURIComponent('Seedling order ' + o.unit)}&body=${encodeURIComponent(pre.value)}`; row.append(a); }
+  if (o.supplier_email) { const a = el('a', 'btn btn-sm', 'Open e-mail'); a.href = `mailto:${mailAddr(o.supplier_email)}?subject=${encodeURIComponent('Seedling order ' + o.unit)}&body=${encodeURIComponent(pre.value)}`; row.append(a); }
   if (o.supplier_phone) { const a = el('a', 'btn btn-sm', 'WhatsApp'); a.href = `https://wa.me/${waNumber(o.supplier_phone)}?text=${encodeURIComponent(pre.value)}`; a.target = '_blank'; a.rel = 'noopener'; row.append(a); }
   d.body.append(field('The order', pre), row, el('div', 'hint', 'Whole trays per crop and delivery. Once it is placed, press "Mark as ordered" on the order.'));
   const close = el('button', 'btn', 'Close'); close.onclick = d.close;

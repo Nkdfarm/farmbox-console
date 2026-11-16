@@ -11,7 +11,7 @@
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE, openFast } from './api.js';
-import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer } from './ui.js';
+import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer, farmDay } from './ui.js';
 import { openViewer } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -38,7 +38,7 @@ async function load() {
   });
 }
 
-const when = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
+const when = ts => farmDay(ts);
 // insects a day since the photo before (0147) against watch / over
 const level = (n, th) => n == null ? '' : n >= th.over ? 'over' : n >= th.watch ? 'watch' : 'ok';
 
@@ -285,9 +285,11 @@ function openReading(t, r) {
     d.body.append(g);
     const save = el('button', 'btn btn-primary', 'Save');
     save.onclick = async () => {
+      const n = Number(total.value);
+      if (total.value.trim() === '' || !Number.isInteger(n) || n < 0) { toast('How many insects were counted? A whole number, 0 or more.', 'bad'); return; }
       busy(save, true, 'Saving…');
       try {
-        await rpc('correct_trap_reading', { p_id: r.id, p_total: parseInt(total.value, 10) || 0, p_pest: pest.value || null });
+        await rpc('correct_trap_reading', { p_id: r.id, p_total: n, p_pest: pest.value || null });
         d.close(); toast('Reading corrected', 'ok'); await load();
       } catch (e) { busy(save, false, 'Save'); toast(e.message, 'bad'); }
     };

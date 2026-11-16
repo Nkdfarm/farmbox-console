@@ -8,16 +8,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
 import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref,
-         parseYmd, farmDate } from './ui.js';
+         parseYmd, farmDate, shortDay, money } from './ui.js';
 import { renderTimeline } from './timeline.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
 
-const fmt = d => d ? new Date(d + 'T00:00:00')
-  .toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
-const money = (n, cur) => n == null ? '—'
-  : `${cur} ${Math.round(Number(n)).toLocaleString()}`;
 // from the farm's day, not this computer's midnight (review 13 Oct 2026)
 const daysTo = d => d ? Math.round((parseYmd(d) - farmDate()) / 86400000) : null;
 
@@ -167,8 +163,8 @@ function proposalCard(proposed, cur, may) {
     const c = x => { const d = el('td'); d.append(x); return d; };
     tr.append(c(el('b', null, g.crop)));
     tr.append(c(el('span', 'mono', String(g.n))));
-    tr.append(c(el('span', null, fmt(g.tp))));
-    tr.append(c(el('span', null, fmt(g.hs))));
+    tr.append(c(el('span', null, shortDay(g.tp))));
+    tr.append(c(el('span', null, shortDay(g.hs))));
     tr.append(c(el('span', 'mono', Math.round(g.yield).toLocaleString() + ' kg')));
     tr.append(c(el('span', 'mono', money(g.rev, cur))));
     tb.append(tr);
@@ -261,17 +257,17 @@ function tile(p, s, cur) {
     const over = b.status === 'active' && e != null && e < 0;
     if (over) t.classList.add('is-over');
     const when = el('span', 'plot-when',
-      b.status === 'proposed' ? 'from ' + fmt(b.transplant_date)
+      b.status === 'proposed' ? 'from ' + shortDay(b.transplant_date)
       : d == null ? 'no dates'
       : d > 0 ? d + ' d to harvest'
       // past its harvest end and still standing: the last cut was never recorded (0.7.112)
-      : over ? 'harvest ended ' + fmt(b.harvest_end)
+      : over ? 'harvest ended ' + shortDay(b.harvest_end)
       : 'harvesting');
     if (over) when.title = 'Still in the position: record the last cut (Grow › Harvest) to free it.';
     t.append(when);
   } else {
     t.append(el('span', 'plot-crop', 'Empty'));
-    t.append(el('span', 'plot-when', 'free ' + fmt(p.free_on)));
+    t.append(el('span', 'plot-when', 'free ' + shortDay(p.free_on)));
   }
   t.onclick = () => openPosition(p, s, cur);
   return t;
@@ -292,9 +288,9 @@ function openPosition(p, s, cur) {
     row('Crop', b.crop);
     row('Batch', b.batch_code);
     row('State', b.status + (b.mode === 'auto' ? ' · proposed by the planner' : ''));
-    if (b.nursery !== 'external') row('Sow', fmt(b.sow_date));
+    if (b.nursery !== 'external') row('Sow', shortDay(b.sow_date));
     row('Seedlings', nurseryLine(b));
-    row('Transplant', fmt(b.transplant_date));
+    row('Transplant', shortDay(b.transplant_date));
     // internal or external, until the seedlings are ordered (0101)
     if (map.may_plan && b.id && b.nursery && !b.nursery_plan?.ordered_at && b.status !== 'active') {
       const other = b.nursery === 'external' ? 'internal' : 'external';
@@ -305,14 +301,14 @@ function openPosition(p, s, cur) {
           const r = await rpc('set_batch_nursery', { p_plan: b.id, p_nursery: other });
           d.close();
           toast(other === 'external'
-            ? (r.order_by ? `Seedlings to order by ${fmt(r.order_by)}${r.late ? ' — late' : ''} · delivery ${fmt(r.delivery)}` : 'External nursery')
+            ? (r.order_by ? `Seedlings to order by ${shortDay(r.order_by)}${r.late ? ' — late' : ''} · delivery ${shortDay(r.delivery)}` : 'External nursery')
             : 'Sown in our nursery', r.late ? 'bad' : 'ok');
           await reload();
         } catch (e) { busy(sw, false, sw.textContent); toast(e.message, 'bad'); }
       };
       const r = el('div', 'set-row'); r.append(el('span'), sw); facts.append(r);
     }
-    row('Harvest', fmt(b.harvest_start) + (b.harvest_end ? ' → ' + fmt(b.harvest_end) : ''));
+    row('Harvest', shortDay(b.harvest_start) + (b.harvest_end ? ' → ' + shortDay(b.harvest_end) : ''));
     if (b.yield) row('Expected', Math.round(b.yield) + ' kg · ' + money(b.revenue, cur));
     // a batch standing here without dates never makes a task: a manager dates it (0076)
     if (map.may_plan && b.id && ['validated', 'active'].includes(b.status) && !b.transplant_date) {
@@ -323,7 +319,7 @@ function openPosition(p, s, cur) {
         busy(go, true, 'Saving…');
         try {
           const r = await rpc('set_batch_dates', { p_plan: b.id, p_transplant: when.value });
-          d.close(); toast(`Dated · harvest from ${fmt(r.harvest_start)} · ${r.tasks} tasks`, 'ok'); await reload();
+          d.close(); toast(`Dated · harvest from ${shortDay(r.harvest_start)} · ${r.tasks} tasks`, 'ok'); await reload();
         } catch (e) { busy(go, false, 'Set dates'); toast(e.message, 'bad'); }
       };
       const r = el('div', 'set-row'); r.append(el('span', null, 'Transplanted on'));
@@ -331,7 +327,7 @@ function openPosition(p, s, cur) {
       facts.append(el('div', 'hint', 'No dates on this batch, so it has no tasks. The harvest window follows from the cycle.'));
     }
   });
-  if (!(p.batches || []).length) row('Free from', fmt(p.free_on));
+  if (!(p.batches || []).length) row('Free from', shortDay(p.free_on));
   row('Grows in', (s.media || []).map(m => mediumLabel(m)).join(', '));
   d.body.append(facts);
 

@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer, ymd, once, addDays, parseYmd, shortDay } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -20,7 +20,6 @@ const OUTCOMES = [['resolved', 'Resolved — gone'], ['contained', 'Contained �
                   ['crop_removed', 'Crop removed'], ['false_alarm', 'False alarm']];
 const METHODS = [['biological', 'Biological'], ['chemical', 'Chemical'], ['cultural', 'Cultural'], ['mechanical', 'Mechanical']];
 const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // The farm the case windows act on: set by the Pest & diseases page (useFarm)
 // before any case or photo is opened (0.7.101 — the Cases tab became part of it).
@@ -115,7 +114,11 @@ export async function openCase(id, onChange, f) {
         if (pt.note) cap.append(el('div', 'hint', pt.note));
         if (det.may_write) {
           const rm = el('button', 'btn btn-sm btn-ghost', 'Take out of the case');
-          rm.onclick = async e => { e.stopPropagation(); try { await rpc('remove_case_point', { p_point: pt.id }); changed(); } catch (er) { toast(er.message, 'bad'); } };
+          rm.onclick = async e => {
+            e.stopPropagation();
+            if (!await confirmDrawer('Take it out of the case?', 'The photo or reading stays in Scouting; it just leaves this case and its curve.', 'Take it out', true)) return;
+            await once(rm, async () => { try { await rpc('remove_case_point', { p_point: pt.id }); changed(); } catch (er) { toast(er.message, 'bad'); } });
+          };
           cap.append(rm);
         }
         fig.append(im, cap);
@@ -135,10 +138,11 @@ export async function openCase(id, onChange, f) {
         const b = el('button', 'toggle', t.code); b.type = 'button';
         b.setAttribute('aria-pressed', String(on.has(t.id)));
         b.disabled = !det.may_write;
-        b.onclick = async () => {
-          on.has(t.id) ? on.delete(t.id) : on.add(t.id);
-          try { await rpc('follow_traps', { p_case: id, p_traps: [...on] }); changed(); } catch (e) { toast(e.message, 'bad'); }
-        };
+        b.onclick = () => once(b, async () => {
+          // the next list is sent; the shown set changes only when the database has taken it
+          const next = new Set(on); next.has(t.id) ? next.delete(t.id) : next.add(t.id);
+          try { await rpc('follow_traps', { p_case: id, p_traps: [...next] }); on.clear(); next.forEach(x => on.add(x)); changed(); } catch (e) { toast(e.message, 'bad'); }
+        });
         row.append(b);
       });
       d.body.append(row, el('div', 'hint', 'Their counts are drawn on the curve from two weeks before the case opened; a replaced card is marked as a reset.'));
@@ -208,26 +212,40 @@ function programForm(det, p, changed) {
   const method = selectBox(METHODS, p?.method || 'biological');
   const product = input({ value: p?.product || '', placeholder: 'e.g. Bacillus subtilis, Encarsia formosa' });
   const rate = input({ value: p?.rate || '', placeholder: 'e.g. 2 ml/l, 5 cards per 100 m²' });
-  const start = input({ type: 'date', value: p?.start_date || ymd(new Date(farmDate().getTime() + 864e5)) });
-  const every = input({ type: 'number', min: 1, max: 90, value: p?.interval_days ?? 7 });
-  const count = input({ type: 'number', min: 1, max: 52, value: p?.applications ?? 3 });
-  const wh = input({ type: 'number', min: 0, max: 180, value: p?.withholding_days ?? 0 });
+  const start = input({ type: 'date', value: p?.start_date || ymd(addDays(farmDate(), 1)) });
+  const every = input({ type: 'number', min: 1, max: 90, value: p?.interval_days ?? '', placeholder: 'days' });
+  const count = input({ type: 'number', min: 1, max: 52, value: p?.applications ?? '', placeholder: 'how many' });
+  const wh = input({ type: 'number', min: 0, max: 180, value: p?.withholding_days ?? '', placeholder: 'days, 0 if none' });
   const note = el('textarea'); note.rows = 2; note.value = p?.note || '';
   const g1 = el('div', 'grid2'); g1.append(field('Product', product), field('Method', method));
   const g2 = el('div', 'grid3'); g2.append(field('First application', start), field('Every (days)', every), field('Applications', count));
   const g3 = el('div', 'grid2'); g3.append(field('Rate', rate), field('Withholding (days)', wh, 'Days after the last application before this crop may be harvested.'));
-  d.body.append(field('Name', name), g1, g2, g3, field('Note', note));
+  // when harvesting is safe again, as the fields are typed (last application + the withholding days)
+  const safe = el('div', 'hint');
+  const paintSafe = () => {
+    const s = start.value, e = Number(every.value), n = Number(count.value);
+    if (wh.value === '') { safe.textContent = 'Type the withholding days (0 if there is none) to see when harvesting is safe.'; return; }
+    if (!s || !(e >= 1) || !(n >= 1)) { safe.textContent = ''; return; }
+    const w = Number(wh.value), last = addDays(parseYmd(s), (n - 1) * e);
+    safe.textContent = w > 0 ? `Safe to harvest from ${shortDay(ymd(addDays(last, w)))} (last application ${shortDay(ymd(last))} + ${w} day${w === 1 ? '' : 's'}).`
+      : `No waiting period: harvest may go on after the last application, ${shortDay(ymd(last))}.`;
+  };
+  [start, every, count, wh].forEach(i => i.addEventListener('input', paintSafe));
+  paintSafe();
+  d.body.append(field('Name', name), g1, g2, g3, safe, field('Note', note));
   d.body.append(el('div', 'hint', 'Each application becomes a task on a working day in this zone' +
     (det.treatment_sop ? `, with the procedure "${det.treatment_sop.title}".` : '.') + ' The case shows when harvesting is safe again.'));
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const ok = el('button', 'btn btn-primary', p ? 'Save' : 'Start');
   ok.onclick = async () => {
     if (!product.value.trim() && !name.value.trim()) { toast('Name the product or the treatment', 'bad'); return; }
+    if (!(Number(every.value) >= 1) || !(Number(count.value) >= 1)) { toast('Type how often (days) and how many applications', 'bad'); return; }
+    if (wh.value === '' || !(Number(wh.value) >= 0)) { toast('Withholding days: type 0 if there is none', 'bad'); return; }
     busy(ok, true, 'Saving…');
     try {
       await rpc('save_program', { p: { id: p?.id || null, issue_id: det.case.id, name: name.value.trim(), method: method.value,
-        product: product.value.trim(), rate: rate.value.trim(), start_date: start.value, interval_days: Number(every.value) || 7,
-        applications: Number(count.value) || 1, withholding_days: Number(wh.value) || 0, note: note.value.trim() } });
+        product: product.value.trim(), rate: rate.value.trim(), start_date: start.value, interval_days: Number(every.value),
+        applications: Number(count.value), withholding_days: Number(wh.value), note: note.value.trim() } });
       d.close(); toast(p ? 'Treatment changed — the applications moved with it' : 'Treatment started — its applications are on the Tasks board', 'ok');
       changed();
     } catch (e) { busy(ok, false, p ? 'Save' : 'Start'); toast(e.message, 'bad'); }
@@ -270,7 +288,7 @@ export function caseChart(det) {
 
   // the date axis: a tick a week, a label every other
   const first = new Date(t0); first.setHours(12, 0, 0, 0); first.setDate(first.getDate() + ((8 - first.getDay()) % 7));
-  for (let t = first.getTime(), i = 0; t <= tEnd; t += 7 * 864e5, i++) {
+  for (let wk = first, t = wk.getTime(), i = 0; t <= tEnd; wk = new Date(wk.getFullYear(), wk.getMonth(), wk.getDate() + 7, 12), t = wk.getTime(), i++) {
     mk('line', { x1: x(t), x2: x(t), y1: T, y2: H - B, class: 'cc-grid' });
     if (i % (span > 70 * 864e5 ? 2 : 1) === 0) mk('text', { x: x(t), y: H - B + 16, class: 'cc-label', 'text-anchor': 'middle' }, day(t));
   }

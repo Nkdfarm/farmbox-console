@@ -11,7 +11,7 @@
 // that way). Sister units are read together unless one is switched off.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate } from './ui.js';
+import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate, ymd, parseYmd, shortDay } from './ui.js';
 
 const DAY = 86400000;
 const SPAN_KEY = 'fbc_basket_span', PROP_KEY = 'fbc_basket_proposed', UNITS_KEY = 'fbc_basket_units';
@@ -21,12 +21,9 @@ const BACK = 14;   // the window opens two weeks back: the last harvests weighed
 let farm = null, mount = null, data = null, offset = 0, clients = null;
 const span = () => Number(pref.get(SPAN_KEY)) || 91;
 const withProposals = () => pref.get(PROP_KEY) !== 'off';
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const dateOf = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
-const dayName = s => dateOf(s).toLocaleDateString(undefined, { weekday: 'short' });
-const dayNum = s => dateOf(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-const longDay = s => dateOf(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+const dayName = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'short' });
+const longDay = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 const kgText = n => { n = Number(n || 0); return n >= 100 ? `${Math.round(n).toLocaleString()} kg` : `${n.toFixed(n >= 10 ? 0 : 1)} kg`; };
 const basketText = n => { n = Number(n || 0); return n < 1 ? `${Math.round(n * 1000)} g` : `${n.toFixed(n >= 10 ? 0 : 2)} kg`; };
 
@@ -95,7 +92,10 @@ function paint() {
   inp.oninput = () => { clients = inp.value === '' ? null : Math.max(0, Math.round(Number(inp.value))); paintChart(); paintTiles(); };
   inp.onchange = async () => {
     try { await rpc('set_basket_clients', { p_farm: farm.id, p_clients: clients }); toast(`${clients ?? 0} direct clients saved`, 'ok'); data.clients = clients; clientsSaved++; }
-    catch (e) { toast(e.message, 'bad'); }
+    catch (e) {
+      toast(e.message, 'bad');
+      clients = data.clients ?? null; inp.value = clients ?? ''; paintChart(); paintTiles();   // the chart shows what is saved, not what failed
+    }
   };
   cl.append(el('span', null, 'Direct clients'), inp);
   const subs = data.subscriptions || {};
@@ -127,7 +127,7 @@ function paint() {
   mount.append(pageHead(null,
     'Each harvest day crop by crop — weighed behind, forecast ahead — and one client\'s basket. Click a day.', cl));
   const bar = el('div', 'bk-bar');
-  bar.append(now, back, fwd, el('b', 'bk-range', `${dayNum(data.from)} – ${dayNum(data.to)}`), el('div', 'spacer'), prop, seg);
+  bar.append(now, back, fwd, el('b', 'bk-range', `${shortDay(data.from)} – ${shortDay(data.to)}`), el('div', 'spacer'), prop, seg);
   const units = data.units || [];
   if (units.length > 1) {
     const us = el('div', 'bk-units');
@@ -253,7 +253,7 @@ function paintChart() {
       stack.append(seg);
     });
     const foot = el('div', 'bk-foot');
-    foot.append(el('span', null, dayName(d.d)), el('span', 'hint', dayNum(d.d)));
+    foot.append(el('span', null, dayName(d.d)), el('span', 'hint', shortDay(d.d)));
     col.append(top, stack, foot);
     col.title = `${longDay(d.d)} · ${c.kind === 'realized' ? 'weighed' : 'forecast'} ${kgText(total)}` +
       (clients && total ? ` · one basket ${basketText(total / clients)}` : '') +

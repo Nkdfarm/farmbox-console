@@ -15,20 +15,19 @@
 // Map size… and Traps and limits…. A kit per page copy, so two units drawn side by side do not share a farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, drawer, num, toast, busy, input, field, trapCheckPill } from './ui.js';
+import { el, drawer, num, toast, busy, input, field, trapCheckPill, shortDay, farmDay } from './ui.js';
 import { openViewer } from './viewer.js';
 import { renderIpm } from './ipm.js';
 
 const TONE_WORD = { red: 'over the limit', orange: 'watch', green: 'low' };
 const TREND = { up: '▲', down: '▼', flat: '–' };
 const TREND_WORD = { up: 'rising against last week', down: 'falling against last week', flat: 'about the same as last week' };
+const when = ts => farmDay(ts, { weekday: 'short' });
 const shortCode = c => String(c || '').replace(/D\d{4}(?:\d{4})?$/, '');
 const d1 = v => num(v, Number(v) >= 10 ? 0 : 1);                                   // insects a day: 1 decimal under 10
 const FAMILY = { whitefly: 'Whitefly', thrips: 'Thrips', fungus_gnat: 'Fungus gnats', shore_fly: 'Shore flies', aphid: 'Aphids',
                  leafminer: 'Leaf miners', moth: 'Moths', beneficial: 'Beneficials', other: 'Other' };
-const dm = d => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
 const m1 = v => num(v, Number(v) % 1 ? 1 : 0);
-const when = ts => ts ? new Date(ts).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
 
 export function trapKit(K) {
   const farm = K.farm, data = K.data || {};
@@ -122,7 +121,7 @@ export function trapKit(K) {
     const card = el('div', 'card card-pad tm-spot');
     const head = el('div', 'row');
     head.append(el('span', 'ipm-code ' + (s.colour || ''), shortCode(s.code)),
-                el('span', 'hint', `card since ${dm(s.hung_on)}${s.active ? '' : ' · taken down'}`));
+                el('span', 'hint', `card since ${shortDay(s.hung_on)}${s.active ? '' : ' · taken down'}`));
     if (s.tone) head.append(el('span', 'pill ' + (s.tone === 'red' ? 'bad' : s.tone === 'orange' ? 'warn' : 'ok'),
                                `${d1(s.level)} new a day · ${TONE_WORD[s.tone]}`));
     if (s.trend) head.append(el('span', 'tm-trend-word', `${TREND[s.trend]} ${TREND_WORD[s.trend]}`));
@@ -179,7 +178,7 @@ export function trapKit(K) {
           const im = x.photo_data ? el('img') : el('span', 'tm-nophoto', 'no photo');
           if (x.photo_data) { im.src = x.photo_data; im.alt = ''; }
           const excl = x.check?.state === 'excluded';
-          f.append(im, el('span', null, `${dm(x.taken_at)}${x.side ? ' · ' + x.side : ''} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : excl ? '' : ' · count starts'}`),
+          f.append(im, el('span', null, `${farmDay(x.taken_at)}${x.side ? ' · ' + x.side : ''} · ${num(x.total, 0)}${x.day_rate != null ? ` · ${d1(x.day_rate)}/day` : excl ? '' : ' · count starts'}`),
                    el('span', 'hint', shortCode(x.code) + (x.replaced ? ' · replaced after' : '')));
           const chk = trapCheckPill(x.check, x.total);
           if (chk) f.append(chk);
@@ -226,7 +225,7 @@ export function trapKit(K) {
       bar.style.height = v == null ? '2px' : `${Math.max(3, 100 * v / max)}%`;
       const start = new Date(w.w + 'T12:00:00'), end = new Date(start); end.setDate(end.getDate() + 7);
       const newCard = changes.some(c => { const d = new Date(c + 'T12:00:00'); return d >= start && d < end; });
-      col.title = `Week of ${dm(w.w)}: ${v == null ? 'no rate' : d1(v) + ' new a day'}${newCard ? ' · new card' : ''}`;
+      col.title = `Week of ${shortDay(w.w)}: ${v == null ? 'no rate' : d1(v) + ' new a day'}${newCard ? ' · new card' : ''}`;
       col.append(bar, el('span', 'tm-wk' + (newCard ? ' new' : ''), newCard ? '↺' : ''));
       box.append(col);
     });

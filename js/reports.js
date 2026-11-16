@@ -10,7 +10,7 @@
 // person is a management tool, not a leaderboard.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, table, pageHead, card, toast, num, shortDate, farmDate } from './ui.js';
+import { loading, el, table, pageHead, card, toast, num, shortDate, farmDate, ymd } from './ui.js';
 
 const RANGES = [[6, 'Last week'], [27, 'Last 4 weeks'], [90, 'Last quarter'],
                 [364, 'Last year']];   // shortest first; the page still opens on four weeks
@@ -22,9 +22,6 @@ export async function renderReports(container, currentFarm) {
   await load();
 }
 
-function ymd(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 // the period on screen, as the arguments it fetches with (app.js reads it ahead)
 export function reportRange() {

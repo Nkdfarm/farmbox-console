@@ -16,7 +16,7 @@
 // 404 (PGRST202): "The gallery is not available yet", not an error.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, confirmDrawer, field, input, selectBox, loading, pageHead, farmToday, parseYmd, addDays, ymd, FARM_TZ } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer, field, input, selectBox, loading, pageHead, farmToday, parseYmd, addDays, ymd, FARM_TZ, farmDayOf } from './ui.js';
 
 const BUCKET = 'farm-gallery';
 const TAGS = [['label', 'Label'], ['equipment', 'Equipment'], ['pest', 'Pest'], ['delivery', 'Delivery'], ['receipt', 'Receipt'], ['crop', 'Crop'], ['other', 'Other']];
@@ -28,7 +28,7 @@ const errText = e => String(e?.message || e).replace(/^\d+ /, '');
 // the database before 0265 has none of these functions
 const gone = e => e?.status === 404 || e?.body?.code === 'PGRST202' || /PGRST202|could not find the function/i.test(String(e?.message || ''));
 const tzOf = farm => farm?.timezone || FARM_TZ;
-const dayOf = (ts, z) => { try { return new Intl.DateTimeFormat('en-CA', { timeZone: z, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts)); } catch { return String(ts).slice(0, 10); } };
+const dayOf = farmDayOf;
 const clock = (ts, z) => ts ? new Date(ts).toLocaleTimeString('en-GB', { timeZone: z, hour: '2-digit', minute: '2-digit' }) : '';
 const stamp = (ts, z) => ts ? new Date(ts).toLocaleString('en-GB', { timeZone: z, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const bigDay = (k, z) => {

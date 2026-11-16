@@ -656,7 +656,9 @@ function decideStrip() {
     if (box.children.length) box.prepend(el('span', 'dc-label', 'To decide'));
   };
   const args = { p_farm: farm.id };
-  cachedRpc('to_decide', args).then(paintIt).catch(() => {});
-  rpc('to_decide', args).then(paintIt).catch(() => {});
+  // the copy on this device is painted only if the fresh answer has not already arrived
+  let fresh = false;
+  cachedRpc('to_decide', args).then(r => { if (!fresh) paintIt(r); }).catch(() => {});
+  rpc('to_decide', args).then(r => { fresh = true; paintIt(r); }).catch(() => {});
   return box;
 }

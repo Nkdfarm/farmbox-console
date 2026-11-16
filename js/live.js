@@ -6,6 +6,9 @@
 import { URL_BASE, ANON } from './api.js';
 
 let ws = null, topic = null, beat = null, retry = null, ref = 0, onMoved = null, debounce = null, lastSaid = 0;
+// a refused or dropped join (review 16 Nov 2026): the socket stayed open on its heartbeat with no channel joined, and
+// nothing was heard or said until the tab was hidden and shown again. Close and open again, 5 s, 10 s … at most 5 min.
+let fails = 0, joinRef = null;
 
 const send = (event, payload, t = topic) => {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ topic: t, event, ref: String(++ref), payload }));
@@ -20,16 +23,26 @@ function open() {
   catch { ws = null; return; }
   ws.onopen = () => {
     send('phx_join', { config: { broadcast: { self: false }, presence: { key: '' } } });
+    joinRef = String(ref);
     beat = setInterval(() => send('heartbeat', {}, 'phoenix'), 25000);
   };
   ws.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
-    if (d.topic !== topic || d.event !== 'broadcast' || d.payload?.event !== 'moved') return;
+    if (d.topic !== topic) return;
+    const joinFailed = d.event === 'phx_reply' && d.ref === joinRef && d.payload?.status !== 'ok';
+    if (d.event === 'phx_error' || d.event === 'phx_close' || joinFailed) { again(); return; }
+    if (d.event === 'phx_reply' && d.ref === joinRef) { fails = 0; return; }
+    if (d.event !== 'broadcast' || d.payload?.event !== 'moved') return;
     clearTimeout(debounce);
     debounce = setTimeout(() => { try { onMoved?.(); } catch { /* the page went away */ } }, 1200);
   };
   ws.onclose = () => { clearInterval(beat); ws = null; retry = setTimeout(open, 20000); };
   ws.onerror = () => { try { ws?.close(); } catch { /* nothing to close */ } };
+}
+function again() {
+  close();
+  fails++;
+  retry = setTimeout(open, Math.min(300_000, 5000 * 2 ** (fails - 1)));
 }
 
 // the channel of a site (its home unit's id), whatever page is open: app.js opens it at every page, so that a change

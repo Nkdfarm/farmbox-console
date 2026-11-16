@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, icon } from './ui.js';
 
-export const VERSION = '0.9.0';
+export const VERSION = '0.9.1';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
@@ -174,9 +174,10 @@ async function update(latest) {
     const regs = await navigator.serviceWorker?.getRegistrations() ?? [];
     await Promise.all(regs.map(r => r.unregister()));
     await step(75, 'Clearing the old copy');
-    // the shell only: fbc-data is the farm's data kept for reading offline
+    // the shell only: fbc-data* is the farm's data kept for reading offline (and fbc-data-models the FarmNet 3D
+    // models, which every update used to download again — review 16 Nov 2026)
     const keys = await caches?.keys() ?? [];
-    await Promise.all(keys.filter(k => k !== 'fbc-data').map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => !k.startsWith('fbc-data')).map(k => caches.delete(k)));
   } catch { /* whatever is left, the new URL still wins */ }
   // Reloading into the old files is the loop the owner saw: the new files were checked above.
 

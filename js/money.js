@@ -11,9 +11,8 @@
 // the cost structure. For the unit's Admin, the Farm manager and the office.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday, curSign, shortDate } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday, curSign, shortDate, ymd, money as fmtMoney } from './ui.js';
 
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const PERIODS = [['month', 'This month'], ['quarter', 'Last 3 months'], ['year', 'This year'], ['12m', 'Last 12 months']];
 const CATS = [['seedlings', 'Seedlings'], ['materials', 'Materials'], ['nutrients', 'Nutrients'], ['labour', 'Labour'], ['energy', 'Energy'],
   ['water', 'Water'], ['rent', 'Rent'], ['equipment', 'Equipment'], ['maintenance', 'Maintenance'], ['transport', 'Transport'],
@@ -44,7 +43,7 @@ async function load(fresh = false) {
   });
 }
 const cur = () => curSign({ currency: data?.currency || farm?.currency });   // "R", as on Orders and Customers
-const money = n => `${cur()} ${Math.round(Number(n || 0)).toLocaleString()}`;
+const money = n => fmtMoney(Number(n || 0), { currency: data?.currency || farm?.currency });
 const perKg = n => n == null ? '—' : `${cur()} ${Number(n).toFixed(2)}`;
 const monthName = s => new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
 

@@ -12,15 +12,13 @@
 // zone opinions were: they kept their own tokens).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, drawer, num, toast } from './ui.js';
+import { el, drawer, num, toast, shortDay, farmWhen } from './ui.js';
 
 const KIND = { 'scout-photo': 'Plant photo read by the AI', 'trap-species': 'Trap photo: the species', 'zone-opinion': 'A zone\'s AI opinion', 'greenhouse-opinion': 'The whole greenhouse: the AI\'s report',
                assistant: 'The assistant', 'photo-note': 'AI note on the phone', 'photo-chat': 'Chat about a photo' };
 const SUB = { health: 'plant health', growth: 'growth', trap: 'trap', code: 'the position on a card' };
 const kindName = r => r.fn === 'photo-note' ? `AI note on the phone · ${SUB[r.kind] || r.kind || ''}` : (KIND[r.fn] || r.fn);
 const usd = (v, dp = 2) => v == null ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
-const shortDay = s => new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-const hhmm = ts => new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
 // the farm's money beside the dollars, when the price book has a rate
 const local = (j, v, dp = 2) => (j.fx_per_usd && j.currency && j.currency !== 'USD' && v != null)
   ? ` · ${j.currency} ${Number(v * j.fx_per_usd).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}` : '';
@@ -159,7 +157,7 @@ export function openAiCost(farmId) {
                             `${num(r.avg_in)} / ${num(r.avg_out)}`, both(j, r.usd)])));
     body.append(el('div', 'pd-hlabel ac-h', 'The last calls'),
       table(['When', 'What', 'By', 'Tokens in / out', 'Cost'],
-        j.recent.map(r => [`${shortDay(r.at)} ${hhmm(r.at)}`, kindName(r), r.by || '—', `${num(r.input_tokens)} / ${num(r.output_tokens)}`, usd(r.usd, 4)])));
+        j.recent.map(r => [farmWhen(r.at), kindName(r), r.by || '—', `${num(r.input_tokens)} / ${num(r.output_tokens)}`, usd(r.usd, 4)])));
     const used = new Set(j.by_kind.map(r => r.model).filter(Boolean));
     const prices = (j.prices || []).filter(p => [...used].some(m => m.startsWith(p.model)));
     body.append(el('div', 'hint ac-foot',

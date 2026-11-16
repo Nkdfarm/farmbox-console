@@ -10,12 +10,11 @@
 // taken as it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal, farmToday } from './ui.js';
+import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal, farmToday, ago } from './ui.js';
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
 // counted in the farm's days, not in blocks of 24 hours: a look at four yesterday afternoon read "today" all the next morning (review 13 Oct 2026)
-const ago = s => { if (!s) return 'never'; const d = Math.round((farmDate() - parseYmd(farmLocal(s))) / 86400000); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
 const PHASES = [['germination', 'Germination'], ['nursery', 'Nursery'], ['transplant', 'Transplant'], ['vegetative', 'Vegetative'],
                 ['flowering', 'Flowering'], ['harvest_window', 'Harvesting'], ['cleanup', 'Clean-up']];
 

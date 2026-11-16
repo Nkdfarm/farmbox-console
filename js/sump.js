@@ -14,7 +14,7 @@
 // paper tracker's. Nothing here sets a limit: they are the unit's own, in Connections.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, drawer, confirmDrawer, toast, busy, input, field, farmInstant, farmToday } from './ui.js';
+import { el, num, drawer, confirmDrawer, toast, busy, input, field, farmInstant, farmToday, parseNoon as parse, shortDay, farmTime } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const METRICS = [
@@ -22,9 +22,6 @@ const METRICS = [
   { key: 'ph', label: 'pH', unit: '', dp: 2 },
   { key: 'water_temp', label: 'Water', unit: '°C', dp: 1 },
 ];
-const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
-const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
-const hhmm = ts => new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
 const mk = (tag, at, parent) => { const n = document.createElementNS(SVG_NS, tag); Object.entries(at).forEach(([k, v]) => n.setAttribute(k, v)); parent?.append(n); return n; };
 
 // outside the alarm limits = bad, outside the watch band = warn
@@ -69,7 +66,7 @@ function curve(h, m, big = false) {
     const last = i === pts.length - 1, tone = toneOf(p.v, lim);
     if (!big && !last && tone === 'ok') return;                       // small: the line, the readings outside the band, the last one
     const c = mk('circle', { cx: x(p.t), cy: y(p.v), r: last ? 3 : big ? 1.8 : 2, class: 'sp-pt ' + tone }, svg);
-    const tt = mk('title', {}, c); tt.textContent = `${shortDay(p.r.day)} ${hhmm(p.r.at)}: ${m.label} ${num(p.v, m.dp)}${m.unit ? ' ' + m.unit : ''}`;
+    const tt = mk('title', {}, c); tt.textContent = `${shortDay(p.r.day)} ${farmTime(p.r.at)}: ${m.label} ${num(p.v, m.dp)}${m.unit ? ' ' + m.unit : ''}`;
   });
   return svg;
 }
@@ -93,7 +90,7 @@ function paintBlock(box, farm, h) {
     // "today" is the farm's today, not the day of the report on screen (review 13 Oct 2026)
     chip.append(el('span', 'hint', String(t.day) === farmToday() ? 'Water today' : `Water ${shortDay(t.day)}`), el('b', null, `${num(t.water_temp, 1)} °C`));
     if (arrow) chip.append(el('span', 'sp-arrow', arrow));
-    chip.title = `Water ${num(t.water_temp, 1)} °C on ${shortDay(t.day)} ${hhmm(t.at)}` + (b ? ` — ${num(b.water_temp, 1)} °C on ${shortDay(b.day)} (${diff >= 0 ? '+' : '−'}${num(Math.abs(diff), 1)})` : ' — the first reading') + '. Click for the curve.';
+    chip.title = `Water ${num(t.water_temp, 1)} °C on ${shortDay(t.day)} ${farmTime(t.at)}` + (b ? ` — ${num(b.water_temp, 1)} °C on ${shortDay(b.day)} (${diff >= 0 ? '+' : '−'}${num(Math.abs(diff), 1)})` : ' — the first reading') + '. Click for the curve.';
     head.append(el('span', 'spacer'), chip);
   }
   box.append(head);
@@ -107,13 +104,13 @@ function paintBlock(box, farm, h) {
       const fig = el('div', 'sp-fig ' + (last ? toneOf(last[m.key], h.limits?.[m.key]) : ''));
       fig.append(el('span', 'sp-name', m.label), el('b', null, last ? num(last[m.key], m.dp) : '—'));
       if (m.unit) fig.append(el('span', 'hint', m.unit));
-      if (last) fig.title = `${m.label} ${num(last[m.key], m.dp)} ${m.unit} · ${shortDay(last.day)} ${hhmm(last.at)}`;
+      if (last) fig.title = `${m.label} ${num(last[m.key], m.dp)} ${m.unit} · ${shortDay(last.day)} ${farmTime(last.at)}`;
       row.append(fig, curve(h, m));
       box.append(row);
     });
     const newest = h.readings[h.readings.length - 1];
     const foot = el('div', 'sp-foot hint');
-    foot.append(el('span', null, shortDay(h.from)), el('span', null, `last read ${shortDay(newest.day)} ${hhmm(newest.at)}`), el('span', null, shortDay(h.day)));
+    foot.append(el('span', null, shortDay(h.from)), el('span', null, `last read ${shortDay(newest.day)} ${farmTime(newest.at)}`), el('span', null, shortDay(h.day)));
     box.append(foot);
   }
   box.classList.add('sp-click');
@@ -191,7 +188,7 @@ export function openSump(farm, { sump, day = null, onChange = null } = {}) {
       tbl.append(hr);
       [...rows].reverse().forEach(r => {
         const tr = el('tr');
-        tr.append(el('td', null, `${shortDay(r.day)} ${hhmm(r.at)}`));
+        tr.append(el('td', null, `${shortDay(r.day)} ${farmTime(r.at)}`));
         METRICS.forEach(m => tr.append(el('td', 'num ' + toneOf(r[m.key], h.limits?.[m.key]), r[m.key] == null ? '—' : num(r[m.key], m.dp))));
         tr.append(el('td', 'hint', r.source === 'checklist' ? (r.by || 'Sump check') : r.source === 'import' ? `Paper tracker${r.slot ? ' · ' + r.slot.toLowerCase() : ''}` : r.source === 'sensor' ? 'Sensor' : (r.note || 'Typed in')));
         const last = el('td');

@@ -11,7 +11,7 @@
 // Excel and CSV files can be attached; the function reads them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, toast, pref, g1Face } from './ui.js';
+import { el, toast, pref, g1Face, escapeHtml } from './ui.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -53,8 +53,7 @@ const save = (id = ctx.farm()?.id) => {
 
 // a little markdown: paragraphs, **bold**, `code`, lists — escaped first
 function md(text) {
-  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  const inline = s => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
   const box = el('div', 'ai-md');
   let html = '', listOpen = null;
   const close = () => { if (listOpen) { html += `</${listOpen}>`; listOpen = null; } };

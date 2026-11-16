@@ -9,14 +9,54 @@ export const ANON =
 const KEY = 'fbc_session';
 let session = null;
 try { session = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { session = null; }
+// this tab's session is in the storage the other tabs share (false in a private window that refuses it): only then
+// can what the storage holds say that another tab signed out or that somebody else signed in (review 16 Nov 2026)
+let stored = !!session;
 
 export const getSession = () => session;
 
 function save(s) {
   session = s;
-  try { s ? localStorage.setItem(KEY, JSON.stringify(s)) : localStorage.removeItem(KEY); }
-  catch { /* private window: the session lives for this tab only */ }
+  try { s ? localStorage.setItem(KEY, JSON.stringify(s)) : localStorage.removeItem(KEY); stored = !!s; }
+  catch { stored = false; /* private window: the session lives for this tab only */ }
 }
+// what the shared storage holds; undefined when there is no storage to ask
+const keptSession = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return undefined; } };
+
+// The session is ended on the server too, best effort and never waited for: a forgotten tab's refresh token must
+// not outlive the sign-out. scope=local: only this sign-in, not the person's other computers.
+function logout(s) {
+  if (!s?.access_token) return;
+  try {
+    fetch(URL_BASE + '/auth/v1/logout?scope=local', {
+      method: 'POST', keepalive: true, headers: { apikey: ANON, Authorization: 'Bearer ' + s.access_token },
+    }).catch(() => { /* offline or already ended: the token expires by itself */ });
+  } catch { /* no fetch */ }
+}
+
+// This tab's session ends while the storage is not this tab's to clear: another tab signed out, or somebody else
+// signed in there (review 16 Nov 2026, the shared office computer). app.js shows the form (fbc:session-ended).
+function endHere() {
+  if (!session) return;
+  const s = session;
+  session = null;
+  logout(s);
+  dispatchEvent(new CustomEvent('fbc:session-ended'));
+}
+
+// Another tab signed out, signed somebody else in, or refreshed the same person's token: this tab follows it.
+addEventListener('storage', e => {
+  if (e.key !== KEY && e.key !== null) return;          // null: the whole storage was cleared
+  let s = null;
+  if (e.key === KEY) { try { s = JSON.parse(e.newValue || 'null'); } catch { s = null; } }
+  if (!session) {
+    // signed in in another tab while this one shows the form: app.js starts here too
+    if (s?.access_token && s.user?.id) { session = s; stored = true; dispatchEvent(new CustomEvent('fbc:session-started')); }
+    return;
+  }
+  if (s?.refresh_token && s.user?.id && s.user.id === session.user?.id) { session = s; stored = true; return; }
+  endHere();
+});
 
 export class ApiError extends Error {
   constructor(message, status, body) {
@@ -54,10 +94,14 @@ export async function signIn(email, password) {
 }
 
 export function signOut() {
-  save(null);
+  const s = session, kept = keptSession();
+  // the storage holds somebody else's session (they signed in in another tab): it is theirs, and so are the copies
+  const mine = !kept || (!!s && kept.user?.id === s.user?.id);
+  if (mine) save(null); else session = null;
+  logout(s);
   // What this device kept for offline reading belongs to the person who read
   // it; the next person at the office computer must not open the console on it.
-  forgetAll();
+  if (mine) forgetAll();
 }
 
 // one refresh at a time (0.7.162): after an hour idle the page and warm()'s readers all asked at once with the same token
@@ -70,19 +114,31 @@ async function doRefresh() {
   if (!session?.refresh_token) throw new ApiError('signed out', 401);
   // another tab of the same person may have refreshed already: a refresh token works once, so asking with the old
   // one is refused, and a refused refresh signs this tab out (review 13 Oct 2026). Take what that tab stored.
-  try {
-    const kept = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (kept?.refresh_token && kept.refresh_token !== session.refresh_token && kept.user?.id && kept.user.id === session.user?.id) {
-      session = kept;
-      if (kept.expires_at > Date.now() + 60_000) return session;
-    }
-  } catch { /* no storage: this tab's own token */ }
+  const kept = keptSession();   // undefined: no storage, this tab's own token
+  if (stored && kept !== undefined && !(kept?.refresh_token && kept.user?.id && kept.user.id === session.user?.id)) {
+    // signed out in another tab, or somebody else signed in there: a refresh would write this person's session back
+    // over it (review 16 Nov 2026) — this tab's session ends instead
+    endHere();
+    throw new ApiError('Your session has ended. Sign in again.', 401);
+  }
+  if (kept && kept.refresh_token !== session.refresh_token) {
+    session = kept;
+    if (kept.expires_at > Date.now() + 60_000) return session;
+  }
+  // an answer landing after a sign-out, or after the next person signed in, is dropped (review 16 Nov 2026)
+  const s0 = session;
+  const overtaken = () => {
+    if (session === s0) return null;
+    if (session && session.user?.id === s0.user?.id) return session;   // another tab of the same person refreshed meanwhile
+    throw new ApiError('signed out', 401);
+  };
   let s;
   try {
     s = await raw('/auth/v1/token?grant_type=refresh_token', {
       method: 'POST', body: JSON.stringify({ refresh_token: session.refresh_token }),
     });
   } catch (e) {
+    const newer = overtaken(); if (newer) return newer;
     // No signal is not a dead session. A refresh that never reached the server
     // used to land here too and throw a good session away, so an hour offline
     // meant signing in again — which cannot be done offline.
@@ -98,6 +154,7 @@ async function doRefresh() {
     dispatchEvent(new CustomEvent('fbc:session-ended'));
     throw new ApiError('Your session has ended. Sign in again.', 401, e.body);
   }
+  const newer = overtaken(); if (newer) return newer;
   save({ ...s, expires_at: Date.now() + (s.expires_in ?? 3600) * 1000 });
   return session;
 }
@@ -149,10 +206,12 @@ const keyOf = (path, opts) =>
   'https://offline.farmbox/' + encodeURIComponent(session?.user?.id || 'me') + path +
   (opts.body ? (path.includes('?') ? '&' : '?') + 'body=' + encodeURIComponent(opts.body) : '');
 
-async function remember(key, body) {
+// at: when the request left, not when it answered (review 16 Nov 2026): a read that left before a save and answered
+// after it holds the state from before the save, and cachedRpc must not take it for newer than that save
+async function remember(key, body, at = Date.now()) {
   try {
     const c = await caches.open(DATA_CACHE);
-    await c.put(key, new Response(JSON.stringify({ saved_at: Date.now(), body }),
+    await c.put(key, new Response(JSON.stringify({ saved_at: at, body }),
       { headers: { 'Content-Type': 'application/json' } }));
   } catch { /* no Cache API (private window): offline simply has nothing to show */ }
 }
@@ -280,11 +339,11 @@ async function api0(path, opts = {}) {
   const read = isRead(path, opts);
   // the key and the person are fixed when the request leaves: an answer landing after a sign-out (or after the
   // next person signed in) must not be kept, nor kept under somebody else's name (review 3 Oct 2026)
-  const s0 = session, key = read ? keyOf(path, opts) : null;
+  const s0 = session, key = read ? keyOf(path, opts) : null, t0 = Date.now();
   try {
     const body = await live(path, opts);
     setOnline(true);
-    if (read) { if (session && session.user?.id === s0.user?.id) remember(key, body); }   // the same person: a token refreshed meanwhile is a new object, not a new person
+    if (read) { if (session && session.user?.id === s0.user?.id) remember(key, body, t0); }   // the same person: a token refreshed meanwhile is a new object, not a new person
     // quiet (0.7.235): a call that changes nothing on the farm — the camera's pass — is not a change to tell the others
     // about, and must not make this tab distrust the copies it kept
     else if (!opts.quiet) { lastWrite = Date.now(); try { dispatchEvent(new Event('fbc:wrote')); } catch { /* no window */ } }   // live.js tells the others

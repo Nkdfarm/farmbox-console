@@ -17,19 +17,10 @@
 // Until a device sends something every page says how to connect one.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon, farmDate } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon, farmDate, ymd, ago, farmWhen, once } from './ui.js';
 
-const nice = s => s ? new Date(s).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const niceDay = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const daysAgo = n => { const t = farmDate(); return ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - n)); };
-const ago = s => {
-  if (!s) return 'never';
-  const m = Math.round((Date.now() - new Date(s).getTime()) / 60000);
-  if (m < 1) return 'just now'; if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60); if (h < 48) return `${h} h ago`;
-  return `${Math.round(h / 24)} days ago`;
-};
 const fmt = (v, dp = 1) => v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
 const ZONE_HUES = [205, 145, 28, 285, 350, 55, 180, 320];
 const KINDS = [['climate', 'Climate'], ['water', 'Water'], ['irrigation', 'Irrigation'], ['substrate', 'Slab'],
@@ -170,7 +161,7 @@ function paintFarmnet(mount, farm, d, hours) {
     const tb = el('tbody');
     d.irrigation.slice(0, 200).forEach(ie => {
       const tr = el('tr');
-      [nice(ie.started_at), (zones.find(z => z.id === ie.zone_id) || {}).name || ie.system || '—', ie.cycle || '—',
+      [farmWhen(ie.started_at), (zones.find(z => z.id === ie.zone_id) || {}).name || ie.system || '—', ie.cycle || '—',
        fmt(ie.volume_l, 0), fmt(ie.ec, 2), fmt(ie.ph, 2), fmt(ie.drain_pct, 0), fmt(ie.drain_ec, 2)]
         .forEach((v, i) => tr.append(el('td', i >= 3 ? 'num' : null, v)));
       tb.append(tr);
@@ -332,7 +323,7 @@ function paintGrowth(mount, farm, d) {
     }
     const h = hist.get(r.position_id) || [];
     if (h.length > 1) card.append(spark(h.map(x => Number(x.canopy_pct ?? 0)), 'canopy % over time'));
-    card.append(el('div', 'hint', `${nice(r.at)} · ${r.model || 'model ?'}${r.confidence != null ? ` · confidence ${Math.round(r.confidence * 100)}%` : ''}`));
+    card.append(el('div', 'hint', `${farmWhen(r.at)} · ${r.model || 'model ?'}${r.confidence != null ? ` · confidence ${Math.round(r.confidence * 100)}%` : ''}`));
     if (d.may_apply && r.status === 'new' && r.plan_id) {
       const act = el('div', 'row');
       const ap = el('button', 'btn btn-sm btn-primary', 'Apply to the batch');
@@ -343,7 +334,10 @@ function paintGrowth(mount, farm, d) {
         catch (e) { busy(ap, false, 'Apply to the batch'); toast(e.message, 'bad'); }
       };
       const no = el('button', 'btn btn-sm btn-ghost', 'Dismiss');
-      no.onclick = async () => { try { await rpc('dismiss_camera_growth', { p_id: r.id }); renderGrowth(mount, farm); } catch (e) { toast(e.message, 'bad'); } };
+      no.onclick = async () => {
+        if (!await confirmDrawer('Dismiss this estimate?', 'The camera estimate is dropped; the batch keeps its plan.', 'Dismiss it', true)) return;
+        await once(no, async () => { try { await rpc('dismiss_camera_growth', { p_id: r.id }); renderGrowth(mount, farm); } catch (e) { toast(e.message, 'bad'); } });
+      };
       act.append(ap, no); card.append(act);
     }
     list.append(card);
@@ -409,7 +403,7 @@ function paintCounting(mount, farm, d, back) {
               el('td', null, OBJ[p.object] || p.object), el('td', 'num', Number(p.count).toLocaleString()),
               el('td', 'num', p.places ? Number(p.places).toLocaleString() : '—'),
               el('td', 'num ' + (p.fill_pct != null && p.fill_pct < 90 ? 'warn' : ''), p.fill_pct != null ? `${fmt(p.fill_pct, 0)}%` : '—'),
-              el('td', 'hint', nice(p.at)));
+              el('td', 'hint', farmWhen(p.at)));
     tb.append(tr);
   });
   t.append(tb); card.append(t); mount.append(card);

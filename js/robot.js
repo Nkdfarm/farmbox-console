@@ -12,15 +12,13 @@
 // a person validates: a manager confirms or dismisses each row.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, cropAvatar, toast, busy, drawer } from './ui.js';
+import { el, num, cropAvatar, toast, busy, drawer, parseNoon as parse, farmTime, farmWhen } from './ui.js';
 
 const OBJECT = { plant: ['plant', 'plants'], head: ['head', 'heads'], fruit: ['fruit', 'fruit'], flower: ['flower', 'flowers'],
                  truss: ['truss', 'trusses'], gap: ['gap', 'gaps'], pest: ['pest', 'pests'], other: ['object', 'objects'] };
 const MEASURE_WORD = { diameter: 'Ø', length: 'L', width: 'W', height: 'H' };
 const STATUS = { new: ['warn', 'To validate'], confirmed: ['ok', 'Confirmed'], dismissed: ['', 'Dismissed'] };
-const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
 const what = r => { const w = OBJECT[r.object] || OBJECT.other; return `${num(r.count, 0)} ${r.count === 1 ? w[0] : w[1]}${r.crop ? ' · ' + r.crop : ''}`; };
 const where = r => [r.zone, r.system && r.system !== r.zone ? r.system : null, r.position || r.pos_code].filter(Boolean).join(' · ');
 // the sizes, one line an item: "1  L 363 · Ø 41 mm"
@@ -77,14 +75,14 @@ function card(r, ctx) {
   cap.append(line);
   const sizes = sizeLines(r.measures);
   if (sizes.length) cap.append(el('b', null, sizes.length === 1 ? sizes[0].text : `${sizes.length} measured · ${sizes[0].text}…`));
-  cap.append(el('div', 'hint', [hhmm(r.at), r.robot, r.confidence != null ? `${Math.round(r.confidence * 100)} % sure` : null, r.note].filter(Boolean).join(' · ')));
+  cap.append(el('div', 'hint', [farmTime(r.at), r.robot, r.confidence != null ? `${Math.round(r.confidence * 100)} % sure` : null, r.note].filter(Boolean).join(' · ')));
   fig.append(cap);
   fig.onclick = () => open(r, ctx);
   return fig;
 }
 
 function open(r, ctx) {
-  const dr = drawer(what(r), [longDay(r.day), hhmm(r.at), r.robot].filter(Boolean).join(' · '));
+  const dr = drawer(what(r), [longDay(r.day), farmTime(r.at), r.robot].filter(Boolean).join(' · '));
   if (r.photo_data) { const im = el('img', 'rb-photo'); im.src = r.photo_data; im.alt = what(r); dr.body.append(im); }
   const facts = el('div', 'rb-facts');
   const row = (k, v) => { if (v == null || v === '') return; const d = el('div'); d.append(el('span', 'hint', k), el('b', null, String(v))); facts.append(d); };
@@ -105,7 +103,7 @@ function open(r, ctx) {
   const [cls, word] = STATUS[r.status] || ['', r.status];
   const st = el('div', 'rb-status');
   st.append(el('span', 'pill ' + cls, word));
-  if (r.decided_at) st.append(el('span', 'hint', `${parse(r.decided_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${hhmm(r.decided_at)}`));
+  if (r.decided_at) st.append(el('span', 'hint', farmWhen(r.decided_at)));
   dr.body.append(st);
   if (!ctx.mayWrite) { dr.body.append(el('p', 'hint', 'A manager of this FarmBox confirms or dismisses what the robot sent.')); return; }
   const acts = el('div', 'rb-acts');
@@ -163,7 +161,7 @@ export function robotStrip(rows, opts) {
     const sizes = sizeLines(r.measures);
     if (sizes.length) sizes.forEach(s => cap.append(el('b', 'rb-size', sizes.length > 1 ? `${s.item}  ${s.text}` : s.text)));
     else cap.append(el('b', 'rb-size', 'no size'));
-    cap.append(el('div', 'hint', [what(r), r.pos_code || r.position, hhmm(r.at)].filter(Boolean).join(' · ')));
+    cap.append(el('div', 'hint', [what(r), r.pos_code || r.position, farmTime(r.at)].filter(Boolean).join(' · ')));
     fig.append(cap);
     fig.onclick = () => open(r, ctx);
     grid.append(fig);

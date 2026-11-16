@@ -88,7 +88,14 @@ export function drawer(title, subtitle, opts = {}) {
   };
   drawerStack.push(close);
   // opts.guard (0.7.287): a drawer with unsaved work asks before Escape, the scrim or ✕ close it
-  const tryClose = () => { if (!opts.guard || opts.guard()) close(); };
+  // the guard may answer at once or with a promise (a confirmDrawer); one question at a time
+  let asking = false;
+  const tryClose = () => {
+    if (asking) return;
+    const r = opts.guard ? opts.guard() : true;
+    if (r && typeof r.then === 'function') { asking = true; r.then(ok => { asking = false; if (ok) close(); }, () => { asking = false; }); }
+    else if (r) close();
+  };
   const onKey = e => { if (e.key === 'Escape' && drawerStack[drawerStack.length - 1] === close) { e.stopImmediatePropagation(); tryClose(); } };
   document.addEventListener('keydown', onKey);
   scrim.onclick = tryClose;
@@ -242,6 +249,48 @@ export const farmLocal = (iso, tz = farmTz) => {
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map(x => [x.type, x.value]));
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 };
+// ── the farm's clock, for instants (timestamps) and for date-only strings ─────────────────────────
+// An instant is printed in the farm's own zone, never the browser's: a manager abroad sees the same hour as the farm.
+// A date-only string ("2026-11-16") has no zone: it is read as a local day and never shifted.
+const fmtIn = (inst, opts) => {
+  try { return new Intl.DateTimeFormat('en-ZA', { timeZone: farmTz, ...opts }).format(new Date(inst)); } catch { return ''; }
+};
+// "16 Nov" — the farm's day of an instant (extra: more Intl options, e.g. { weekday: 'short' })
+export const farmDay = (inst, extra = {}) => inst ? fmtIn(inst, { day: 'numeric', month: 'short', ...extra }) : '—';
+// "08:05" — the farm's clock
+export const farmTime = inst => inst ? fmtIn(inst, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
+// "16 Nov 08:05"
+export const farmWhen = inst => inst ? `${farmDay(inst)} ${farmTime(inst)}` : '—';
+// "2026-11-16" — the farm's day of an instant, as a date string
+export const farmDayOf = (inst, tz) => {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || farmTz }).format(new Date(inst)); } catch { return String(inst).slice(0, 10); }
+};
+// "16 Nov" from a date-only string (never through UTC)
+export const shortDay = s => s ? parseYmd(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
+// "3 days ago" of an instant; "never" when empty
+export const ago = inst => {
+  if (!inst) return 'never';
+  const mins = Math.round((Date.now() - new Date(inst).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+};
+// "R 12 345" (the farm's sign, spaces as thousands); '—' for nothing
+// farm: the farm row, or just its currency code
+export const money = (n, farm) => n == null || n === '' ? '—' : `${curSign(typeof farm === 'string' ? { currency: farm } : farm)} ${Math.round(Number(n)).toLocaleString('en-ZA')}`;
+// minutes → "1 h 05"; '—' for none
+export const hours = (m, zero = '—') => { m = Math.round(Number(m || 0)); return m ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : zero; };
+// one escaper for the few places that build HTML text
+export const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Run a write behind a button: disabled while fn runs, back on after (a double click cannot send it twice).
+export async function once(btn, fn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try { return await fn(); } finally { btn.disabled = false; }
+}
+// a date-only string as local NOON: safe for millisecond arithmetic and DST (the planner pages count in days)
+export const parseNoon = s => { const d = parseYmd(s); d.setHours(12); return d; };
 export const isoDow = d => ((d.getDay() + 6) % 7) + 1;           // Mon = 1 … Sun = 7
 export const mondayOf = d => addDays(d, 1 - isoDow(d));
 

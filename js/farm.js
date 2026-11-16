@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
-         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays } from './ui.js';
+         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays, ymd } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 import { patch } from './api.js';
@@ -331,10 +331,9 @@ function weekCard(may) {
 // The country's public holidays, downloaded from Nager.Date the moment the
 // country is set (five years ahead, refreshed once a year), and the farm's own
 // closures. Nothing is planned on them: the work moves to the next working day.
-const ymdOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const holidayRange = () => {
   const d = farmDate();   // the farm's day, not this computer's
-  return { p_from: ymdOf(d), p_to: ymdOf(addDays(d, 365)) };
+  return { p_from: ymd(d), p_to: ymd(addDays(d, 365)) };
 };
 const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 

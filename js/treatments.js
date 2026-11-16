@@ -20,13 +20,10 @@
 // The system proposes: a treatment starts when the Admin, the Farm manager or the Agronomist says so.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer } from './ui.js';
+import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer, ymd, parseNoon as parse, shortDay, farmDay, farmTime } from './ui.js';
 import { openProduct, openChangeLog, openNewProduct, expiryPill } from './product.js';
 import { KIND, GROUPS, kindOk } from './kinds.js';
 
-const parse = s => new Date(String(s).slice(0, 10) + 'T12:00:00');
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const shortDay = s => parse(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
 const longDay = s => parse(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const METHOD = { biological: 'Biological', chemical: 'Chemical', integrated: 'Integrated', cultural: 'Cultural', mechanical: 'Mechanical' };
 const CATEGORY = { leafy: 'Leafy', mixed_leafy: 'Mixed leafy', herbs: 'Herbs', microgreens: 'Microgreens', fruiting_vines: 'Fruiting vines', fruiting_bush: 'Fruiting bush' };
@@ -102,7 +99,7 @@ function paintBlock(box, farm, z, t, again, onChange) {
     lg.append(el('span', 'hint', 'filled = applied · ring = to come'));
     box.append(lg);
   }
-  if (t.reentry?.until) box.append(el('div', 'note bad tr-note', `Re-entry closed until ${new Date(t.reentry.until).toLocaleString('en-ZA', { weekday: 'short', hour: '2-digit', minute: '2-digit' })} (${t.reentry.product}).`));
+  if (t.reentry?.until) box.append(el('div', 'note bad tr-note', `Re-entry closed until ${farmDay(t.reentry.until, { weekday: 'short' })} ${farmTime(t.reentry.until)} (${t.reentry.product}).`));
   if (t.harvest_after && String(t.harvest_after) > String(t.today)) box.append(el('div', 'note warn tr-note', `No harvest on the treated tables before ${longDay(t.harvest_after)}.`));
 
   (t.programs || []).forEach(p => {

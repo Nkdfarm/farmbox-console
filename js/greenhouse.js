@@ -30,22 +30,17 @@
 // scouting.js owns the page: it asks this kit for the panel and for the pills of a day's line (a press on one shows
 // that day up here). Everything is read beside the page, so a database without 0224 still shows the report.
 import { rpc, fn, api, cachedRpc, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, field, confirmDrawer, avatar, g1Face } from './ui.js';
+import { el, toast, busy, drawer, field, confirmDrawer, avatar, g1Face, parseNoon as at, ymd, shortDay, farmTime, farmWhen, farmToday } from './ui.js';
 
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
 // the zones' own words for a trend (scouting.js, TREND_AI): down is fewer pests
 const TREND = { better: ['ok', '▼ getting better', '▼'], stable: ['', '– stable', '–'], worse: ['bad', '▲ getting worse', '▲'], unclear: ['', '? trend unclear', '?'] };
-const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '';
-const dayMon = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const first = n => String(n || 'somebody').trim().split(/\s+/)[0];
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const clean = e => String(e?.message || e).replace(/^\d+ /, '').slice(0, 200);
 // a day is a 'YYYY-MM-DD' string everywhere here; noon keeps it the same day in every time zone
-const at = day => new Date(String(day) + 'T12:00:00');
-const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const shift = (day, n) => { const d = at(day); d.setDate(d.getDate() + n); return iso(d); };
+const shift = (day, n) => { const d = at(day); d.setDate(d.getDate() + n); return ymd(d); };
 const longDay = day => at(day).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-const shortDay = day => at(day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const LONG = 700;   // a note longer than this is shown by its first lines
 // the report's colours (0.7.239, owner: "use some color code in the ai report according with the severity and urgency"):
 // a point by how bad it is, an action by how soon, a thing still open by how long it has waited
@@ -82,7 +77,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
   const node = el('section', 'card pd-ghp');
   node.setAttribute('aria-label', 'The whole greenhouse');
 
-  const now = () => String(today() || iso(new Date()));
+  const now = () => String(today() || farmToday());
   const a = () => ({ p_farm: farm.id, p_days: 120 });
   const list = () => { if (!gone) relist(); };
   const take = rows => { days = new Map((rows || []).map(r => [String(r.day), r])); known = true; };
@@ -198,7 +193,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
   }
 
   function correct(day, n) {
-    const d = drawer('Correct the note', `${first(n.author)} · ${dayMon(n.at)} ${hhmm(n.at)}`);
+    const d = drawer('Correct the note', `${first(n.author)} · ${farmWhen(n.at)}`);
     const box = el('textarea'); box.rows = 8; box.maxLength = 8000; box.value = n.text || '';
     d.body.append(field('The note', box, n.audio?.length
       ? 'A voice note is written down by a machine: put right what it heard wrong. The recording stays as it is.'
@@ -227,7 +222,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     const row = el('div', 'pd-gh-said');
     line.append(row);
     const who = el('div', 'pd-gh-who');
-    who.append(el('b', null, n.mine ? 'You' : first(n.author)), el('span', 'hint', hhmm(n.at)));
+    who.append(el('b', null, n.mine ? 'You' : first(n.author)), el('span', 'hint', farmTime(n.at)));
     if (n.extra) who.append(el('span', 'pill pd-extra', 'extra'));
     if (n.source === 'import') who.append(el('span', 'hint', 'brought in from Notion'));
     if (n.edited_at) who.append(el('span', 'hint', `corrected${n.edited_by ? ' by ' + first(n.edited_by) : ''}`));
@@ -276,7 +271,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
       const fix = el('button', 'linkish', 'Correct'); fix.onclick = () => { done?.(); correct(day, n); };
       const rm = el('button', 'linkish', 'Remove');
       rm.onclick = async () => {
-        if (!await confirmDrawer('Remove this note?', `${first(n.author)}, ${dayMon(n.at)} ${hhmm(n.at)} — it leaves the report. It is not erased: the database keeps it.`, 'Remove', true)) return;
+        if (!await confirmDrawer('Remove this note?', `${first(n.author)}, ${farmWhen(n.at)} — it leaves the report. It is not erased: the database keeps it.`, 'Remove', true)) return;
         try { await rpc('remove_scout_note', { p_id: n.id }); toast('Removed', 'ok'); done?.(); await after(day); }
         catch (e) { toast(clean(e), 'bad'); }
       };
@@ -350,7 +345,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Choose a day');
     const [y, m] = calMonth.split('-').map(Number);
     const head = el('div', 'pd-ghp-cal-head');
-    const move = n => { const d = new Date(y, m - 1 + n, 1, 12); calMonth = iso(d).slice(0, 7); draw(); };
+    const move = n => { const d = new Date(y, m - 1 + n, 1, 12); calMonth = ymd(d).slice(0, 7); draw(); };
     const prev = el('button', 'pd-ghp-step', '‹'); prev.type = 'button'; prev.title = 'The month before'; prev.onclick = e => { e.stopPropagation(); move(-1); };
     const next = el('button', 'pd-ghp-step', '›'); next.type = 'button'; next.title = 'The month after'; next.onclick = e => { e.stopPropagation(); move(1); };
     next.disabled = calMonth >= t.slice(0, 7);
@@ -519,7 +514,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     const read = [st.days ? plural(st.days, 'day') + ' of records' : null, st.reports_before ? plural(st.reports_before, 'earlier report') : null,
                   st.notes ? plural(st.notes, 'note') : null, st.trap_readings ? plural(st.trap_readings, 'trap reading') : null,
                   st.plant_health ? plural(st.plant_health, 'health photo') : null, st.cases ? plural(st.cases, 'case') : null].filter(Boolean).join(', ');
-    box.append(el('div', 'hint pd-ai-foot', [`Written ${dayMon(op.created_at)} ${hhmm(op.created_at)}`, op.auto ? 'by itself' : (op.by ? 'asked by ' + first(op.by) : null),
+    box.append(el('div', 'hint pd-ai-foot', [`Written ${farmWhen(op.created_at)}`, op.auto ? 'by itself' : (op.by ? 'asked by ' + first(op.by) : null),
       op.confidence != null ? `confidence ${Math.round(op.confidence * 100)} %` : null, read ? 'read ' + read : null,
       'nothing from after ' + shortDay(k)].filter(Boolean).join(' · ') + ' · The AI proposes; you decide.'));
     if (op.notes_since > 0) box.append(el('div', 'note warn pd-gh-stale', `${op.notes_since > 1 ? op.notes_since + ' notes were' : 'A note was'} added or corrected after this report — ask again.`));
@@ -585,7 +580,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     if (!data.has(kd)) { try { await readDay(kd, { fresh: true }); } catch { /* said below */ } }
     const n = (data.get(kd)?.notes || []).find(x => x.id === id);
     if (!n) { toast('That note is no longer in the report', 'bad'); return; }
-    const dr = drawer(`${n.mine ? 'Your' : first(n.author) + "'s"} note`, `${longDay(kd)} · ${hhmm(n.at)} · about the whole greenhouse`);
+    const dr = drawer(`${n.mine ? 'Your' : first(n.author) + "'s"} note`, `${longDay(kd)} · ${farmTime(n.at)} · about the whole greenhouse`);
     wide.add(n.id);
     dr.body.append(noteRow(kd, n, dr.close));
     const x = el('button', 'btn', 'Close'); x.onclick = dr.close;
@@ -627,14 +622,14 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
       head.append(el('span', 'pd-hlabel', `Team reports · AI summary of ${plural(notes.length, 'note')}`));
       notes.forEach(n => {
         const b = el('button', 'pd-ghp-notechip'); b.type = 'button';
-        b.append(avatar({ worker_id: n.worker_id || null, name: n.author || 'somebody' }, 'xs'), `${n.mine ? 'You' : first(n.author)} ${hhmm(n.at)}`);
+        b.append(avatar({ worker_id: n.worker_id || null, name: n.author || 'somebody' }, 'xs'), `${n.mine ? 'You' : first(n.author)} ${farmTime(n.at)}`);
         b.title = 'Open this note: read it as it was said or written, listen, correct or remove it';
         b.onclick = () => openNote(k, n.id);
         head.append(b);
       });
       const body = el('div', 'pd-ghp-sum');
       dg.text.split(/\n+/).map(t => t.trim()).filter(Boolean).forEach(t => { const par = el('p'); par.append(rich(t, false)); body.append(par); });
-      box.append(head, body, el('div', 'hint', `Written by the AI from the ${notes.length > 1 ? plural(notes.length, 'note') : 'note'} above${dg.written_at ? ', ' + dayMon(dg.written_at) + ' ' + hhmm(dg.written_at) : ''}: nothing is added. The notes are kept as they were said or written — open one to read, correct or remove it.`));
+      box.append(head, body, el('div', 'hint', `Written by the AI from the ${notes.length > 1 ? plural(notes.length, 'note') : 'note'} above${dg.written_at ? ', ' + farmWhen(dg.written_at) : ''}: nothing is added. The notes are kept as they were said or written — open one to read, correct or remove it.`));
       if (d.may_write) box.append(addBox(k));
       return box;
     }

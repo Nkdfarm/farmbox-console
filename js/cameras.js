@@ -27,17 +27,24 @@ const player = c => `${CAM}/stream.html?src=${encodeURIComponent(c.src)}&mode=ms
 const playing = () => document.querySelector('.cam-tile iframe');
 
 // One pass a visit, asked again when half its life is gone; several tiles share the one request.
-let passUntil = 0, asking = null;
+// holder: which person's pass it is — a pass asked for before a sign-out does not count for the next person
+let passUntil = 0, asking = null, holder = 0;
 function door() {
   if (Date.now() < passUntil) return Promise.resolve();
-  asking ||= (async () => {
+  if (asking) return asking;
+  const mine = holder;
+  const q = (async () => {
     const p = await fn('camera-pass', null, { quiet: true });   // asks, changes nothing: not a write (api.js)
     const r = await fetch(CAM + '/pass', { method: 'POST', credentials: 'include', headers: { Authorization: 'Bearer ' + p.pass } });
-    if (r.ok) passUntil = Date.now() + (p.expires_in || 0) * 500;
+    if (r.ok && mine === holder) passUntil = Date.now() + (p.expires_in || 0) * 500;
   })().catch(() => { /* offline, no camera for this account, the gate not answering: the player says so */ })
-      .finally(() => { asking = null; });
-  return asking;
+      .finally(() => { if (asking === q) asking = null; });
+  asking = q;
+  return q;
 }
+// the session ended (app.js endSession, review 16 Nov 2026): the next person asks for a pass of their own. The gate's
+// cookie on cam.nkd.farm stays until it expires; this tab no longer counts on it.
+export function forgetPass() { passUntil = 0; asking = null; holder++; }
 
 export function cameraTiles(farm) {
   return CAMERAS.filter(c => c.unit === farm?.code).map(tile);

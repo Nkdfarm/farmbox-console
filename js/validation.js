@@ -10,13 +10,13 @@
 // standard"). Every decision stays: who proposed, on what evidence, who decided.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, api, cachedRpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref, systemTypes } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref, systemTypes, farmDay } from './ui.js';
 
 const ENTITY = { phase_days: 'Phase length', yield: 'Yield', target: 'EC / pH / climate target', procedure_step: 'Procedure step',
                  pest: 'Pest identification', material: 'Material quantity', other: 'Other' };
 const STATUS = { proposed: ['to decide', 'warn'], applied: ['applied', 'ok'], accepted: ['accepted', 'ok'], for_standard: ['accepted — for the standard', 'info'], rejected: ['rejected', ''] };
 const TARGETS = [['ec', 'EC (mS/cm)'], ['ph', 'pH'], ['air_temp', 'Air temperature (°C)'], ['water_temp', 'Solution temperature (°C)'], ['rh', 'Humidity (%)']];
-const nice = s => s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+const nice = s => farmDay(s, { year: 'numeric' });
 
 let farm = null, mount = null, data = null;
 export async function renderValidation(container, currentFarm) {

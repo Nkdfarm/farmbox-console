@@ -12,12 +12,13 @@
 // table, and the harvest week in the crop's colour, readable from the path.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { toast, cropHue } from './ui.js';
+import { toast, cropHue, escapeHtml } from './ui.js';
 
 const QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+// sha384 of that exact file: the page opens in the console's origin, so a changed file must not run
+const QR_SRI = 'sha384-lQXOAyZwHXE55JFyrOMB7nY2Wv+m5ZWNtJcHrd1rceRQXAYNLak8ukN5TjBTcIwz';
 const SCAN_URL = 'https://brain.nkd.farm/#/lot/';
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const day = s => { if (!s) return null; const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const nice = s => s ? day(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '—';
 // ISO week, as the farm counts them
@@ -55,20 +56,20 @@ function label(l) {
   const plants = l.plants ? `${Math.round(Number(l.plants)).toLocaleString('en-ZA')} plants` : '';
   return `<div class="lab" style="--h:${hue}">
     <div class="band"></div>
-    <div class="qr" data-url="${esc(SCAN_URL + l.id)}"></div>
+    <div class="qr" data-url="${escapeHtml(SCAN_URL + l.id)}"></div>
     <div class="top">
       <div class="k">LOT</div>
-      <div class="code">${esc(l.lot_code)}</div>
-      <div class="crop">${esc(l.crop)}</div>
-      <div class="var">${esc([l.variety, CATEGORY[l.category] || l.category].filter(Boolean).join(' · '))}</div>
+      <div class="code">${escapeHtml(l.lot_code)}</div>
+      <div class="crop">${escapeHtml(l.crop)}</div>
+      <div class="var">${escapeHtml([l.variety, CATEGORY[l.category] || l.category].filter(Boolean).join(' · '))}</div>
     </div>
-    <div class="place"><b>${esc(l.zone)}</b> · ${esc(l.system)} · table <b>${esc(l.position)}</b><span>${esc(plants)}</span></div>
+    <div class="place"><b>${escapeHtml(l.zone)}</b> · ${escapeHtml(l.system)} · table <b>${escapeHtml(l.position)}</b><span>${escapeHtml(plants)}</span></div>
     <div class="dates">
-      ${start ? `<span>${esc(start)}</span>` : ''}
-      <span>${l.transplanted ? 'Transplanted' : 'Transplant'} <b>${esc(nice(l.transplant))}</b> · wk ${esc(isoWeek(l.transplant) ?? '—')}</span>
+      ${start ? `<span>${escapeHtml(start)}</span>` : ''}
+      <span>${l.transplanted ? 'Transplanted' : 'Transplant'} <b>${escapeHtml(nice(l.transplant))}</b> · wk ${escapeHtml(isoWeek(l.transplant) ?? '—')}</span>
     </div>
-    <div class="harvest"><span class="hk">HARVEST</span><b>${esc(weeks)}</b><span class="hd">${esc(nice(l.harvest_from))}${l.harvest_to && l.harvest_to !== l.harvest_from ? ' – ' + esc(nice(l.harvest_to)) : ''}${l.expected_kg ? ` · ~${esc(Math.round(Number(l.expected_kg)))} kg` : ''}</span></div>
-    <div class="foot">${esc(l.farm)} · scan for cases, sprays and the next tasks</div>
+    <div class="harvest"><span class="hk">HARVEST</span><b>${escapeHtml(weeks)}</b><span class="hd">${escapeHtml(nice(l.harvest_from))}${l.harvest_to && l.harvest_to !== l.harvest_from ? ' – ' + escapeHtml(nice(l.harvest_to)) : ''}${l.expected_kg ? ` · ~${escapeHtml(Math.round(Number(l.expected_kg)))} kg` : ''}</span></div>
+    <div class="foot">${escapeHtml(l.farm)} · scan for cases, sprays and the next tasks</div>
   </div>`;
 }
 
@@ -77,7 +78,7 @@ export function labelSheet(labels) {   // exported for a look at the sheet witho
   for (let i = 0; i < labels.length; i += 8) pages.push(labels.slice(i, i + 8));
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Batch labels · ${esc(labels.length)}</title>
+<title>Batch labels · ${escapeHtml(labels.length)}</title>
 <style>
   @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
@@ -111,14 +112,14 @@ export function labelSheet(labels) {   // exported for a look at the sheet witho
   @media print { .how { display: none; } .page { margin: 0; box-shadow: none; break-after: page; } .page:last-child { break-after: auto; } }
 </style></head><body>
 <div class="how">
-  <b class="t">${esc(labels.length)} batch label${labels.length === 1 ? '' : 's'}</b>
+  <b class="t">${escapeHtml(labels.length)} batch label${labels.length === 1 ? '' : 's'}</b>
   Print at <b>100 % (Actual size)</b>, not "fit to page". The sheet is the common A4 8-up label (99.1 × 67.7 mm);
   for the greenhouse, waterproof polyester or vinyl labels last a crop. On plain paper, cut along the dashed lines and laminate.
   Stake the label at the table so the QR faces the path; write the lot code on every crate of its harvest.
   <p><button onclick="print()">Print</button></p>
 </div>
 ${pages.map(p => `<div class="page">${p.map(label).join('')}</div>`).join('')}
-<script src="${QR_LIB}"></script>
+<script src="${QR_LIB}" integrity="${QR_SRI}" crossorigin="anonymous"></script>
 <script>
   // each QR drawn as an SVG of its own modules: sharp at any printer resolution
   document.querySelectorAll('.qr').forEach(box => {

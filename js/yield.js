@@ -15,11 +15,10 @@
 // own: before, a crop in production was in no table until its last cut.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, cropAvatar, pref, farmDate, drawer, confirmDrawer, field, input, selectBox, toast, busy } from './ui.js';
+import { loading, el, pageHead, cropAvatar, pref, farmDate, drawer, confirmDrawer, field, input, selectBox, toast, busy, ymd } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
 const CROP_KEY = 'fbc_yield_crop';
-const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const kg = n => `${Math.round(Number(n || 0)).toLocaleString()} kg`;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
 const pctOf = (a, b) => Number(b) > 0 ? Math.round(100 * Number(a) / Number(b)) : null;

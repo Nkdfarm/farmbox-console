@@ -19,7 +19,7 @@
 //     openCases   async () → the open cases of the zone (rpc cases, filtered)
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, toast, busy, num, selectBox, drawer, once } from './ui.js';
+import { el, toast, busy, num, selectBox, emptyState } from './ui.js';
 import { newCase, openCase } from './cases.js';
 import { SEV, day, when, partLabel, fullPhotoUrl, photoTitle, RISK_WORD, riskOf, noteChip, byGravity, insectsByGravity, errWord } from './viewer/parts.js';
 import { teamNotes } from './viewer/notes.js';
@@ -253,7 +253,7 @@ export function openViewer(ctx) {
       const chip = noteChip(photo);
       if (chip) { const box = el('div', 'vw-chips'); box.append(chip); secNote.append(box); }
       else if (photo.note) secNote.append(el('div', 'vw-note-plain', photo.note));
-      else secNote.append(el('div', 'hint', 'No note on this photo.'));
+      else secNote.append(emptyState('No note on this photo.'));
     }
     if (mayWrite && photo.id && (!inFlow || !photo.note)) {
       const ed = el('button', 'btn btn-sm', photo.note ? 'Edit the note' : 'Add the note of who took the photo');
@@ -543,7 +543,7 @@ export function openViewer(ctx) {
     secCase.append(el('div', 'sec-title', 'Cases'));
     const firstCode = (photo.tags || [])[0]?.code || (photo.ai?.findings || [])[0]?.code || null;
     const firstSev = (photo.tags || [])[0]?.severity ?? (photo.ai?.findings || [])[0]?.severity ?? 1;
-    if (!list.length) secCase.append(el('div', 'hint', 'No open case in this zone.'));
+    if (!list.length) secCase.append(emptyState('No open case in this zone.'));
     list.forEach(c => {
       const row = el('div', 'vw-case');
       const name = el('button', 'linkish', c.title); name.onclick = () => openCase(c.id, ctx.onChange, ctx.farm);
@@ -590,7 +590,7 @@ export function openViewer(ctx) {
     try { list = await ctx.zonePhotos?.() || []; } catch (e) { cmpList.textContent = ''; cmpList.append(el('div', 'note bad', e.message)); return; }
     cmpList.textContent = '';
     list = list.filter(p => !(p.kind === photo.kind && p.id === photo.id));
-    if (!list.length) { cmpList.append(el('div', 'hint', 'No other photo of this zone in the last four months.')); return; }
+    if (!list.length) { cmpList.append(emptyState('No other photo of this zone in the last four months.')); return; }
     // by date, newest first; a trap's own earlier photos first when this is a trap
     const groups = new Map();
     list.forEach(p => { const d = String(p.taken_at).slice(0, 10); if (!groups.has(d)) groups.set(d, []); groups.get(d).push(p); });

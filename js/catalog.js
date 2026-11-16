@@ -9,7 +9,7 @@
 // switched off rather than deleted, so a zone or crop that uses it keeps it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, toast, drawer, busy, catalog, setCatalog } from './ui.js';
+import { el, input, toast, drawer, busy, catalog, setCatalog } from './ui.js';
 
 // the list as the server has it (with in_use counts), read once per page view
 let full = null;

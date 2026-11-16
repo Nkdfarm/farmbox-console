@@ -1,6 +1,6 @@
 // Asking the team for an opinion on a photo, and the list of photos waiting for mine (split from viewer.js, 16 Nov 2026)
 import { rpc } from '../api.js';
-import { el, drawer, toast, busy, confirmDrawer, once, avatar } from '../ui.js';
+import { el, drawer, toast, busy, confirmDrawer, once, avatar, emptyState } from '../ui.js';
 import { day, whoAmI, signedUrl, errWord, riskSelect } from './parts.js';
 
 export async function askOpinion(photo, kind, ctx, question = '') {
@@ -39,7 +39,7 @@ export async function openOpinions(farm, onChange) {
     let rows = [];
     try { rows = await rpc('dg_my_requests', { p_farm: farm.id }); } catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', errWord(e))); return; }
     d.body.textContent = '';
-    if (!rows.length) { d.body.append(el('div', 'hint', 'Nothing waiting for your opinion.')); return; }
+    if (!rows.length) { d.body.append(emptyState('Nothing waiting for your opinion.')); return; }
     rows.forEach(q => {
       const card = el('div', 'vw-req');
       const ph = q.photo || {};

@@ -1,6 +1,6 @@
 // Scouting page: the insect strip and the zone / growth curves
 import { openCase } from '../cases.js';
-import { el, num, drawer, ymd, parseNoon as parse, shortDay } from '../ui.js';
+import { el, num, drawer, ymd, parseNoon as parse, shortDay, emptyState } from '../ui.js';
 import { reload } from './index.js';
 import { S, SVG_NS, dotEl } from './state.js';
 
@@ -92,7 +92,7 @@ function zoneCurve(h, z) {
     head.append(big);
   }
   box.append(head);
-  if (!pts.length) box.append(el('div', 'hint', 'No trap figure in the last 30 days: a trap gets one from its second photo.'));
+  if (!pts.length) box.append(emptyState('No trap figure in the last 30 days: a trap gets one from its second photo.'));
   else {
     // the time axis starts at the first figure (a week at least), so a young record is not a flat line in an empty month
     const d1 = parse(h.day).getTime();

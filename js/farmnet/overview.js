@@ -1,5 +1,5 @@
 // FarmNet Overview: the plan view, bay window, live values, history, centre and mixer buttons
-import { fn, rpc } from '../api.js';
+import { rpc } from '../api.js';
 import { lineChart } from '../connect.js';
 import { site3d } from '../farmnet3d.js';
 import { el, drawer, icon, loading, farmLocal, pref } from '../ui.js';

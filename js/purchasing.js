@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, toast, busy,
-         num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign, once } from './ui.js';
+         num, shortDate, selectBox, confirmDrawer, isFranchisor, curSign, once, emptyState } from './ui.js';
 import { expiryPill } from './product.js';
 
 // a supplier's address in a mailto: link: encoded, so a '?' or '&' in it cannot add a header, but '@' and ',' kept
@@ -348,7 +348,7 @@ function countStock(row) {
 // ── purchase orders (0132): per supplier, approved by the Admin or Farm manager, then sent ──
 function ordersCard(rows, may) {
   const box = el('div', 'po-list');
-  if (!rows.length) { const c = card('Purchase orders'); c.append(el('div', 'empty', 'No purchase order yet. Tick requests under "To order" and press "Make purchase orders".')); return c; }
+  if (!rows.length) { const c = card('Purchase orders'); c.append(emptyState('No purchase order yet. Tick requests under "To order" and press "Make purchase orders".')); return c; }
   const ST = { draft: ['to approve', 'warn'], approved: ['approved — to send', 'info'], sent: ['sent', 'ok'], received: ['received', 'ok'], cancelled: ['cancelled', ''] };
   rows.forEach(po => {
     const c = el('div', 'card card-pad po');
@@ -383,7 +383,7 @@ function ordersCard(rows, may) {
       if (po.status !== 'sent') {
         const cx = el('button', 'btn btn-sm btn-ghost tl-clear', 'Cancel order');
         cx.onclick = () => once(cx, async () => {
-          if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel it', true)) return;
+          if (!await confirmDrawer(`Cancel ${po.number}?`, 'Its requests go back to "To order".', 'Cancel the order', true)) return;
           try { await rpc('cancel_purchase_order', { p_po: po.id }); await load(); } catch (e) { toast(e.message, 'bad'); }
         });
         acts.append(cx);
@@ -439,7 +439,7 @@ function seedlingsCard() {
   const all = seed.orders || [];
   if (!all.length) {
     const c = card('Seedlings');
-    c.append(el('div', 'empty', 'No seedling order. Validated batches with an external nursery make one here, on the day to order.'));
+    c.append(emptyState('No seedling order. Validated batches with an external nursery make one here, on the day to order.'));
     return c;
   }
   const open = all.filter(o => o.status !== 'done');
@@ -447,7 +447,7 @@ function seedlingsCard() {
   const later = open.filter(o => !now.includes(o));
   const done = all.filter(o => o.status === 'done').sort((a, b) => String(b.done_at).localeCompare(String(a.done_at)));
   if (now.length) now.forEach(o => box.append(seedOrder(o, true)));
-  else box.append(el('div', 'note', `Nothing to order today. Next: ${later.length ? shortDate(later[0].day) : '—'}.`));
+  else box.append(emptyState(`Nothing to order today. Next: ${later.length ? shortDate(later[0].day) : '—'}.`));
   if (later.length) {
     const t = el('button', 'btn btn-ghost', `${laterOpen ? '▾' : '▸'} Later orders · ${later.length}`);
     t.onclick = () => { laterOpen = !laterOpen; paint(); };

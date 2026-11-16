@@ -9,8 +9,8 @@
 // Labour is deliberately manager-only, as the spec asks: task completion per
 // person is a management tool, not a leaderboard.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, openFast } from './api.js';
-import { loading, el, table, pageHead, card, toast, num, shortDate, farmDate, ymd } from './ui.js';
+import { openFast } from './api.js';
+import { loading, el, table, pageHead, card, num, shortDate, farmDate, ymd } from './ui.js';
 
 const RANGES = [[6, 'Last week'], [27, 'Last 4 weeks'], [90, 'Last quarter'],
                 [364, 'Last year']];   // shortest first; the page still opens on four weeks

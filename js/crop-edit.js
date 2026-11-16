@@ -10,7 +10,7 @@
 // overwrites it; leaving it empty goes back to the library figure.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num, sowingLine, cropAvatar } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, mediaList, systemTypes, systemsFor, num, sowingLine, cropAvatar, emptyState } from './ui.js';
 
 const CATEGORIES = [['leafy', 'Leafy'], ['mixed_leafy', 'Mixed leafy'], ['herbs', 'Herbs'],
                     ['microgreens', 'Microgreens'], ['fruiting_vines', 'Fruiting vines'], ['fruiting_bush', 'Fruiting bush']];
@@ -209,7 +209,7 @@ export async function editCrop(c, onSaved, farm) {
           rep_.title = 'Repeat every n days while the phase lasts; empty = once';
           rep_.oninput = () => { pr.repeat_days = rep_.value; };
           const x = el('button', 'btn btn-sm btn-ghost', '✕');
-          x.title = 'Take this procedure off the phase';
+          x.title = 'Remove this procedure from the phase';
           x.onclick = () => { p.procedures.splice(j, 1); paintLinks(); };
           row.append(el('span', 'hint', 'day'), off, el('span', 'hint', 'every'), rep_, el('span', 'hint', 'd'), x);
           links.append(row);
@@ -223,12 +223,12 @@ export async function editCrop(c, onSaved, farm) {
         };
         addRow.append(pick);
         links.append(addRow);
-        if (!p.procedures.length) links.prepend(el('div', 'hint', 'No procedure — a batch does nothing in this phase.'));
+        if (!p.procedures.length) links.prepend(emptyState('No procedure — a batch does nothing in this phase.'));
       };
       paintLinks();
       phaseBox.append(links);
     });
-    if (!phases.length) phaseBox.append(el('div', 'hint', 'No phases — the planner will not place this crop.'));
+    if (!phases.length) phaseBox.append(emptyState('No phases — the planner will not place this crop.'));
     paintTotal();
   };
   const ph = el('div', 'row');

@@ -1,6 +1,6 @@
 // FarmNet Sensors and Alarms pages, the Commands page, the command log card
 import { rpc } from '../api.js';
-import { el, toast, icon, pref } from '../ui.js';
+import { el, toast, icon, pref, emptyState } from '../ui.js';
 import { history, liveVals } from './overview.js';
 import { GROUPS, MAX_PINS, ask, bad, card, fnTime, nice, page, pinsOf, range, secs, setPins, soft, sourcesOf, spanPicker, table } from './shell.js';
 
@@ -71,7 +71,7 @@ export async function renderFnSensors(mount, farm, _app, quiet) {
         });
         list.append(box);
       });
-      if (!list.childNodes.length) list.append(el('div', 'hint', 'No source matches.'));
+      if (!list.childNodes.length) list.append(emptyState('No source matches.'));
     };
     q.value = sensorFind;
     q.oninput = () => { sensorFind = q.value; paint(); };
@@ -129,7 +129,7 @@ export function logCard(ctx, log, title, ...right) {
   const k = card(title, ...right);
   if (log.e) { k.append(bad(log.e)); return k; }
   const rows = log.v || [];
-  if (!rows.length) { k.append(el('div', 'hint', 'No command sent to FarmNet from Naked Heart yet.')); return k; }
+  if (!rows.length) { k.append(emptyState('No command sent to FarmNet from Naked Heart yet.')); return k; }
   const label = a => ctx.actions[a]?.label || a;
   const args = x => {
     const a = x.args || {};

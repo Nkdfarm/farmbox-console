@@ -1,6 +1,6 @@
 // FarmNet commands: run, start irrigation / mixing, pause, resume, stop, setpoints
-import { el, drawer, field, selectBox, toast, busy, confirmDrawer, loading } from '../ui.js';
-import { ask, bad, num, secs, send, show, unit } from './shell.js';
+import { el, drawer, field, selectBox, toast, busy, confirmDrawer, loading, emptyState } from '../ui.js';
+import { ask, bad, num, secs, send, show } from './shell.js';
 
 // ═══ Commands to FarmNet ════════════════════════════════════════════════════
 async function run(ctx, action, args, changes, okText) {
@@ -156,7 +156,7 @@ export async function setpoints(ctx, z, st) {
       });
       box.append(sec);
     }));
-    if (!box.childNodes.length) box.append(el('div', 'hint', 'No parameter shown for this device type.'));
+    if (!box.childNodes.length) box.append(emptyState('No parameter shown for this device type.'));
   };
   sel.onchange = load;
   await load();

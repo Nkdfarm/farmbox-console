@@ -14,7 +14,7 @@ import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
 import { showAssistantWaiting } from './assistant.js';
 import { cameraTiles } from './cameras.js';
-import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate } from './ui.js';
+import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate, emptyState, readNote } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -606,7 +606,7 @@ function bays() {
     list.append(row);
   });
   if (!data.occupancy.by_system.length) {
-    list.append(el('div', 'empty', 'No growing systems yet — set them up on Farm setup.'));
+    list.append(emptyState('No growing systems yet — set them up on Farm setup.'));
   }
   card.append(list);
   return card;
@@ -657,8 +657,11 @@ function decideStrip() {
   };
   const args = { p_farm: farm.id };
   // the copy on this device is painted only if the fresh answer has not already arrived
-  let fresh = false;
-  cachedRpc('to_decide', args).then(r => { if (!fresh) paintIt(r); }).catch(() => {});
-  rpc('to_decide', args).then(r => { fresh = true; paintIt(r); }).catch(() => {});
+  let fresh = false, shown = false;
+  cachedRpc('to_decide', args).then(r => { if (!fresh) { paintIt(r); shown = !!r; } }).catch(() => {});
+  rpc('to_decide', args).then(r => { fresh = true; paintIt(r); }).catch(() => {
+    box.querySelector('.read-note')?.remove();
+    box.prepend(readNote(shown));
+  });
   return box;
 }

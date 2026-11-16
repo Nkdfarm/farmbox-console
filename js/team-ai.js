@@ -14,7 +14,7 @@
 // Everything is saved with the window's own Save. The database decides who may (mcp_team's may_edit).
 // ═════════════════════════════════════════════════════════════════════
 import { rpc, URL_BASE } from './api.js';
-import { el, toast, confirmDrawer, drawer, busy, farmInstant, farmLocal, farmWhen } from './ui.js';
+import { el, toast, confirmDrawer, drawer, busy, farmInstant, farmLocal, farmWhen, emptyState } from './ui.js';
 
 export const MCP_URL = URL_BASE + '/functions/v1/mcp';
 const when = iso => iso ? farmWhen(iso) : '';
@@ -250,13 +250,13 @@ export function aiLine(AI, done) {
   asked.onclick = () => openAsked(AI, null);
   row.append(asked);
   if (AI.people.some(p => p.ai_access)) {
-    const stop = el('button', 'btn btn-sm btn-ghost team-danger', 'Stop all');
+    const stop = el('button', 'btn btn-sm btn-ghost team-danger', 'Remove all');
     stop.onclick = async () => {
-      if (!await confirmDrawer('Stop all AI access?',
+      if (!await confirmDrawer('Remove all AI access?',
         'Everybody of this farm and its sister units is unticked now, and their AIs are signed out. You can tick them again later.',
-        'Stop all', true)) return;
-      busy(stop, true, 'Stopping…');
-      try { const n = await rpc('mcp_stop_all', { p_farm: AI.farm_id }); toast(`AI access stopped for ${n} ${n === 1 ? 'person' : 'people'}`, 'ok'); await done(); }
+        'Remove all', true)) return;
+      busy(stop, true, 'Removing…');
+      try { const n = await rpc('mcp_stop_all', { p_farm: AI.farm_id }); toast(`AI access removed for ${n} ${n === 1 ? 'person' : 'people'}`, 'ok'); await done(); }
       catch (e) { busy(stop, false); toast(say(e), 'bad'); }
     };
     row.append(stop);
@@ -282,7 +282,7 @@ async function openAsked(AI, person) {
     const mail = (person.email || '').trim().toLowerCase();
     calls = calls.filter(c => (c.email || '').toLowerCase() === mail);
   }
-  if (!calls.length) { d.body.append(el('div', 'hint', 'Nothing yet.')); return; }
+  if (!calls.length) { d.body.append(emptyState('Nothing yet.')); return; }
   const isWrite = c => c.tool === 'act' || c.tool === 'revert';
   let only = false;
   const list = el('div');

@@ -11,9 +11,8 @@
 // that way). Sister units are read together unless one is switched off.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate, ymd, parseYmd, shortDay } from './ui.js';
+import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate, ymd, parseYmd, shortDay, emptyState } from './ui.js';
 
-const DAY = 86400000;
 const SPAN_KEY = 'fbc_basket_span', PROP_KEY = 'fbc_basket_proposed', UNITS_KEY = 'fbc_basket_units';
 const SPANS = [[28, '4 weeks'], [91, '3 months'], [182, '6 months']];
 const BACK = 14;   // the window opens two weeks back: the last harvests weighed, then the forecast
@@ -227,7 +226,7 @@ function paintChart() {
   chartBox.textContent = '';
   const days = data.days || [];
   if (!days.length) {
-    chartBox.append(el('div', 'empty', 'No harvest day in this window. Harvest days are set on Farm setup › The week.'));
+    chartBox.append(emptyState('No harvest day in this window. Harvest days are set on Farm setup › The week.'));
     return;
   }
   const contents = days.map(d => ({ day: d, ...dayContent(d) }));
@@ -291,7 +290,7 @@ function openBasket(day) {
   const n = clients || 0;
   const d = drawer(`Basket · ${longDay(day.d)}`,
     `${c.kind === 'realized' ? 'Weighed' : 'Forecast'} ${kgText(total)}` + (n ? ` shared by ${n} direct client${n === 1 ? '' : 's'}: one basket ≈ ${basketText(total / n)}` : ' — set the direct clients on top to see one basket'));
-  if (!total) { d.body.append(el('div', 'hint', 'Nothing to harvest this day.')); return; }
+  if (!total) { d.body.append(emptyState('Nothing to harvest this day.')); return; }
   const byCrop = new Map();
   c.parts.forEach(p => {
     const x = byCrop.get(p.id) || { id: p.id, kg: 0, prop: 0 };

@@ -10,7 +10,7 @@
 // standard"). Every decision stays: who proposed, on what evidence, who decided.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, api, cachedRpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref, systemTypes, farmDay } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, pref, systemTypes, farmDay, emptyState } from './ui.js';
 
 const ENTITY = { phase_days: 'Phase length', yield: 'Yield', target: 'EC / pH / climate target', procedure_step: 'Procedure step',
                  pest: 'Pest identification', material: 'Material quantity', other: 'Other' };
@@ -47,7 +47,7 @@ function paint() {
   });
   mount.append(pageHead(null, 'Corrections proposed from the field; the Farm manager or the agronomist decides.', seg, add));
   const items = (data.items || []).filter(i => show === 'all' || (show === 'proposed' ? i.status === 'proposed' : i.status !== 'proposed'));
-  if (!items.length) { mount.append(el('div', 'empty', show === 'proposed' ? 'Nothing waiting for a decision.' : 'No correction yet.')); return; }
+  if (!items.length) { mount.append(emptyState(show === 'proposed' ? 'Nothing waiting for a decision.' : 'No correction yet.')); return; }
   const list = el('div', 'va-list');
   items.forEach(i => list.append(card(i)));
   mount.append(list);

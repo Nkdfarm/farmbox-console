@@ -6,7 +6,7 @@ import { trapKit } from '../trapmap.js';
 import { loading, el } from '../ui.js';
 import { openGhRef, readExtras } from './extras.js';
 import { openDays, paint } from './paint.js';
-import { S, dayData, robotFoot, robotTick } from './state.js';
+import { S, dayData, readFailed, readOk, robotFoot, robotTick } from './state.js';
 import { dayRows, thumbsLive, thumbsKept, pendings, panelReads } from './thumbs.js';
 
 export async function renderScouting(container, currentFarm) {
@@ -37,12 +37,13 @@ async function rereadOlder(before, n, here) {
       older = older.concat(part);
       if (part.length < ask) end = true; else cursor = part[part.length - 1].day;
     }
+    readOk();
     const head = S.dates.filter(x => String(x.day) >= String(before));
     if (JSON.stringify(older) === JSON.stringify(S.dates.slice(head.length))) return;
     S.dates = head.concat(older);
     if (end) S.moreDone = true;                  // fewer than were asked for: there is nothing older than these
-    paint();
-  } catch { /* no answer: the lines stay as they were read */ }
+    paint(); readOk();
+  } catch { readFailed(true); /* no answer: the lines stay as they were read */ }
 }
 
 export async function load(fresh = false) {

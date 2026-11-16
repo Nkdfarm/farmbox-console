@@ -1,6 +1,6 @@
 // steady harvest over several zones: groups, banner, options window and preview
 import { el, busy, toast, once, confirmDrawer, drawer, field, selectBox, systemLabel, loading,
-         cropAvatar } from '../ui.js';
+         cropAvatar, emptyState } from '../ui.js';
 import { rpc } from '../api.js';
 import { paint, reload, fits } from './index.js';
 import { kgRow, plantsRow } from './weeks.js';
@@ -104,7 +104,7 @@ export function steadyHead(g, zones, W, from, px) {
     }
     const end = el('button', 'btn btn-sm btn-ghost tl-clear', 'End the group');
     end.onclick = () => once(end, async () => {
-      if (!await confirmDrawer(`End ${groupName(g)}?`, 'Its zones go back to planning on their own. Every proposal stays where it is; the other steady groups are not touched.', 'End it')) return;
+      if (!await confirmDrawer(`End ${groupName(g)}?`, 'Its zones go back to planning on their own. Every proposal stays where it is; the other steady groups are not touched.', 'End the group')) return;
       try { await rpc('steady_dissolve', { p_group: g.id }); toast('Steady group ended — the proposals stay', 'ok'); await reload(); }
       catch (e) { toast(e.message, 'bad'); }
     });
@@ -148,9 +148,9 @@ export function steadyChip(sys, g) {
   chip.append(el('span', null, `Steady · ${cropById(sys.steady_crop_id)?.name || 'crop'}`));
   if (S.data.may_plan) {
     const x = el('button', 'tl-chip-x', '✕');
-    x.title = `Take ${sys.name} out of ${groupName(g)}`;
+    x.title = `Remove ${sys.name} from ${groupName(g)}`;
     x.onclick = () => once(x, async () => {
-      if (!await confirmDrawer(`Take ${sys.name} out?`, `Its proposals stay where they are; the other zones of ${groupName(g)} are planned again. Undo can put it back.`, 'Take it out')) return;
+      if (!await confirmDrawer(`Remove ${sys.name}?`, `Its proposals stay where they are; the other zones of ${groupName(g)} are planned again. Undo can put it back.`, 'Remove')) return;
       try { await rpc('steady_leave', { p_system: sys.id }); toast(`${sys.name} left ${groupName(g)}`, 'ok'); await reload(); }
       catch (e) { toast(e.message, 'bad'); }
     });
@@ -276,7 +276,7 @@ function drawSteadyPreview(box, r) {
   if (r.total && r.total.cv != null && (r.series || []).length > 1)
     box.append(el('div', 'hint', `All these zones together: ≈ ${Math.round(r.total.mean || 0).toLocaleString()} ${r.objective === 'harvests' ? 'harvests' : 'kg'} a week, ${pct(r.total.cv)}`));
   const weeks = r.weeks || [];
-  if (!weeks.length) { box.append(el('div', 'hint', 'Nothing would be harvested inside the window.')); return; }
+  if (!weeks.length) { box.append(emptyState('Nothing would be harvested inside the window.')); return; }
   const max = Math.max(1, ...weeks.map(w => Number(r.objective === 'harvests' ? w.cuts : w.kg)));
   const from = r.total?.from ? dn(r.total.from) : null, to = r.total?.to ? dn(r.total.to) : null;
   const chart = el('div', 'st-chart');

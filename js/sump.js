@@ -14,7 +14,7 @@
 // paper tracker's. Nothing here sets a limit: they are the unit's own, in Connections.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, drawer, confirmDrawer, toast, busy, input, field, farmInstant, farmToday, parseNoon as parse, shortDay, farmTime } from './ui.js';
+import { el, num, drawer, confirmDrawer, toast, busy, input, field, farmInstant, farmToday, parseNoon as parse, shortDay, farmTime, emptyState } from './ui.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const METRICS = [
@@ -94,9 +94,9 @@ function paintBlock(box, farm, h) {
     head.append(el('span', 'spacer'), chip);
   }
   box.append(head);
-  if (!s) { box.append(el('div', 'hint', 'No sump is set for this zone.')); return; }
+  if (!s) { box.append(emptyState('No sump is set for this zone.')); return; }
   if (!(h.readings || []).length) {
-    box.append(el('div', 'hint', 'No EC, pH or temperature in these 30 days. The daily sump check files them here.'));
+    box.append(emptyState('No EC, pH or temperature in these 30 days. The daily sump check files them here.'));
   } else {
     METRICS.filter(m => m.key !== 'water_temp').forEach(m => {
       const last = lastOf(h, m.key);
@@ -165,7 +165,7 @@ export function openSump(farm, { sump, day = null, onChange = null } = {}) {
     [30, 90, 365].forEach(n => { const b = el('button', 'pd-cropchip' + (n === days ? ' on' : ''), `${n} days`); b.onclick = () => { days = n; read(); }; bar.append(b); });
     body.append(bar);
     const rows = h.readings || [];
-    if (!rows.length) body.append(el('div', 'empty', 'No reading in this period.'));
+    if (!rows.length) body.append(emptyState('No reading in this period.'));
     METRICS.forEach(m => {
       const vals = rows.filter(r => r[m.key] != null).map(r => Number(r[m.key]));
       if (!vals.length) { if (rows.length) body.append(el('div', 'hint sp-none', `${m.label}: not measured in this period.`)); return; }
@@ -193,10 +193,10 @@ export function openSump(farm, { sump, day = null, onChange = null } = {}) {
         tr.append(el('td', 'hint', r.source === 'checklist' ? (r.by || 'Sump check') : r.source === 'import' ? `Paper tracker${r.slot ? ' · ' + r.slot.toLowerCase() : ''}` : r.source === 'sensor' ? 'Sensor' : (r.note || 'Typed in')));
         const last = el('td');
         if (h.may_write && r.source !== 'checklist') {
-          const x = el('button', 'btn btn-ghost btn-sm', '✕'); x.title = 'Take this reading out';
+          const x = el('button', 'btn btn-ghost btn-sm', '✕'); x.title = 'Remove this reading';
           x.onclick = async () => {
             // it asks first (13 Oct 2026): a typed reading went on one click of a small ✕ beside its row
-            if (!await confirmDrawer('Take this reading out?', 'It leaves the curve and the report of its day. A reading typed by mistake is what this is for.', 'Take it out', true)) return;
+            if (!await confirmDrawer('Remove this reading?', 'It leaves the curve and the report of its day. A reading typed by mistake is what this is for.', 'Remove', true)) return;
             try { await rpc('save_sump_reading', { p: { sump_id: h.sump.id, id: r.id, remove: true } }); read(); onChange?.(); } catch (e) { toast(e.message, 'bad'); }
           };
           last.append(x);

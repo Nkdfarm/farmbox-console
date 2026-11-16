@@ -2,7 +2,7 @@
 import { robotFig } from '../robot.js';
 import { sumpBlock } from '../sump.js';
 import { treatBlock } from '../treatments.js';
-import { el, num, drawer, shortDay } from '../ui.js';
+import { el, num, drawer, shortDay, emptyState } from '../ui.js';
 import { photoFig, trapCard } from './cards.js';
 import { G_WORD, growthCurve, insectStrip } from './curves.js';
 import { reload } from './index.js';
@@ -100,7 +100,7 @@ function insectsBlock(z, day, traps) {
   curve.append(el('div', 'hint', 'Reading the insects a day…'));
   body.append(curve);
   if (mu && S.kit) { const m = S.kit.unitMap(mu, spots); m.classList.add('tm-mini'); body.append(m); }
-  else body.append(el('div', 'hint', 'No trap map for this zone.'));
+  else body.append(emptyState('No trap map for this zone.'));
   const lastRead = spots.map(s => s.read_at).filter(Boolean).sort().pop();
   const foot = el('div', 'pd-ins-foot');
   if (lastRead) foot.append(el('span', 'hint', 'last read ' + shortDay(lastRead)));
@@ -124,7 +124,7 @@ function insectsBlock(z, day, traps) {
     const now = live();
     const d = drawer(`Trap photos · ${z.name}`, `${longDay(day.day)} · ${now.length} photo${now.length === 1 ? '' : 's'}, both sides of each card`);
     d.box.classList.add('sump-drawer', 'pd-ins-drawer');
-    if (!now.length) { d.body.append(el('div', 'hint', 'No trap photo that day.')); return; }
+    if (!now.length) { d.body.append(emptyState('No trap photo that day.')); return; }
     const cards = el('div', 'pd-traps');
     const gallery = { label: 'Trap photos', list: live };
     // a trap's comment is one for the trap: on its first side's card only, not on both (review 15 Oct 2026)

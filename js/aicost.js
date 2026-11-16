@@ -12,7 +12,7 @@
 // zone opinions were: they kept their own tokens).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, drawer, num, toast, shortDay, farmWhen } from './ui.js';
+import { el, drawer, num, toast, shortDay, farmWhen, emptyState } from './ui.js';
 
 const KIND = { 'scout-photo': 'Plant photo read by the AI', 'trap-species': 'Trap photo: the species', 'zone-opinion': 'A zone\'s AI opinion', 'greenhouse-opinion': 'The whole greenhouse: the AI\'s report',
                assistant: 'The assistant', 'photo-note': 'AI note on the phone', 'photo-chat': 'Chat about a photo' };
@@ -110,7 +110,7 @@ export function openAiCost(farmId) {
   };
   const paint = j => {
     const body = d.body; body.textContent = '';
-    if (!j.since) { body.append(el('div', 'empty', 'Nothing logged yet. Ask the AI about a photo, a trap or a zone: the call appears here with its cost.')); return; }
+    if (!j.since) { body.append(emptyState('Nothing logged yet. Ask the AI about a photo, a trap or a zone: the call appears here with its cost.')); return; }
     const tiles = el('div', 'ac-tiles');
     [['Today', j.day], ['7 days', j.week], ['30 days', j.month30], ['This month', j.this_month]].forEach(([label, s]) => {
       const t = el('div', 'ac-tile');

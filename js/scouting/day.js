@@ -2,13 +2,13 @@
 import { rpc, cachedRpc } from '../api.js';
 import { openCase } from '../cases.js';
 import { robotSection } from '../robot.js';
-import { el, cropAvatar, farmTime, farmWhen } from '../ui.js';
+import { el, cropAvatar, farmTime, farmWhen, emptyState } from '../ui.js';
 import { extraPill, sectionPills } from './extras.js';
 import { healthSection } from './health.js';
 import { reload } from './index.js';
 import { opinionCard } from './opinion.js';
 import { openDays } from './paint.js';
-import { S, calm, dayData, dotEl, longDay, robotDay, robotIn, robotNames, robotOpts, worst, zoneName, zones } from './state.js';
+import { S, calm, dayData, dotEl, longDay, robotDay, robotIn, robotNames, robotOpts, worst, zoneName } from './state.js';
 import { dayRows, readThumbs, updater } from './thumbs.js';
 
 // ── one report day ──
@@ -85,7 +85,7 @@ export function dayRow(d, openFirst, latest = false) {
     // a zone with nothing in it that day is one word, not a band
     const has = z => z.traps.length || z.photos.length || (z.cases || []).length || z.item?.task?.status === 'done' || robotIn(z, rbDay).length;
     const full = zones.filter(has), empty = zones.filter(z => !has(z));
-    if (S.zoneFilter && !full.length) body.append(el('div', 'hint', `Nothing photographed or counted in ${zoneName(S.zoneFilter)} that day.`));
+    if (S.zoneFilter && !full.length) body.append(emptyState(`Nothing photographed or counted in ${zoneName(S.zoneFilter)} that day.`));
     else if (!full.length && !rbDay.length && !(robotNames() && String(d.day) === String(S.over.today))) body.append(el('div', 'hint', S.cropFilter ? 'No zone with this crop.' : 'Nothing photographed that day.'));
     full.forEach(z => { const b = zoneBand(z, day, latest && !S.zoneFilter); if (S.zoneFilter) b.open = true;
       b.dataset.unit = z.unit_id || z.zone_id || z.name;

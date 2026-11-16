@@ -1,10 +1,10 @@
 // Scouting page: the opinions button and the feed window
 import { rpc } from '../api.js';
-import { loading, el, num, toast, busy, drawer, farmWhen } from '../ui.js';
+import { loading, el, num, toast, busy, drawer, farmWhen, emptyState } from '../ui.js';
 import { openViewer, tagChips, noteChip, partLabel, openOpinions, firstComments, aiBlocks } from '../viewer.js';
 import { socialLine } from './cards.js';
 import { viewerCtx } from './day.js';
-import { load, reload } from './index.js';
+import { reload } from './index.js';
 import { S, calm, dayData } from './state.js';
 import { thumbMaps } from './thumbs.js';
 
@@ -128,7 +128,7 @@ function openFeed() {
     const y = d.body.scrollTop;
     list.textContent = ''; foot.textContent = '';
     sum.textContent = total ? `${total} post${total === 1 ? '' : 's'} in the last ${feedDays} days` : '';
-    if (!items.length) list.append(el('div', 'empty', feedSort === 'mine' ? `Nothing of yours in the last ${feedDays} days.`
+    if (!items.length) list.append(emptyState(feedSort === 'mine' ? `Nothing of yours in the last ${feedDays} days.`
       : feedSort === 'disagree' ? `No disagreement in the last ${feedDays} days.` : `No photo in the last ${feedDays} days.`));
     const rows = items.slice();                   // the list a viewer opened from it goes through, as it was clicked
     rows.forEach((p, i) => list.append(card(p, i, rows)));

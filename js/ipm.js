@@ -11,7 +11,7 @@
 // already raised an issue.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, api, URL_BASE, openFast } from './api.js';
-import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, confirmDrawer, farmDay } from './ui.js';
+import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, farmDay, emptyState } from './ui.js';
 import { openViewer } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -84,7 +84,7 @@ function paint() {
         (data.ai_pending ? ` · ${data.ai_pending} photo${data.ai_pending > 1 ? 's' : ''} waiting` : '')));
     c.append(head);
     if (sp.length) c.append(speciesTable(sp, true));
-    else c.append(el('div', 'empty', 'No photo named yet.'));
+    else c.append(emptyState('No photo named yet.'));
     mount.append(c);
   } else if (!data.ai_ready) {
     mount.append(el('div', 'note', 'The AI is off: paste an Anthropic API key in Settings › Integrations, then open any trap photo and press Ask the AI.'));
@@ -116,7 +116,7 @@ function paint() {
       head.append(el('div', 'spacer'), b);
     }
     c.append(head);
-    if (!z.traps.length) { c.append(el('div', 'empty', 'No trap in this zone yet.')); mount.append(c); return; }
+    if (!z.traps.length) { c.append(emptyState('No trap in this zone yet.')); mount.append(c); return; }
     c.append(table([
       { key: 'code', label: 'Trap', fmt: (v, t) => {
           const b = el('div');

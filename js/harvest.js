@@ -8,7 +8,7 @@
 // the phone can still be recorded here.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, parseYmd, addDays,
+import { loading, el, table, pageHead, drawer, field, input, selectBox, toast, busy, num, shortDate, pref, ymd, addDays,
          mondayOf, subFamilyTag, farmDate, systemLabel } from './ui.js';
 
 const PERIOD_KEY = 'fbc_harvest_period';

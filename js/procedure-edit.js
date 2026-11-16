@@ -7,7 +7,7 @@
 // onto it; if not, only the details are written.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList, scheduleText, farmDate, addDays, ymd } from './ui.js';
+import { el, field, input, selectBox, toast, drawer, busy, systemTypes, mediaList, scheduleText, farmDate, addDays, ymd, emptyState } from './ui.js';
 import { familyOptions, subFamiliesOf } from './families.js';
 
 // Repeats (0094): three choices. On a schedule = a routine with its days and every n weeks;
@@ -247,7 +247,7 @@ export function editProcedure(p, subFamilies, onSaved, all = [], farm = null) {
       card.append(field('Action plan', ap));
       box.append(card);
     });
-    if (!steps.length) box.append(el('div', 'hint', 'No steps yet.'));
+    if (!steps.length) box.append(emptyState('No steps yet.'));
   };
 
   const sh = el('div', 'row');

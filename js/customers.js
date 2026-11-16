@@ -9,7 +9,7 @@
 // customer took in the last 90 days and when they last had a delivery.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref, curSign, money as fmtMoney } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, pref, curSign, money as fmtMoney, emptyState } from './ui.js';
 
 export const CUSTOMER_KINDS = [['direct', 'Direct client'], ['super_user', 'Super user'], ['restaurant', 'Restaurant'],
   ['retailer', 'Retailer'], ['community', 'Community'], ['market_agent', 'Market agent'], ['other', 'Other']];
@@ -75,7 +75,7 @@ function paint() {
     const s = q.trim().toLowerCase();
     const rows = all.filter(c => (!kindFilter || c.kind === kindFilter)
       && (!s || [c.name, c.route, c.phone, c.email, c.contact_person].some(x => String(x || '').toLowerCase().includes(s))));
-    if (!rows.length) { list.append(el('div', 'empty', all.length ? 'No customer matches.' : (data.may_edit ? 'The book is empty. "New customer" adds the first.' : 'The book is empty.'))); return; }
+    if (!rows.length) { list.append(emptyState(all.length ? 'No customer matches.' : (data.may_edit ? 'The book is empty. "New customer" adds the first.' : 'The book is empty.'))); return; }
     const t = el('table', 'table');
     t.innerHTML = '<thead><tr><th>Customer</th><th>Kind</th><th>Contact</th><th>Route</th><th>Basket</th><th class="num">kg · 90 d</th><th class="num">Revenue · 90 d</th><th>Last delivery</th><th></th></tr></thead>';
     const tb = el('tbody');

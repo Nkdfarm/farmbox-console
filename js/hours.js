@@ -9,7 +9,7 @@
 // dashboard reads it).
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate, parseYmd, curSign, ymd, hours } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, avatar, confirmDrawer, pref, farmLocal, farmInstant, farmToday, farmDate, parseYmd, curSign, ymd, hours, emptyState } from './ui.js';
 
 // the farm's clock, like the In and Out fields of the window: on a laptop set to another zone the list said one hour
 // and the window another (review 13 Oct 2026)
@@ -105,7 +105,7 @@ function paint() {
   const ent = data.entries || [];
   const rec = el('div', 'card card-pad');
   rec.append(el('div', 'sec-title', `Clock record · ${ent.length}`));
-  if (!ent.length) rec.append(el('div', 'hint', 'Nothing recorded in this period. Hours come from the task timers on Naked Brain (the phone); a manager can add them here.'));
+  if (!ent.length) rec.append(emptyState('Nothing recorded in this period. Hours come from the task timers on Naked Brain (the phone); a manager can add them here.'));
   else {
     const t2 = el('table', 'table');
     t2.innerHTML = '<thead><tr><th>Person</th><th>In</th><th>Out</th><th class="num">Time</th><th>From</th><th></th></tr></thead>';

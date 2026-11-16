@@ -126,19 +126,26 @@ export function dropTarget(cell, date, slot) {
     e.preventDefault(); cell.classList.remove('over');
     const t = S.dragging; S.dragging = null;
     if (!t) return;
-    const sameDay = t.date === date;
-    const sameSlot = slot === null || bandOf(t) === slot;
-    if (sameDay && sameSlot) return;
-    // a folded card moves every open zone of the day, not only those a filter leaves; a refusal half way
-    // (0201: that day has the zone already) reloads, so the board shows what really moved
-    const ids = (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
-    try {
-      const others = [];
-      for (const id of ids) { const r = await rpc('move_task', { p_task: id, p_date: date, p_slot: slot }); if (r?.just_before?.by) others.push(r.just_before.by); }
-      toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}` + alsoBy(others), 'ok');
-    } catch (err) { toast(err.message, 'bad'); }
-    finally { await load(); }
+    await moveTaskTo(t, date, slot);
   };
+}
+
+// the one write behind a task moved to a day (and a half of it): the drop of a chip and the "Move to…" chooser of the
+// task drawer both call it
+export async function moveTaskTo(t, date, slot) {
+  const sameDay = t.date === date;
+  const sameSlot = slot === null || bandOf(t) === slot;
+  if (sameDay && sameSlot) return true;
+  // a folded card moves every open zone of the day, not only those a filter leaves; a refusal half way
+  // (0201: that day has the zone already) reloads, so the board shows what really moved
+  const ids = (t.hub ? (t.all || t.members) : [t]).filter(isOpenTask).map(m => m.id);
+  try {
+    const others = [];
+    for (const id of ids) { const r = await rpc('move_task', { p_task: id, p_date: date, p_slot: slot }); if (r?.just_before?.by) others.push(r.just_before.by); }
+    toast(`${t.title} → ${shortDay(date)}${slot ? ' · ' + SLOT_WORD[slot].toLowerCase() : ''}` + alsoBy(others), 'ok');
+    return true;
+  } catch (err) { toast(err.message, 'bad'); return false; }
+  finally { await load(); }
 }
 
 export const cell = child => { const c = el('td'); c.append(child); return c; };

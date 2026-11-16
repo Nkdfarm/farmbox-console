@@ -10,7 +10,7 @@
 // the Crop planner, where the machine's own proposals make way for them.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
-import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays, ymd, once } from './ui.js';
+import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays, ymd, once, emptyState } from './ui.js';
 
 let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -49,7 +49,7 @@ function paint() {
 
   const orders = data.orders || [];
   if (!orders.length) {
-    mount.append(el('div', 'empty', data.may_edit ? 'No order yet. "New order" takes the first one.' : 'No order yet.'));
+    mount.append(emptyState(data.may_edit ? 'No order yet. "New order" takes the first one.' : 'No order yet.'));
     return;
   }
   const list = el('div', 'ord-list');

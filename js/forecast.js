@@ -10,7 +10,7 @@
 // taken as it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmLocal, farmToday, ago } from './ui.js';
+import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmToday, ago, emptyState } from './ui.js';
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
@@ -43,8 +43,8 @@ function paint() {
   const days = (data.review_days || []).map(d => DAY[d]).join(' and ');
   mount.append(pageHead(null, `${days ? `Every ${days}: confirm` : 'Confirm'} each batch, or correct its days to harvest and its kg.`, tog));
   const rows = onlyDue ? due : all;
-  if (!all.length) { mount.append(el('div', 'empty', 'No batch is growing or validated. Validate a proposal on Grow › Crop planner first.')); return; }
-  if (!rows.length) { mount.append(el('div', 'empty', `Every batch was looked at in the last three days. ${all.length} growing.`)); return; }
+  if (!all.length) { mount.append(emptyState('No batch is growing or validated. Validate a proposal on Grow › Crop planner first.')); return; }
+  if (!rows.length) { mount.append(emptyState(`Every batch was looked at in the last three days. ${all.length} growing.`)); return; }
   let zone = null, card = null;
   rows.forEach(b => {
     if (b.zone !== zone) { zone = b.zone; card = el('div', 'card card-pad fc-zone'); card.append(el('div', 'sec-title', zone || 'No zone')); mount.append(card); }

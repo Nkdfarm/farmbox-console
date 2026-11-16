@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { openCase } from './cases.js';
-import { loading, el, table, pageHead, drawer, field, input, selectBox, confirmDrawer,
+import { loading, el, table, pageHead, drawer, field, input, selectBox,
          toast, busy, shortDate } from './ui.js';
 
 const SEVERITY = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],

@@ -30,7 +30,7 @@
 // scouting.js owns the page: it asks this kit for the panel and for the pills of a day's line (a press on one shows
 // that day up here). Everything is read beside the page, so a database without 0224 still shows the report.
 import { rpc, fn, api, cachedRpc, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, field, confirmDrawer, avatar, g1Face, parseNoon as at, ymd, shortDay, farmTime, farmWhen, farmToday } from './ui.js';
+import { el, toast, busy, drawer, field, confirmDrawer, avatar, g1Face, parseNoon as at, ymd, shortDay, farmTime, farmWhen, farmToday, emptyState, readNote } from './ui.js';
 
 const STATUS = { ok: ['ok', 'OK'], watch: ['warn', 'Watch'], act: ['bad', 'Act now'] };
 // the zones' own words for a trend (scouting.js, TREND_AI): down is fewer pests
@@ -93,16 +93,17 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
   const current = () => sel || auto();
 
   // the list: beside the page, the kept copy first
+  let listFailed = false;   // the last read of the list of days failed: draw() says so
   async function readDays() {
     const before = JSON.stringify([...days]);
     try { const copy = await cachedRpc('greenhouse_days', a()); if (copy) take(copy); } catch { /* no copy */ }
     if (JSON.stringify([...days]) !== before) { list(); drawSoon(); }
     try {
       const fresh = await rpc('greenhouse_days', a());
-      const was = JSON.stringify([...days]);
-      take(fresh);
-      if (JSON.stringify([...days]) !== was) { list(); drawSoon(); }
-    } catch { /* a database without the function, or no connection: the page goes on without the panel's figures */ }
+      const was = JSON.stringify([...days]), failedBefore = listFailed;
+      take(fresh); listFailed = false;
+      if (JSON.stringify([...days]) !== was || failedBefore) { list(); drawSoon(); }
+    } catch { listFailed = true; drawSoon(); /* a database without the function, or no connection: the page goes on without the panel's figures */ }
   }
   // the page read again (a change made here or on another device): the list, and the day on show. What was read of
   // the other days is let go, so each is read again when it is next shown (0.7.242: a report written again elsewhere
@@ -136,10 +137,10 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
       if (JSON.stringify(d) !== was && k === current()) drawSoon();
     } catch (e) {
       // said on the panel, with "Try again" (review 13 Oct 2026: a read that failed left "Reading…" for ever). Only a
-      // day with nothing to show is drawn again, and the failure counts as its last try, so it is not asked in a loop.
+      // day with nothing to show, or one showing its kept copy under the "Could not read" note, is drawn again, and the failure counts as its last try, so it is not asked in a loop.
       if ((landed.get(k) || 0) < my) {
         failed.set(k, clean(e)); tried.set(k, Date.now());
-        if (!data.has(k) && k === current()) drawSoon();
+        if (k === current()) drawSoon();
       }
       if (fresh) throw e;
     }
@@ -487,7 +488,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
       });
       col('Still open from before', ul);
     } else if (op.trend) {
-      col('Still open from before', el('div', 'hint', 'Nothing carried over from the earlier reports and notes.'));
+      col('Still open from before', emptyState('Nothing carried over from the earlier reports and notes.'));
     }
     // under the three columns, the AI's own opinion on the team's notes; beside both, the photo that shows the worst of
     // the report — always one while the unit has a photo (0.7.241: the picture stood as a fourth column of the lists)
@@ -667,6 +668,7 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     const k = current(), d = data.get(k) || null;
     node.textContent = '';
     node.append(headRow(k), report(k, d), said(k, d));
+    if ((d && failed.has(k)) || listFailed) node.prepend(readNote(!!d || days.size > 0));
     const foot = bottom?.(k);                 // the page's own box at the foot of the report: the robot's pictures (0.7.260)
     if (foot) node.append(foot);
     if (!d && Date.now() - (tried.get(k) || 0) > 30000) readDay(k).catch(() => {});

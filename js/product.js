@@ -99,7 +99,7 @@ export function openProduct(farm, p, label, opts = {}) {
       const off = el('button', 'btn btn-ghost', 'Take off the list');
       off.title = 'A product of our own: it leaves the list, its history and stock movements stay.';
       off.onclick = async () => {
-        if (!await confirmDrawer('Take this product off the list?', `${ctx.det.product.name} leaves Products for your unit and its sister units. Its history and its stock movements stay.`, 'Take it off', true)) return;
+        if (!await confirmDrawer('Remove this product?', `${ctx.det.product.name} leaves Products for your unit and its sister units. Its history and its stock movements stay.`, 'Remove', true)) return;
         try { await rpc('archive_own_product', { p_farm: farm.id, p_product: p.id }); ctx.changed = true; toast('Taken off the list', 'ok'); d.close(); }
         catch (e) { toast(errText(e), 'bad'); }
       };

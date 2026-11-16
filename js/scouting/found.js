@@ -1,7 +1,7 @@
 // Scouting page: what was found (window, pressure line, case strip, crop bar)
 import { rpc } from '../api.js';
 import { openCase } from '../cases.js';
-import { loading, el, num, cropAvatar, toast, busy, drawer, ymd, parseNoon as parse, shortDay, farmDay } from '../ui.js';
+import { loading, el, num, cropAvatar, toast, busy, drawer, ymd, parseNoon as parse, shortDay, farmDay, emptyState } from '../ui.js';
 import { openViewer, photoTitle } from '../viewer.js';
 import { reload } from './index.js';
 import { paint } from './paint.js';
@@ -19,7 +19,7 @@ export async function openFound() {
   const paintList = () => {
     d.body.textContent = '';
     const list = j.photos || [];
-    if (!list.length) { d.body.append(el('div', 'empty', 'Nothing waiting: every finding was tagged, put in a case or marked seen.')); return; }
+    if (!list.length) { d.body.append(emptyState('Nothing waiting: every finding was tagged, put in a case or marked seen.')); return; }
     d.body.append(el('div', 'hint', 'A proposal by the AI, not a diagnosis. Open a photo to tag it, put it in a case, or mark it seen.'));
     list.forEach(p => {
       const row = el('div', 'pd-found');

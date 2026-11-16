@@ -358,6 +358,9 @@ th.right, td.right { text-align: right; }
 /* ── misc ────────────────────────────────────────────────────────────────── */
 .empty { text-align: center; padding: var(--space-10) var(--space-6); color: var(--text-faint); }
 .empty h3 { font-size: var(--text-lg); margin-bottom: var(--space-2); color: var(--text); }
+.empty-state { text-align: center; padding: var(--space-6) var(--space-4); color: var(--text-faint); font-size: var(--text-sm); }
+.empty-state p { margin: 0 0 var(--space-3); }
+.empty-state p:last-child { margin-bottom: 0; }
 .toast { position: fixed; bottom: var(--space-6); left: 50%; transform: translateX(-50%);
   z-index: 70; padding: var(--space-3) var(--space-5); border-radius: var(--radius-full);
   background: var(--ink); color: var(--ink-text); box-shadow: var(--shadow-lg);

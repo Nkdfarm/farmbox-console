@@ -1,11 +1,31 @@
 // the task drawer and the hub drawer
-import { drawer, el, subFamilyTag, sowingLine, busy, toast, confirmDrawer } from '../ui.js';
+import { drawer, el, subFamilyTag, sowingLine, busy, toast, confirmDrawer, field, input, selectBox, once } from '../ui.js';
 import { rpc } from '../api.js';
 import { weeks, mondayOf, longDate, hhmm, hrs, PRIO, reasonText, stateMark, S } from './state.js';
 import { SLOT_WORD, slotOf, unitOf, bandOf, timeOf, heldBy, unitMark, timeWord, SLOTS, openIds } from './data.js';
-import { workedBy, secondReports, positionsLine } from './chip.js';
+import { workedBy, secondReports, positionsLine, moveTaskTo } from './chip.js';
+import { taskToPerson } from './people.js';
 import { repeatsWord, deleteHand, notDone, reassign } from './actions.js';
 import { load } from './index.js';
+
+// "Move to…" (touch screens have no drag): the same two writes as dragging the chip to a day or half, or onto a face
+function openMoveTask(t, wk, parent) {
+  const d = drawer('Move ' + t.title, 'Another day, another part of the day or another person. Same as dragging the chip.');
+  const dayIn = input({ type: 'date', value: t.date });
+  const half = selectBox([['', 'Same part of the day'], ['am', 'Morning'], ['pm', 'Afternoon']], '');
+  const roster = new Map((wk?.roster || []).map(r => [r.worker_id, r.name]));
+  const who = selectBox([['', 'Keep as it is'], ['none', 'Nobody'], ...[...roster].map(([id, name]) => [id, name])], '');
+  d.body.append(field('Day', dayIn), field('Part of the day', half), field('Person', who, 'The person it goes to; the names that were on it come off.'));
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  const go = el('button', 'btn btn-primary', 'Move');
+  go.onclick = () => once(go, async () => {
+    // only a day or half that changed is sent; a refused move stops here (it said why) and the drawer stays
+    if (dayIn.value && (dayIn.value !== t.date || half.value) && !await moveTaskTo(t, dayIn.value, half.value || null)) return;
+    if (who.value) await taskToPerson(t, who.value === 'none' ? null : { id: who.value, name: roster.get(who.value) });
+    d.close(); parent?.close();
+  });
+  d.footer.append(cancel, go);
+}
 
 // ── one task: the facts and the actions ────────────────────────────────────
 export function openTask(t) {
@@ -61,6 +81,10 @@ export function openTask(t) {
       };
       mv.append(b);
     });
+    const mt = el('button', 'btn btn-sm btn-ghost', 'Move to…');
+    mt.title = 'Another day, part of the day or person — what dragging the chip does';
+    mt.onclick = () => openMoveTask(t, wk, d);
+    mv.append(mt);
     d.body.append(mv);
   }
   // held by somebody on a phone (0.7.205): a manager frees it — their timer stops, the next person may open it
@@ -149,6 +173,9 @@ function openHub(t) {
   d.body.append(el('div', 'hint', 'The scouting is one task a zone on the phone, the report and the hours; here the day is one card. Change who gives every open zone to one person; open a zone for its own task.'));
   const mayPlan = wk?.may_plan;
   if (openIds(t).length && mayPlan) {
+    const mt = el('button', 'btn', 'Move to…');
+    mt.onclick = () => openMoveTask(t, wk, d);
+    d.footer.append(mt);
     const ch = el('button', 'btn btn-primary', 'Change who');
     ch.onclick = () => { d.close(); reassign(t, wk); };
     d.footer.append(ch);

@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
-         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays, ymd } from './ui.js';
+         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays, ymd, emptyState } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 import { patch } from './api.js';
@@ -365,7 +365,7 @@ function holidaysBlock() {
 
     const list = el('div');
     list.style.marginTop = 'var(--space-2)';
-    if (!r.holidays.length) list.append(el('div', 'hint', 'No holiday in the next twelve months.'));
+    if (!r.holidays.length) list.append(emptyState('No holiday in the next twelve months.'));
     r.holidays.forEach(h => {
       const row = el('div', 'row');
       row.style.alignItems = 'center'; row.style.padding = '4px 0';
@@ -433,7 +433,6 @@ function holidaysBlock() {
 const CATS  = [['leafy','Leafy'],['mixed_leafy','Mixed leafy'],['herbs','Herbs'],['microgreens','Microgreens'],
                ['fruiting_vines','Fruiting vines'],['fruiting_bush','Fruiting bush']];
 const STATUS = [['active','Active'],['maintenance','In maintenance'],['out_of_service','Out of service']];
-const label = (list, v) => (list.find(x => x[0] === v) || [v, v])[1];
 
 function zonesCard(may) {
   const card = el('div', 'card');

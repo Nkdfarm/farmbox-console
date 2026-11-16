@@ -2,6 +2,8 @@
 // something. Deliberately small — the console has no component framework and
 // does not need one.
 
+import { farmDayOf as dayOnFarmClock } from './farm-time.js';   // the farm-day rule shared with Naked Brain (shared/farm-time.js)
+
 export function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -181,7 +183,7 @@ export function table(columns, rows, opts = {}) {
   wrap.append(t);
   if (!rows.length) {
     wrap.textContent = '';
-    wrap.append(el('div', 'empty', opts.empty || 'Nothing here yet.'));
+    wrap.append(emptyState(opts.empty || 'Nothing here yet.'));
   }
   return wrap;
 }
@@ -197,6 +199,19 @@ export function pageHead(title, blurb, ...right) {
   head.append(titles, el('div', 'spacer'));
   right.filter(Boolean).forEach(n => head.append(n));
   return head;
+}
+
+// One "nothing here yet" look for every empty list (0.9.2): a short sentence and, when there is a next step,
+// a button. next = { label, onClick } or a ready button.
+export const readNote = have => el('div', 'hint read-note', have ? 'Could not read just now — showing the last copy' : 'Could not read');
+export function emptyState(text, next) {
+  const box = el('div', 'empty-state');
+  box.append(el('p', null, text));
+  if (next) {
+    if (next instanceof Node) box.append(next);
+    else { const b = el('button', 'btn btn-sm', next.label); b.onclick = next.onClick; box.append(b); }
+  }
+  return box;
 }
 
 export function card(title, ...kids) {
@@ -230,9 +245,7 @@ export const isFranchisor = () => myRoleRows.some(r => r.role === 'franchisor_ad
 export const FARM_TZ = 'Africa/Johannesburg';
 let farmTz = FARM_TZ;
 export const setFarmTz = tz => { farmTz = tz || FARM_TZ; };
-export const farmToday = (tz = farmTz) => {
-  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); } catch { return ymd(new Date()); }
-};
+export const farmToday = (tz = farmTz) => dayOnFarmClock(new Date(), tz);
 export const farmDate = () => parseYmd(farmToday());   // the farm's day as a local Date (for period arithmetic)
 // a datetime-local value typed as the farm's clock → an ISO instant ("2026-10-03T08:30" → …+02:00)
 export const farmInstant = (local, tz = farmTz) => {
@@ -262,9 +275,7 @@ export const farmTime = inst => inst ? fmtIn(inst, { hour: '2-digit', minute: '2
 // "16 Nov 08:05"
 export const farmWhen = inst => inst ? `${farmDay(inst)} ${farmTime(inst)}` : '—';
 // "2026-11-16" — the farm's day of an instant, as a date string
-export const farmDayOf = (inst, tz) => {
-  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || farmTz }).format(new Date(inst)); } catch { return String(inst).slice(0, 10); }
-};
+export const farmDayOf = (inst, tz) => dayOnFarmClock(inst, tz || farmTz);
 // "16 Nov" from a date-only string (never through UTC)
 export const shortDay = s => s ? parseYmd(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
 // "3 days ago" of an instant; "never" when empty

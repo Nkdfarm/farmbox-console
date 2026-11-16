@@ -15,7 +15,7 @@
 // own: before, a crop in production was in no table until its last cut.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, cropAvatar, pref, farmDate, drawer, confirmDrawer, field, input, selectBox, toast, busy, ymd } from './ui.js';
+import { loading, el, pageHead, cropAvatar, pref, farmDate, drawer, confirmDrawer, field, input, selectBox, toast, busy, ymd, emptyState } from './ui.js';
 
 const PERIODS = [['28', '4 weeks'], ['91', '3 months'], ['182', '6 months'], ['365', 'A year']];
 const CROP_KEY = 'fbc_yield_crop';
@@ -130,7 +130,7 @@ function paint(mount, farm, d) {
   const lines = yTop > 0;
 
   if (!(top > 0) && !lines) {
-    card.append(el('div', 'hint', 'Nothing harvested or planned in this period.'));
+    card.append(emptyState('Nothing harvested or planned in this period.'));
     mount.append(card);
   } else {
     const plot = el('div', 'yd-plot');
@@ -229,7 +229,7 @@ function paint(mount, farm, d) {
   const table = (title, rows, nameOf) => {
     const c = el('div', 'card card-pad');
     c.append(el('div', 'sec-title', title));
-    if (!rows.length) { c.append(el('div', 'hint', 'Nothing in this period.')); return c; }
+    if (!rows.length) { c.append(emptyState('Nothing in this period.')); return c; }
     const t = el('table', 'table');
     t.innerHTML = '<thead><tr><th></th><th class="num">Planned so far</th><th class="num">Harvested</th><th>Of plan</th><th class="num">kg/m²</th><th class="num">kg/m² a year</th><th class="num">Waste</th></tr></thead>';
     const tb = el('tbody');
@@ -332,13 +332,13 @@ function correctCut(c, done) {
   const day = input({ type: 'date', value: String(c.date).slice(0, 10), max: ymd(farmDate()) });
   const waste = input({ type: 'number', step: '0.1', min: '0', value: c.waste ?? '' });
   dr.body.append(field('Total kg', kgIn), field('Day', day), field('Waste (kg)', waste, 'Left empty: none.'));
-  const rm = el('button', 'btn btn-danger', 'Take it out'); rm.type = 'button';
+  const rm = el('button', 'btn btn-danger', 'Remove'); rm.type = 'button';
   const save = el('button', 'btn btn-primary', 'Save'); save.type = 'button';
   rm.onclick = async () => {
-    if (!await confirmDrawer('Take this harvest out?', `${fmt1(c.kg)} kg on ${nice(c.date)} leaves every total and figure. Use it for a harvest recorded twice or by mistake.`, 'Take it out', true)) return;
+    if (!await confirmDrawer('Remove this harvest?', `${fmt1(c.kg)} kg on ${nice(c.date)} leaves every total and figure. Use it for a harvest recorded twice or by mistake.`, 'Remove', true)) return;
     busy(rm, true, 'Taking out…');
     try { await rpc('edit_harvest', { p: { id: c.id, remove: true } }); dr.close(); toast('Harvest taken out', 'ok'); done(); }
-    catch (e) { busy(rm, false, 'Take it out'); toast(e.message, 'bad'); }
+    catch (e) { busy(rm, false, 'Remove'); toast(e.message, 'bad'); }
   };
   save.onclick = async () => {
     if (!(Number(kgIn.value) > 0)) { toast('It needs a weight above zero', 'bad'); return; }
@@ -355,7 +355,7 @@ function addCut(farm, d, chosen, from, to, done) {
   // the batches that can take it: those picking or cut in the period, of the crop on screen when one is
   const batches = [...(d.running || [])].filter(b => !chosen || b.crop === chosen.crop);
   const dr = drawer('Add a harvest', 'For a harvest that was not recorded on the phone');
-  if (!batches.length) { dr.body.append(el('div', 'hint', 'No batch in production in this period to add a harvest to.')); return; }
+  if (!batches.length) { dr.body.append(emptyState('No batch in production in this period to add a harvest to.')); return; }
   const pick = selectBox(batches.map(b => [b.plan_id, `${b.crop} · ${[b.zone, b.position].filter(Boolean).join(' · ')}`]), batches[0].plan_id);
   const today = ymd(farmDate());
   const day = input({ type: 'date', value: to < today ? to : today, max: today });

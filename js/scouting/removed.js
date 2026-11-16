@@ -1,6 +1,6 @@
 // Scouting page: removing a picture and the removed-pictures window
 import { rpc } from '../api.js';
-import { el, num, toast, busy, drawer, confirmDrawer, shortDay, farmWhen } from '../ui.js';
+import { el, num, toast, busy, drawer, confirmDrawer, shortDay, farmWhen, emptyState } from '../ui.js';
 import { reload } from './index.js';
 import { S, dayData } from './state.js';
 
@@ -53,7 +53,7 @@ export async function openRemoved() {
     try { r = await rpc('removed_photos', { p_farm: S.farm.id }); }
     catch (e) { d.body.textContent = ''; d.body.append(el('div', 'note bad', e.message)); return; }
     d.body.textContent = '';
-    if (!(r.rows || []).length) { d.body.append(el('div', 'empty', 'No photo was removed in the last 30 days.')); return; }
+    if (!(r.rows || []).length) { d.body.append(emptyState('No photo was removed in the last 30 days.')); return; }
     if (!r.may_restore) d.body.append(el('div', 'hint', 'A manager can put a photo back.'));
     const list = el('div', 'pd-removed');
     r.rows.forEach(x => {

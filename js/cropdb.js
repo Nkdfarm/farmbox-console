@@ -10,8 +10,8 @@
 // Page head: Plan a crop, Archive (the window of archived crops, with Restore).
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { loading, el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, ymd, sowingLine, cropAvatar,
-         systemLabel, mediumLabel, systemsFor, nurseryField } from './ui.js';
+import { loading, el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, sowingLine, cropAvatar,
+         systemLabel, mediumLabel, systemsFor, nurseryField, emptyState } from './ui.js';
 import { editCrop, TRACK_SUBJECTS, trackingLine } from './crop-edit.js';
 
 // the words on screen, and a colour, for a category code
@@ -108,7 +108,7 @@ function paint() {
   mount.append(tabs);
 
   const list = el('div', 'cropdb');
-  if (!shown.length) list.append(el('div', 'empty', 'No crop matches that.'));
+  if (!shown.length) list.append(emptyState('No crop matches that.'));
   const byCat = new Map();
   shown.forEach(c => { if (!byCat.has(c.category)) byCat.set(c.category, []); byCat.get(c.category).push(c); });
   [...byCat.keys()].sort((a, b) => CAT_ORDER.indexOf(a) - CAT_ORDER.indexOf(b)).forEach(cat => {
@@ -204,7 +204,7 @@ function cropRow(c) {
     const list = editing ? await procedureList() : [];
     if (my !== gen) return;
     let day = 0;
-    if (!phases.length) body.append(el('div', 'hint', 'No cycle yet — the planner will not place this crop.'));
+    if (!phases.length) body.append(emptyState('No cycle yet — the planner will not place this crop.'));
     phases.forEach((p, i) => {
       const row = el('div', 'cropdb-phase');
       const head = el('div');

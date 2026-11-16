@@ -22,7 +22,7 @@ export function zoneBlock(inner, sys, W, from, to, px, today, cur, group) {
     const cb = el('input'); cb.type = 'checkbox'; cb.disabled = true;
     cb.setAttribute('aria-label', `${sys.name} is in ${groupName(group)}`);
     lab.append(cb);
-    lab.title = `${sys.name} is in ${groupName(group)} — take it out there first (✕ on its chip)`;
+    lab.title = `${sys.name} is in ${groupName(group)} — remove it there first (✕ on its chip)`;
   } else if (S.steadyMode) {
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = S.steadyPick.has(sys.id);
     cb.setAttribute('aria-label', `Keep ${sys.name} steady`);

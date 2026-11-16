@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer, ymd, once, addDays, parseYmd, shortDay } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer, ymd, once, addDays, parseYmd, shortDay, emptyState } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -101,7 +101,7 @@ export async function openCase(id, onChange, f) {
     // the points
     const pts = det.points || [];
     d.body.append(el('div', 'sec-title', `Photos and readings · ${pts.length}`));
-    if (!pts.length) d.body.append(el('div', 'hint', 'Nothing added yet. In Scouting, open a photo of this zone and press Add to this case.'));
+    if (!pts.length) d.body.append(emptyState('Nothing added yet. In Scouting, open a photo of this zone and press Add to this case.'));
     else {
       const grid = el('div', 'sc-grid');
       pts.slice().reverse().forEach(pt => {
@@ -116,7 +116,7 @@ export async function openCase(id, onChange, f) {
           const rm = el('button', 'btn btn-sm btn-ghost', 'Take out of the case');
           rm.onclick = async e => {
             e.stopPropagation();
-            if (!await confirmDrawer('Take it out of the case?', 'The photo or reading stays in Scouting; it just leaves this case and its curve.', 'Take it out', true)) return;
+            if (!await confirmDrawer('Remove from the case?', 'The photo or reading stays in Scouting; it just leaves this case and its curve.', 'Remove', true)) return;
             await once(rm, async () => { try { await rpc('remove_case_point', { p_point: pt.id }); changed(); } catch (er) { toast(er.message, 'bad'); } });
           };
           cap.append(rm);
@@ -151,7 +151,7 @@ export async function openCase(id, onChange, f) {
     // the treatment
     d.body.append(el('div', 'sec-title', 'Treatment'));
     (det.programs || []).forEach(p => d.body.append(programCard(p, det, changed)));
-    if (!(det.programs || []).length) d.body.append(el('div', 'hint', 'No treatment yet.'));
+    if (!(det.programs || []).length) d.body.append(emptyState('No treatment yet.'));
     // treatments are the Admin's, the Farm manager's and the agronomist's since 0197 (may_treat);
     // closing the case stays with the managers
     if ((det.may_treat ?? det.may_manage) && c.status !== 'closed') {
@@ -195,11 +195,11 @@ function programCard(p, det, changed) {
     const acts = el('div', 'row'); acts.style.marginTop = '6px';
     const edit = el('button', 'btn btn-sm', 'Change…'); edit.onclick = () => programForm(det, p, changed);
     if (fromLibrary) edit.hidden = true;   // the hand-typed form would rewrite a library program's applications
-    const stop = el('button', 'btn btn-sm btn-ghost', 'Stop');
+    const stop = el('button', 'btn btn-sm btn-ghost', 'End');
     // asked first (review 13 Oct 2026): one press took the applications still to come, and their tasks, off the plan
     stop.onclick = async () => {
-      if (!await confirmDrawer('Stop this program?', 'The applications not done yet are removed, with their tasks. What was applied stays on the calendar.', 'Stop the program', true)) return;
-      busy(stop, true, '…'); try { await rpc('stop_program', { p_program: p.id }); toast('Stopped — the applications not done are gone', 'ok'); changed(); } catch (e) { busy(stop, false, 'Stop'); toast(e.message, 'bad'); } };
+      if (!await confirmDrawer('End this program?', 'The applications not done yet are removed, with their tasks. What was applied stays on the calendar.', 'End the program', true)) return;
+      busy(stop, true, '…'); try { await rpc('stop_program', { p_program: p.id }); toast('Ended — the applications not done are gone', 'ok'); changed(); } catch (e) { busy(stop, false, 'End'); toast(e.message, 'bad'); } };
     acts.append(edit, stop);
     card.append(acts);
   }

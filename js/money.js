@@ -11,7 +11,7 @@
 // the cost structure. For the unit's Admin, the Farm manager and the office.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday, curSign, shortDate, ymd, money as fmtMoney } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, cropAvatar, confirmDrawer, pref, farmDate, farmToday, curSign, shortDate, ymd, money as fmtMoney, emptyState } from './ui.js';
 
 const PERIODS = [['month', 'This month'], ['quarter', 'Last 3 months'], ['year', 'This year'], ['12m', 'Last 12 months']];
 const CATS = [['seedlings', 'Seedlings'], ['materials', 'Materials'], ['nutrients', 'Nutrients'], ['labour', 'Labour'], ['energy', 'Energy'],
@@ -99,7 +99,7 @@ function paint() {
   const crops = data.crops || [];
   const cc = el('div', 'card card-pad');
   cc.append(el('div', 'sec-title', 'Per crop · the batches harvested in the period'));
-  if (!crops.length) cc.append(el('div', 'hint', 'No harvest recorded in the period.'));
+  if (!crops.length) cc.append(emptyState('No harvest recorded in the period.'));
   else {
     const tb = el('table', 'table');
     tb.innerHTML = '<thead><tr><th></th><th>Crop</th><th class="num">kg</th><th class="num">Price a kg</th><th class="num">Cost a kg</th><th class="num">Margin a kg</th><th>Margin</th><th class="num">Materials</th><th class="num">Labour</th><th class="num">Overhead</th></tr></thead>';
@@ -124,7 +124,7 @@ function paint() {
   const grid = el('div', 'yd-grid');
   const ch = el('div', 'card card-pad');
   ch.append(el('div', 'sec-title', 'Per channel'));
-  if (!(data.channels || []).length) ch.append(el('div', 'hint', 'No delivery in the period (Office › Orders › Delivered…).'));
+  if (!(data.channels || []).length) ch.append(emptyState('No delivery in the period (Office › Orders › Delivered…).'));
   else {
     const t2 = el('table', 'table');
     t2.innerHTML = '<thead><tr><th>Customers</th><th class="num">kg</th><th class="num">Revenue</th><th class="num">Price a kg</th></tr></thead>';
@@ -134,7 +134,7 @@ function paint() {
   }
   const ct = el('div', 'card card-pad');
   ct.append(el('div', 'sec-title', 'Costs entered, by category'));
-  if (!(data.categories || []).length) ct.append(el('div', 'hint', 'No cost entered yet — "Add a cost" for rent, energy, water, insurance…'));
+  if (!(data.categories || []).length) ct.append(emptyState('No cost entered yet — "Add a cost" for rent, energy, water, insurance…'));
   else {
     const t3 = el('table', 'table');
     t3.innerHTML = '<thead><tr><th>Category</th><th>Kind</th><th class="num">Amount</th></tr></thead>';
@@ -162,7 +162,7 @@ function paint() {
       b4.append(tr);
     });
     t4.append(b4); ec.append(t4);
-  } else ec.append(el('div', 'hint', 'Nothing entered in the period.'));
+  } else ec.append(emptyState('Nothing entered in the period.'));
   mount.append(ec);
 }
 

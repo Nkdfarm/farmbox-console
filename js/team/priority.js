@@ -1,6 +1,6 @@
 // Team page: the windows for one family's order and for all of them
 import { rpc } from '../api.js';
-import { loading, el, field, selectBox, toast, drawer, confirmDrawer, avatar, busy, subFamilyTag } from '../ui.js';
+import { loading, el, field, selectBox, toast, drawer, confirmDrawer, avatar, busy, subFamilyTag, emptyState } from '../ui.js';
 import { paint, profile, reload } from './index.js';
 import { S, first, keyLabel, roleLabel, sameKey } from './state.js';
 import { orderLine, sameOrder } from './table.js';
@@ -75,7 +75,7 @@ export function openKey(p, r) {
     off.onclick = async () => {
       if (!await confirmDrawer(`Take ${label} off ${me.name}?`,
         `${me.name} is no longer responsible for ${label}` + (me.manual ? '.' : ', although the job covers it — it stays off for them until added again.')
-        + ' The others move up.', 'Take it off', true)) return;
+        + ' The others move up.', 'Remove', true)) return;
       try {
         await rpc('team_remove', { p_worker: me.worker_id, p_family: r.family, p_category: r.category || null });
         d.close(); toast(`${label} taken off ${me.name}`, 'ok'); await reload();
@@ -174,7 +174,7 @@ export function openGlobal(p, n) {
     const keys = res.keys || [];
     const choices = keys.filter(k => k.choice);
     body.append(el('div', 'sec-title team-sec', keys.length ? `Family by family · ${keys.length}` : 'Family by family'));
-    if (!keys.length) body.append(el('div', 'hint', 'No family changes its order: each is held by one of them, or the others come before by their job.'));
+    if (!keys.length) body.append(emptyState('No family changes its order: each is held by one of them, or the others come before by their job.'));
     if (choices.length) {
       const note = el('div', 'note warn team-ask');
       note.append(document.createTextNode(`${choices.length === 1 ? 'One family has' : choices.length + ' families have'} numbers set by hand that the new order would not give. ` +

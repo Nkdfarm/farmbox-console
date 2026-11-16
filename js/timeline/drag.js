@@ -1,5 +1,5 @@
 // the crop palette, drag and drop onto positions, press and resize of bars
-import { el, cropAvatar, mediumLabel, toast } from '../ui.js';
+import { el, cropAvatar, mediumLabel, toast, drawer, field, input, selectBox, once } from '../ui.js';
 import { rpc } from '../api.js';
 import { fits, cycleOf, clashOn, reload, paint } from './index.js';
 import { dn, nice, ds, S } from './state.js';
@@ -71,6 +71,56 @@ export function dropProblem(crop, sys, pid, tpDay, except) {
   if (hit) return `overlaps ${hit.crop} (${nice(hit.stay_from)} – ${nice(hit.stay_to)})`;
   if (tpDay < dn(S.data.today)) return 'before today';
   return null;
+}
+
+// the one write behind a batch moved to a position and a transplant day (day = day number): the drop of a bar and
+// the "Move to…" chooser both call it, so they say and do the same. Returns true when it moved.
+export async function moveBatchTo(b, target, day) {
+  try {
+    const r = await rpc('move_batch', { p_plan: b.id, p_position: target.pos, p_transplant: ds(day) });
+    toast(`${b.crop} moved to ${target.code} · in ${nice(r.transplant_date)}` + (r.tasks ? ` · ${r.tasks} tasks re-dated` : '')
+      + (r.late_sowing ? ' · its sowing is already past' : ''), r.late_sowing ? 'bad' : 'ok');
+    await reload();
+    return true;
+  } catch (err) { toast(err.message, 'bad'); return false; }
+}
+
+// "Move to…" (touch screens have no drag): the same move as dropping the bar — zone, position and transplant day
+export function openMoveBatch(b, parent) {
+  const crop = (S.data.crops || []).find(c => c.id === b.crop_id);
+  if (!(S.data.may_plan && b.movable && crop)) return;
+  const d = drawer('Move ' + b.crop, 'Another position or another transplant day. Same check as dragging the bar.');
+  const systems = (S.data.systems || []).filter(s => (s.positions || []).length && fits(crop, s));
+  const sysBox = selectBox(systems.map(s => [s.id, s.name]), b.system_id || systems.find(s => s.positions.some(q => q.id === b.position_id))?.id);
+  const posBox = selectBox([], '');
+  const fillPos = () => {
+    const s = systems.find(x => x.id === sysBox.value);
+    posBox.textContent = '';
+    (s?.positions || []).forEach(q => posBox.append(new Option(q.code, q.id)));
+    if ((s?.positions || []).some(q => q.id === b.position_id)) posBox.value = b.position_id;
+  };
+  const dayIn = input({ type: 'date', value: b.transplant_date || b.stay_from });
+  const why = el('div', 'hint');
+  const go = el('button', 'btn btn-primary', 'Move');
+  const check = () => {
+    const s = systems.find(x => x.id === sysBox.value);
+    const day = dayIn.value ? dn(dayIn.value) : null;
+    const prob = s && day != null && posBox.value ? dropProblem(crop, s, posBox.value, day, b.id) : 'Choose a position and a day';
+    why.textContent = prob || '';
+    why.className = 'hint' + (prob ? ' warn' : '');
+    go.disabled = !!prob || (posBox.value === b.position_id && dayIn.value === b.transplant_date);
+  };
+  sysBox.onchange = () => { fillPos(); check(); };
+  posBox.onchange = check; dayIn.oninput = check;
+  fillPos(); check();
+  d.body.append(field('Zone', sysBox), field('Position', posBox), field('Transplant day', dayIn), why);
+  const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
+  go.onclick = () => once(go, async () => {
+    const s = systems.find(x => x.id === sysBox.value);
+    const target = { pos: posBox.value, sys: s, code: s.positions.find(q => q.id === posBox.value)?.code };
+    if (await moveBatchTo(b, target, dn(dayIn.value))) { d.close(); parent?.close(); }
+  });
+  d.footer.append(cancel, go);
 }
 
 export function dropTarget(track, sys, p, from, px) {
@@ -156,12 +206,7 @@ export function pressable(box, b, sys, p, from, px) {
       if (!target) return;
       if (target.prob) { toast(target.prob, 'bad'); return; }
       if (target.pos === b.position_id && ds(day) === b.transplant_date) return;
-      try {
-        const r = await rpc('move_batch', { p_plan: b.id, p_position: target.pos, p_transplant: ds(day) });
-        toast(`${b.crop} moved to ${target.code} · in ${nice(r.transplant_date)}` + (r.tasks ? ` · ${r.tasks} tasks re-dated` : '')
-          + (r.late_sowing ? ' · its sowing is already past' : ''), r.late_sowing ? 'bad' : 'ok');
-        await reload();
-      } catch (err) { toast(err.message, 'bad'); }
+      await moveBatchTo(b, target, day);
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);

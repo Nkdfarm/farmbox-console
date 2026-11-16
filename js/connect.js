@@ -17,7 +17,7 @@
 // Until a device sends something every page says how to connect one.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon, farmDate, ymd, ago, farmWhen, once } from './ui.js';
+import { loading, el, pageHead, drawer, field, selectBox, toast, busy, confirmDrawer, cropAvatar, pref, icon, farmDate, ymd, ago, farmWhen, once, emptyState } from './ui.js';
 
 const niceDay = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
 const daysAgo = n => { const t = farmDate(); return ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() - n)); };
@@ -176,7 +176,7 @@ export function lineChart(series, lim, title, dp) {   // also the FarmNet page's
   const all = series.flatMap(s => s.pts);
   const box = el('div', 'cx-chart');
   box.append(el('div', 'cx-chart-title', title));
-  if (!all.length) { box.append(el('div', 'hint', 'No readings in this window.')); return box; }
+  if (!all.length) { box.append(emptyState('No readings in this window.')); return box; }
   const t0 = Math.min(...all.map(p => p[0])), t1 = Math.max(...all.map(p => p[0]));
   const vals = all.map(p => p[1]).concat([lim.low_watch, lim.high_watch].filter(v => v != null).map(Number));
   let v0 = Math.min(...vals), v1 = Math.max(...vals);
@@ -425,7 +425,7 @@ function paintDevices(mount, farm, d) {
 
   const card = el('div', 'card');
   const devs = d.devices || [];
-  if (!devs.length) card.append(el('div', 'empty', d.may_edit ? 'No device yet. "Add a device" registers the first one — FarmNet first.' : 'No device yet.'));
+  if (!devs.length) card.append(emptyState(d.may_edit ? 'No device yet. "Add a device" registers the first one — FarmNet first.' : 'No device yet.'));
   else {
     const t = el('table', 'table');
     t.innerHTML = '<thead><tr><th>Device</th><th>Kind</th><th>Where</th><th>State</th><th>Last data</th><th class="num">Readings 24 h</th><th>Key</th><th></th></tr></thead>';

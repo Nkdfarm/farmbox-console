@@ -1,5 +1,5 @@
 // the people column: faces, drag and drop of people and tasks, auto-assign
-import { el, busy, toast, avatar, confirmDrawer } from '../ui.js';
+import { el, busy, toast, avatar, confirmDrawer, emptyState } from '../ui.js';
 import { rpc } from '../api.js';
 import { rangeOnScreen, mayPlanNow, mondaysOnScreen, alsoBy, load } from './index.js';
 import { tasksOnScreen, isOpenTask } from './data.js';
@@ -85,7 +85,7 @@ export function paintPeople() {
   const unit = S.span === 'day' ? (S.day === today() ? 'today' : 'that day') : S.span === 'month' ? 'in the month'
              : (S.week === mondayOf(today()) ? 'this week' : 'that week');
   S.peopleCol.append(el('div', 'tk-people-sub', `Hours ${unit}: assigned / possible`));
-  if (!list.length) S.peopleCol.append(el('div', 'empty', 'Nobody is rostered in this period.'));
+  if (!list.length) S.peopleCol.append(emptyState('Nobody is rostered in this period.'));
   list.forEach(p => {
     const card = el('button', 'tk-person' + (manual.on && manual.worker === p.id ? ' chosen' : '') + (manual.on ? ' pickable' : ''));
     // the card as it was before 0.7.245 — the face, the name, the hours under it, the bar — with the name alone: how
@@ -205,7 +205,7 @@ async function personToTask(p, t, add) {
 }
 
 // a task dropped on a face: it is theirs, the names that were on it come off; on Nobody (p null) the names come off
-async function taskToPerson(t, p) {
+export async function taskToPerson(t, p) {
   const changes = [];
   for (const m of openOnes(t)) {
     const was = (m.workers || []).map(w => w.id);

@@ -14,7 +14,7 @@
 // The view lives across the Overview's minute: the canvas is kept and only the colours and labels change.
 // ═══════════════════════════════════════════════════════════════════════════
 import { api, URL_BASE } from './api.js';
-import { el, toast } from './ui.js';
+import { el } from './ui.js';
 
 const BUCKET = 'farm-models';
 const views = new Map();          // farm id → the view (one WebGL context a farm, kept between redraws)
@@ -56,7 +56,6 @@ const reading = (real, s) => {
   return Number.isFinite(x) && x !== 65535 && x !== -100 ? x : null;
 }
 
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const KIND = {
   steel: { color: 0x9aa3ab, metalness: 0.6, roughness: 0.45 },
   film:  { color: 0xf2f6f8, transparent: true, opacity: 0.16, roughness: 0.2, depthWrite: false, side: 2 },

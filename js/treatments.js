@@ -20,7 +20,7 @@
 // The system proposes: a treatment starts when the Admin, the Farm manager or the Agronomist says so.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer, ymd, parseNoon as parse, shortDay, farmDay, farmTime } from './ui.js';
+import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer, ymd, parseNoon as parse, shortDay, farmDay, farmTime, emptyState } from './ui.js';
 import { openProduct, openChangeLog, openNewProduct, expiryPill } from './product.js';
 import { KIND, GROUPS, kindOk } from './kinds.js';
 
@@ -110,13 +110,13 @@ function paintBlock(box, farm, z, t, again, onChange) {
     row.append(el('div', 'hint', [p.target_label, 'tables: ' + p.tables, p.next ? 'next ' + shortDay(p.next) : null,
       p.case ? 'case: ' + p.case : 'no case (preventive)'].filter(Boolean).join(' · ')));
     if (t.may_treat && p.state === 'running') {
-      const stop = el('button', 'btn btn-sm', 'Stop');
+      const stop = el('button', 'btn btn-sm', 'End');
       stop.title = 'The applications not done yet are removed, with their tasks and what they had asked the store for';
       stop.onclick = async () => {
-        if (!await confirmDrawer('Stop this program?', `${p.name} on ${p.tables}: the applications not done yet are removed, with their tasks. What was applied stays on the calendar.`, 'Stop the program', true)) return;
+        if (!await confirmDrawer('End this program?', `${p.name} on ${p.tables}: the applications not done yet are removed, with their tasks. What was applied stays on the calendar.`, 'End the program', true)) return;
         busy(stop, true, '…');
-        try { await rpc('stop_program', { p_program: p.id }); toast('Stopped', 'ok'); again(); onChange?.(); }
-        catch (e) { busy(stop, false, 'Stop'); toast(e.message, 'bad'); }
+        try { await rpc('stop_program', { p_program: p.id }); toast('Ended', 'ok'); again(); onChange?.(); }
+        catch (e) { busy(stop, false, 'End'); toast(e.message, 'bad'); }
       };
       top.append(el('span', 'spacer'), stop);
     }
@@ -197,7 +197,7 @@ export async function openApply(farm, z, opts = {}) {
     choice.textContent = '';
     if (state.mode === 'program') {
       const list = lib.templates.filter(t => (!state.target || t.target === state.target) && (!state.method || t.method === state.method));
-      if (!list.length) { choice.append(el('div', 'hint', 'No program of the library matches. Try "One product", or another method.')); state.template = null; return; }
+      if (!list.length) { choice.append(emptyState('No program of the library matches. Try "One product", or another method.')); state.template = null; return; }
       if (!list.some(t => t.id === state.template)) state.template = null;
       list.forEach(t => {
         const c = el('button', 'tr-tpl' + (t.id === state.template ? ' on' : '')); c.type = 'button';
@@ -371,10 +371,10 @@ export async function openApply(farm, z, opts = {}) {
 }
 
 // ── the library: programs ────────────────────────────────────────────────────
-let pMount = null, pFarm = null, pLib = null;
+let pMount = null, pLib = null;
 const pf = { target: '', method: '', category: '', q: '' };
 export async function renderIpmPrograms(container, farm) {
-  pMount = container; pFarm = farm;
+  pMount = container;
   const here = container;
   await openFast([['ipm_library', { p_farm: farm.id }]], {
     show: ([lib]) => { pLib = lib; libs.set(farm.id, lib); paintPrograms(); },
@@ -571,7 +571,7 @@ export function openSprayVolumes(farm) {
       + Object.entries(PHASE).map(([k, l]) => `${l.toLowerCase()} ${Math.round(Number(sv.shares[k]) * 100)} %`).join(', ')
       + ' (a table with no crop 100 %), never below its least. A product with no range keeps its own figure, else 1 000 L/ha. '
       + 'The most precise line wins: a phase before any phase, a crop before its category.'));
-    if (!sv.rows.length) d.body.append(el('div', 'note', 'No volume set yet.'));
+    if (!sv.rows.length) d.body.append(emptyState('No volume set yet.'));
     else d.body.append(table([
       { key: 'crop', label: 'Crop', fmt: (v, r) => v || (r.crop_category ? `${CATEGORY[r.crop_category] || r.crop_category} (every crop)` : 'Any crop') },
       { key: 'phase_type', label: 'Phase', fmt: v => v ? PHASE[v] || v : 'Any phase' },

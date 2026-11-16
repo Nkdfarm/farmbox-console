@@ -12,7 +12,7 @@
 // a person validates: a manager confirms or dismisses each row.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, num, cropAvatar, toast, busy, drawer, parseNoon as parse, farmTime, farmWhen } from './ui.js';
+import { el, num, cropAvatar, toast, busy, drawer, parseNoon as parse, farmTime, farmWhen, emptyState } from './ui.js';
 
 const OBJECT = { plant: ['plant', 'plants'], head: ['head', 'heads'], fruit: ['fruit', 'fruit'], flower: ['flower', 'flowers'],
                  truss: ['truss', 'trusses'], gap: ['gap', 'gaps'], pest: ['pest', 'pests'], other: ['object', 'objects'] };
@@ -44,7 +44,7 @@ export function robotSection(rows, opts) {
   const grid = el('div', rows.length ? 'sc-grid pd-sec-body' : 'pd-sec-body');
   rows.forEach(r => grid.append(card(r, ctx)));
   // a registered robot has its line on today's report before it has sent anything (0.7.185)
-  if (!rows.length) grid.append(el('div', 'hint', 'Nothing received yet. What the robot counts and measures on its round shows here, for a manager to confirm.'));
+  if (!rows.length) grid.append(emptyState('Nothing received yet. What the robot counts and measures on its round shows here, for a manager to confirm.'));
   det.append(sum, grid);
   return det;
 }

@@ -1,5 +1,5 @@
 // the week board, day, month and list views
-import { el, parseYmd, ymd, pref } from '../ui.js';
+import { el, parseYmd, ymd, pref, emptyState } from '../ui.js';
 import { paintPeople } from './people.js';
 import { foldHubs, visible, tasksOnScreen, BANDS, holidayOn, dayLine, byTime, SLOT_WORD, bandOf,
          isOpenTask } from './data.js';
@@ -54,7 +54,7 @@ function dayView(tasks) {
   const hol = holidayOn(S.day);
   if (hol) box.append(el('div', 'note', `${hol} — a holiday: its work has moved to the next working day.`));
   const list = tasks.filter(t => t.date === S.day).sort(byTime);
-  if (!list.length) { box.append(el('div', 'empty', 'Nothing on this day' + (S.filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
+  if (!list.length) { box.append(emptyState('Nothing on this day' + (S.filters.status !== 'all' ? ' with these filters' : '') + '.')); return box; }
   const mins = list.reduce((a, t) => a + Number(t.minutes || 0), 0);
   box.append(el('div', 'hint', `${list.length} task${list.length === 1 ? '' : 's'} · ${hrs(mins)} h planned · ${dayLine(S.day).text}`));
   BANDS.forEach(slot => {
@@ -100,7 +100,7 @@ function monthView(tasks) {
 function listView(tasks) {
   const box = el('div');
   const days = [...new Set(tasks.map(t => t.date))].sort();
-  if (!days.length) { const c = el('div', 'card card-pad'); c.append(el('div', 'empty', 'No task matches these filters.')); box.append(c); return box; }
+  if (!days.length) { const c = el('div', 'card card-pad'); c.append(emptyState('No task matches these filters.')); box.append(c); return box; }
   days.forEach(date => {
     const list = tasks.filter(t => t.date === date).sort(byTime);
     const card = el('div', 'card');

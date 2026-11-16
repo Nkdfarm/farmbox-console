@@ -1,7 +1,7 @@
 // Team page: the Jobs windows (replace, add, the list, one job)
 import { rpc } from '../api.js';
 import { jobAiSection } from '../team-ai.js';
-import { el, field, selectBox, toast, drawer, busy, subFamilyTag, farmToday } from '../ui.js';
+import { el, field, selectBox, toast, drawer, busy, subFamilyTag, farmToday, emptyState } from '../ui.js';
 import { families, reload } from './index.js';
 import { S, first, roleLabel } from './state.js';
 import { chip } from './table.js';
@@ -60,7 +60,7 @@ export function openAdd(p) {
   const has = new Set((p.rows || []).map(r => r.family + '|' + (r.category || '')));
   const offJob = new Set((p.excluded || []).map(r => r.family + '|' + (r.category || '')));
   const fams = families();
-  if (!fams.length) d.body.append(el('div', 'note', 'No task families yet. Add them in Settings › Task families and come back.'));
+  if (!fams.length) d.body.append(emptyState('No task families yet. Add them in Settings › Task families and come back.'));
   const add = async (family, category, b) => {
     busy(b, true, 'Adding…');
     try {
@@ -123,7 +123,7 @@ export function openJob(job) {
   d.body.append(body);
   const draw = () => {
     body.textContent = '';
-    if (!fams.length) body.append(el('div', 'note', 'No task families yet. Add them in Settings › Task families and come back.'));
+    if (!fams.length) body.append(emptyState('No task families yet. Add them in Settings › Task families and come back.'));
     fams.forEach(f => {
       const box = el('div', 'resp-fam');
       const head = el('header'); head.append(el('b', null, f.name));

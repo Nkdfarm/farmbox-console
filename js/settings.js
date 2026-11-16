@@ -7,7 +7,7 @@
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { api, fn, select, rpc } from './api.js';
-import { el, toast, drawer, confirmDrawer, busy, icon, avatar, input, pref } from './ui.js';
+import { el, toast, drawer, confirmDrawer, busy, icon, avatar, input, pref, emptyState } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
 import { setCalendarView, calendarView } from './dashboard.js';
 import { familiesRow } from './families.js';
@@ -592,7 +592,7 @@ function versionLog() {
   select('release_note', 'select=version,released,title,summary,old_version&app=eq.console&order=seq.desc')
     .then(rows => {
       list.textContent = '';
-      if (!rows?.length) { list.append(el('div', 'note', 'No releases recorded yet.')); return; }
+      if (!rows?.length) { list.append(emptyState('No releases recorded yet.')); return; }
       const items = rows.map(r => {
         const it = el('div', 'set-row rel-row');
         const t = el('div', 'set-text');

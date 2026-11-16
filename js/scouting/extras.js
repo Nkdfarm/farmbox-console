@@ -6,7 +6,7 @@ import { el, toast } from '../ui.js';
 import { openViewer } from '../viewer.js';
 import { viewerCtx } from './day.js';
 import { reload } from './index.js';
-import { S, calm, dayData } from './state.js';
+import { S, calm, dayData, readFailed, readOk } from './state.js';
 import { thumbMaps } from './thumbs.js';
 
 // what the whole-greenhouse report rests on, opened beside the page (0.7.240): the windows the page already has
@@ -69,13 +69,18 @@ export async function readExtras(here) {
   };
   const ca = { p_farm: S.farm.id, p_days: 45 };
   // the copy on this device is painted only if the fresh answer has not already arrived
-  let freshCov = false, freshPeople = false;
-  cachedRpc('scouting_coverage', ca).then(r => { if (!freshCov) landCov(r); }).catch(() => {});
-  rpc('scouting_coverage', ca).then(r => { freshCov = true; landCov(r); }).catch(() => {});
-  cachedRpc('scouting_people', a).then(r => { if (!freshPeople) landPeople(r); }).catch(() => {});
-  rpc('scouting_people', a).then(r => { freshPeople = true; landPeople(r); }).catch(() => {});
-  land(await cachedRpc('extra_scoutings', a).catch(() => null));
-  land(await rpc('extra_scoutings', a).catch(() => null));
+  let freshCov = false, freshPeople = false, copyCov = false, copyPeople = false, copyExtras = false;   // copy = one was painted
+  cachedRpc('scouting_coverage', ca).then(r => { if (!freshCov) { landCov(r); copyCov = Array.isArray(r); } }).catch(() => {});
+  rpc('scouting_coverage', ca).then(r => { freshCov = true; landCov(r); readOk(); }).catch(() => readFailed(copyCov));
+  cachedRpc('scouting_people', a).then(r => { if (!freshPeople) { landPeople(r); copyPeople = Array.isArray(r); } }).catch(() => {});
+  rpc('scouting_people', a).then(r => { freshPeople = true; landPeople(r); readOk(); }).catch(() => readFailed(copyPeople));
+  const kept = await cachedRpc('extra_scoutings', a).catch(() => null);
+  copyExtras = Array.isArray(kept);
+  land(kept);
+  let ok = true;
+  const live = await rpc('extra_scoutings', a).catch(() => { ok = false; readFailed(copyExtras); return null; });
+  if (ok) readOk();
+  land(live);
 }
 const minWord = m => (m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}` : `${Math.round(m)} min`);
 // The section pills of a day (0.7.219, owner 4 Oct 2026: "green when all assigned targets for this specific day are

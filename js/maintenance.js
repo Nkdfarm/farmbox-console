@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
-         toast, busy, shortDate, ymd, addDays, farmDate } from './ui.js';
+         toast, busy, shortDate, ymd, addDays, farmDate, emptyState } from './ui.js';
 
 const TYPES = [['pump', 'Pump'], ['filter', 'Filter'], ['dosing_unit', 'Dosing unit'],
                ['fan', 'Fan'], ['light', 'Light'], ['tank', 'Tank'],
@@ -112,7 +112,7 @@ function assetRow(a, may) {
   box.append(head);
 
   if (!a.rules.length) {
-    box.append(el('div', 'hint', 'No routine on this one.'));
+    box.append(emptyState('No routine on this one.'));
     return box;
   }
 

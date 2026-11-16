@@ -1,5 +1,5 @@
 // the Friday plan drawer: roster, load, exceptions, Draft and Validate
-import { drawer, el, parseYmd, once, confirmDrawer, toast, busy, avatar } from '../ui.js';
+import { drawer, el, parseYmd, once, confirmDrawer, toast, busy, avatar, emptyState } from '../ui.js';
 import { rpc } from '../api.js';
 import { roleLabel } from '../people.js';
 import { focusWeek, load } from './index.js';
@@ -128,7 +128,7 @@ function rosterCard() {
   });
   if (!(S.data?.roster || []).length) {
     const tr = el('tr'); const td = el('td'); td.colSpan = 6;
-    td.append(el('div', 'empty', 'Nobody is rostered this week.'));
+    td.append(emptyState('Nobody is rostered this week.'));
     tr.append(td); tb.append(tr);
   }
   t.append(tb); wrap.append(t);

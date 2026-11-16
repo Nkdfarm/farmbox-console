@@ -1,5 +1,5 @@
 // cancelling validated batches and clearing a zone
-import { drawer, selectBox, el, field, loading, busy, toast } from '../ui.js';
+import { drawer, selectBox, el, field, loading, busy, toast, emptyState } from '../ui.js';
 import { rpc } from '../api.js';
 import { steadyGroups, groupName } from './steady.js';
 import { reload } from './index.js';
@@ -105,7 +105,7 @@ function openClear(sys) {
   const d = drawer(`Clear ${sys.name}?`, 'What is removed, before anything is');
   // the counts are the batches in the window on screen; clear_zone takes every one in the zone,
   // later ones too — so say so, and never refuse a zone whose batches are all further out (review 3 Oct 2026)
-  if (!prop && !val && !act) d.body.append(el('div', 'hint', 'Nothing planned or growing in the window on screen.'));
+  if (!prop && !val && !act) d.body.append(emptyState('Nothing planned or growing in the window on screen.'));
   const lines = el('ul', 'tl-clear-list');
   if (prop) lines.append(el('li', null, `${prop} proposal${prop === 1 ? '' : 's'} — removed`));
   if (val) lines.append(el('li', null, `${val} validated batch${val === 1 ? '' : 'es'} — cancelled, their open tasks removed`));

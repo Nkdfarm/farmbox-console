@@ -3,7 +3,7 @@ import { el, num, trapCheckPill, farmTime, farmDay } from '../ui.js';
 import { openViewer, tagChips, noteChip, photoTitle, partLabel, REACTS, firstComments, aiBlocks } from '../viewer.js';
 import { viewerCtx } from './day.js';
 import { removeX } from './removed.js';
-import { S, MEASURE_WORD, SVG_NS, dotEl } from './state.js';
+import { MEASURE_WORD, SVG_NS, dotEl } from './state.js';
 import { thumb } from './thumbs.js';
 
 // a photo or a count added by an extra scouting (0204), beside the zone's planned one: "extra · Dial"

@@ -1,7 +1,7 @@
 // Scouting page: the page paint (day rows, zone bar, dashboard)
 import { rpc } from '../api.js';
 import { newCase } from '../cases.js';
-import { el, pageHead } from '../ui.js';
+import { el, pageHead, emptyState } from '../ui.js';
 import { unfiledButton } from '../unfiled.js';
 import { dayRow } from './day.js';
 import { feedButton, opinionsButton } from './feed.js';
@@ -61,7 +61,7 @@ export function paint() {
   const shown = S.dates.filter(d => !S.cropFilter || (d.photo_crops || {})[S.cropFilter] || d.traps).concat(S.cropFilter ? [] : robotOnly)
     .sort((x, y) => String(y.day).localeCompare(String(x.day)));
   if (S.zoneFilter) list.append(el('div', 'pd-zone-head', `${zoneName(S.zoneFilter)} — the scouting report by date`));
-  if (!shown.length) list.append(el('div', 'empty', 'No scouting report yet. The phone makes one every working day.'));
+  if (!shown.length) list.append(emptyState('No scouting report yet. The phone makes one every working day.'));
   // only today's report opens by itself (0.7.202, owner 2 Oct 2026: "only today report is opened, other reports are
   // closed"; it was today and yesterday, or the latest, since 0.7.174) — a day opens, and is read, when it is clicked
   // … and with no report today yet, the latest one (0.7.203, owner: "yes open the last one")

@@ -1,7 +1,7 @@
 // Scouting page: shared state S, constants, small helpers, robot helpers, zone filters, the read queue
-import { rpc, fn } from '../api.js';
+import { rpc } from '../api.js';
 import { robotStrip } from '../robot.js';
-import { el, parseNoon as parse } from '../ui.js';
+import { el, parseNoon as parse, readNote } from '../ui.js';
 import { reload } from './index.js';
 
 // the page's shared state (was the module-level `let`s of scouting.js): one object so every part can assign to it
@@ -87,4 +87,13 @@ export async function calm(name, args) {
     try { return await queued(() => rpc(name, args)); }
     catch (e) { if (i >= 2 || !BUSY.test(String(e.message || e))) throw e; await new Promise(r => setTimeout(r, 1500 * (i + 1))); }
   }
+}
+// a read that failed: one small note at the top of the page, not a break in what is shown (have = a copy is on screen)
+// a later read that succeeded takes the note away
+export const readOk = () => S.mount?.querySelector(':scope > .read-note')?.remove();
+export function readFailed(have) {
+  const m = S.mount;
+  if (!m?.isConnected) return;
+  m.querySelector(':scope > .read-note')?.remove();
+  m.prepend(readNote(have));
 }

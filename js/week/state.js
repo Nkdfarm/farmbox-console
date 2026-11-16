@@ -36,7 +36,6 @@ export const resetManual = on => { manual.on = on; manual.worker = null; manual.
 try { S.filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
 
 // This page works in ISO strings; the date arithmetic is ui.js's, in local parts.
-const iso = ymd;
 export const mondayOf = s => ymd(mondayOfDate(parseYmd(s)));
 export const shift = (s, days) => ymd(addDays(parseYmd(s), days));
 export const firstOfMonth = s => s.slice(0, 8) + '01';

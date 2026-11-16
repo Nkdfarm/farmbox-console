@@ -5,7 +5,7 @@ import { rpc, mergeValidated, rpcInChunks } from '../api.js';
 import { printLabels } from '../labels.js';
 import { nice, DAY, dn, ds, span, S } from './state.js';
 import { fits, reload, cycleOf } from './index.js';
-import { dropProblem } from './drag.js';
+import { dropProblem, openMoveBatch } from './drag.js';
 
 // ── one batch ────────────────────────────────────────────────────────────────
 export function openBatch(b, sys, p) {
@@ -49,6 +49,12 @@ export function openBatch(b, sys, p) {
       };
       const w = el('div', 'row'); w.append(crop, go);
       d.body.append(field('Crop', w, 'Same position and transplant day; its cycle decides the rest.'));
+    }
+    if (b.movable && (S.data.crops || []).some(c => c.id === b.crop_id)) {
+      const mv = el('button', 'btn btn-sm', 'Move to…');
+      mv.title = 'Another zone, position or transplant day — what dragging the bar does';
+      mv.onclick = () => openMoveBatch(b, d);
+      d.body.append(field('Position', mv, 'For a touch screen, where a bar cannot be dragged.'));
     }
     const endIn = el('input', 'input'); endIn.type = 'date'; endIn.value = b.harvest_end || '';
     const setEnd = el('button', 'btn btn-sm', 'Set');

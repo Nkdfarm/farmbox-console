@@ -4,7 +4,7 @@ import { CONF, FIELD, day } from './fields.js';
 
 // ── what the catalogue says ──
 export function factsBlock(ctx, pr, label) {
-  const { farm, p, opts } = ctx;
+  const { p, opts } = ctx;
   const w = el('div');
   const facts = el('dl', 'tr-facts');
   const fact = (k, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) return; facts.append(el('dt', null, k), el('dd', null, Array.isArray(v) ? v.join(', ') : String(v))); };

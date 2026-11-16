@@ -15,7 +15,7 @@
 // Map size… and Traps and limits…. A kit per page copy, so two units drawn side by side do not share a farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
-import { el, drawer, num, toast, busy, input, field, trapCheckPill, shortDay, farmDay } from './ui.js';
+import { el, drawer, num, toast, busy, input, field, trapCheckPill, shortDay, farmDay, emptyState } from './ui.js';
 import { openViewer } from './viewer.js';
 import { renderIpm } from './ipm.js';
 
@@ -171,7 +171,7 @@ export function trapKit(K) {
       try {
         const r = await getReadings();
         hist.textContent = '';
-        if (!r.length) hist.append(el('div', 'hint', 'No reading in the last 120 days.'));
+        if (!r.length) hist.append(emptyState('No reading in the last 120 days.'));
         r.forEach(x => {
           const f = el('button', 'tm-hfig');
           f.type = 'button';

@@ -16,7 +16,7 @@
 // 404 (PGRST202): "The gallery is not available yet", not an error.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, confirmDrawer, field, input, selectBox, loading, pageHead, farmToday, parseYmd, addDays, ymd, FARM_TZ, farmDayOf } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer, field, input, selectBox, loading, pageHead, farmToday, parseYmd, addDays, ymd, FARM_TZ, farmDayOf, emptyState } from './ui.js';
 
 const BUCKET = 'farm-gallery';
 const TAGS = [['label', 'Label'], ['equipment', 'Equipment'], ['pest', 'Pest'], ['delivery', 'Delivery'], ['receipt', 'Receipt'], ['crop', 'Crop'], ['other', 'Other']];
@@ -50,7 +50,7 @@ async function signAll(paths) {
   return out;
 }
 
-const unavailable = () => el('div', 'empty', 'The gallery is not available yet');
+const unavailable = () => emptyState('The gallery is not available yet');
 
 // ── the grid: the page and the picker draw the same one ──
 // o = { tag, pick, multiple, selected (Map id → photo), onSelect(), onOpen(photo) }
@@ -140,7 +140,7 @@ function makeGrid(farm, o = {}) {
     moreBtn.hidden = !hasMore;
     if (!photos.length) {
       const any = f.tag || f.person || f.from || f.to || f.view !== 'all';
-      list.append(el('div', 'empty', any ? 'No photo for this choice.' : 'No photo in the gallery yet. A photo taken in Naked Brain › Gallery appears here once it is sent.'));
+      list.append(emptyState(any ? 'No photo for this choice.' : 'No photo in the gallery yet. A photo taken in Naked Brain › Gallery appears here once it is sent.'));
       return;
     }
     const days = new Map();

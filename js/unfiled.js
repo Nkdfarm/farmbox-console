@@ -13,7 +13,7 @@
 // Since 0.7.224 (0218) a file can also be deleted for good — from storage, after a confirmation.
 // ═════════════════════════════════════════════════════════════════════════
 import { rpc, api, URL_BASE } from './api.js';
-import { el, toast, busy, drawer, confirmDrawer, farmToday, shortDay, farmTime, farmDayOf } from './ui.js';
+import { el, toast, busy, drawer, confirmDrawer, farmToday, shortDay, farmTime, farmDayOf, emptyState } from './ui.js';
 
 const errText = e => String(e?.message || e).replace(/^\d+ /, '');
 const STATUS = { done: 'done', skipped: 'cancelled', cancelled: 'cancelled', in_progress: 'in progress', assigned: 'open', planned: 'open', generated: 'open' };
@@ -149,7 +149,7 @@ function openUnfiled(farm, onChange) {
 
     // ── files with no record ──
     d.body.append(el('h3', 'uf-h', `Photos with no report (${live.length})`));
-    if (!files.length) d.body.append(el('div', 'empty', 'Every photo of the last 14 days is in a report.'));
+    if (!files.length) d.body.append(emptyState('Every photo of the last 14 days is in a report.'));
     const list = el('div', 'pd-removed');
     // the traps a trap photo can be filed to (0238), read once for the window when there is one to file
     const trapList = r.may_file && files.some(f => f.kind === 'trap' && !f.discarded)

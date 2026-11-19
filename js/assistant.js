@@ -483,7 +483,7 @@ function paintPeek() {
   if (!peek) return;
   const last = mode === 'chat' ? [...convo().view].reverse().find(v => v.role === 'assistant') : null;
   peek.textContent = sending ? 'Reading the farm and thinking…'
-    : last ? String(last.text).replace(/[*`#]/g, '').split('\n').find(l => l.trim()) || '' : 'Ask about this page or the whole FarmBox.';
+    : last ? String(last.text).replace(/[*`#]/g, '').split('\n').find(l => l.trim()) || '' : '';   // no label and no hint (owner, 19 Nov 2026)
 }
 
 export function initAssistant(context) {
@@ -497,7 +497,7 @@ export function initAssistant(context) {
   gear.title = 'What the cards do on this FarmBox'; gear.setAttribute('aria-label', 'Settings of the cards');
   gear.onclick = () => { mode = 'settings'; if (closed()) openBand(); paint(); };
   peek = el('span', 'ai-peek');
-  head.append(g1Face('sm', 'The assistant'), el('b', null, 'Assistant'), peek, el('div', 'spacer'), gear, fresh);
+  head.append(g1Face('sm', 'The assistant'), peek, el('div', 'spacer'), gear, fresh);
   list = el('div', 'ai-list');
   chips = el('div', 'ai-chips');
   SUGGEST.forEach(s => { const c = el('button', 'chip', s); c.onclick = () => send(s); chips.append(c); });

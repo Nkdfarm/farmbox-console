@@ -10,51 +10,70 @@
 // validates a plan, approves anything or marks a task done. Pictures, PDFs,
 // Excel and CSV files can be attached; the function reads them.
 //
+// The compact band (19 Nov 2026, owner): the head is the voice buttons and the conversation's title (no avatar, no gear, no
+// prepared questions); the question box has the page and units as one small line, "New chat" and Send at the bottom; the
+// settings of the cards are in Settings › Assistant. Each page keeps its own conversation; "To check" asks what on the page needs checking.
+//
 // The band (19 Nov 2026): the answers on the left two thirds, the question on the right third, with the page and the units
 // on screen as chips that go with the question (a click drops one). A click on its grip opens or closes it; a drag
 // makes it taller or shorter, snapping to closed, a fifth, a third or half the window; the height is kept per person and
 // per screen (fbc_band_…). Closed it is one line — the question box stays — and a question slides it open to a fifth.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
-import { el, toast, pref, g1Face, escapeHtml } from './ui.js';
+import { el, toast, pref, escapeHtml } from './ui.js';
+import { createVoice, voiceButtons } from './assistant-voice.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
   'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop']);
-const SUGGEST = [
-  'Explain this page',
-  'Plan a steady lettuce harvest in Zone 2',
-  'Can we deliver 200 kg of basil in 8 weeks?',
-  'Write the scouting report for today',
-  'Import these prices from my spreadsheet',
-];
+// "To check" (owner, 19 Nov 2026): the button beside Send; the person sees "To check", the assistant reads the longer ask
+const CHECK = 'To check';
+const CHECK_ASK = 'Check the page on screen and tell me what needs checking: late or overdue items, readings or numbers that look wrong, anything waiting for a decision. A short list, the most important first, at most 6 lines. Say plainly if nothing needs attention.';
+const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dropped from this browser
 
 let ctx = null;              // { farm(), refresh() } from app.js
-let band, grip, list, input, sendBtn, fileIn, chips, busyRow, peek, ctxRow;
+let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, voice, voiceBtns;
 let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
-const convos = new Map();    // farm id → { messages (as the function returned them), view, notes }
+const convos = new Map();    // farm id | page → { messages (as the function returned them), view, notes, chatId, at }
 let files = [];
 
+// one conversation for each page of each FarmBox (owner, 19 Nov 2026): the box on a page opens with the last
+// conversation held there, and is empty on a page where there was none. Kept in this browser; the database keeps each
+// chat as before, but only this browser knows which page it belongs to.
+const pageOf = () => (location.hash || '#/').split('?')[0];
+const ckey = () => (ctx.farm()?.id || 'none') + '|' + pageOf();
 const convo = () => {
-  const f = ctx.farm();
-  const id = f?.id || 'none';
+  const id = ckey();
   if (!convos.has(id)) {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem('fbc_ai_' + id) || 'null'); } catch { /* none */ }
-    convos.set(id, saved || { messages: [], view: [], notes: [], chatId: null, fresh: false });
+    if (saved) { saved.seen = Date.now(); try { localStorage.setItem('fbc_ai_' + id, JSON.stringify(saved)); } catch { /* full */ } }   // opened: it is kept another month
+    convos.set(id, saved || { messages: [], view: [], notes: [], chatId: null, at: 0 });
   }
   return convos.get(id);
 };
-// id: the farm the conversation belongs to — an answer that lands after a switch of FarmBox is saved with its own
-// conversation, not the one now on screen (review 3 Oct 2026)
-const save = (id = ctx.farm()?.id) => {
+// id: the key of the conversation (farm | page) — an answer that lands after a switch of page or FarmBox is saved with
+// its own conversation, not the one now on screen (review 3 Oct 2026)
+const save = (id = ckey()) => {
   if (!id || !convos.has(id)) return;
   try {
     const s = JSON.stringify(convos.get(id));
     if (s.length < 3_000_000) localStorage.setItem('fbc_ai_' + id, s); else localStorage.removeItem('fbc_ai_' + id);
   } catch { /* private window, or full */ }
 };
+// the conversations of pages not opened for a month go, and so do the single-conversation copies of before the pages
+function prune() {
+  try {
+    const old = Date.now() - KEEP_DAYS * 864e5;
+    Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_')).forEach(k => {
+      if (!k.includes('|')) { localStorage.removeItem(k); return; }
+      let at = 0;
+      try { const o = JSON.parse(localStorage.getItem(k) || '{}'); at = Math.max(o.seen || 0, o.at || 0); } catch { /* unreadable: goes */ }
+      if (at < old) localStorage.removeItem(k);
+    });
+  } catch { /* no storage */ }
+}
 
 // a little markdown: paragraphs, **bold**, `code`, lists — escaped first
 function md(text) {
@@ -77,13 +96,13 @@ function md(text) {
   return box;
 }
 
-// ── what waits for a manager, and the farm's settings for the cards (0276) ─────────────────────────────────────────
-let mode = 'chat';   // 'chat' | 'waiting' | 'settings'
+// ── what waits for a manager (0276) ─────────────────────────────────────────
+let mode = 'chat';   // 'chat' | 'waiting'  (the cards' settings are in Settings › Assistant since 19 Nov 2026)
 let paintSeq = 0;    // a slow answer for a view that has been left must not draw under the one now shown
 const backBtn = () => { const b = el('button', 'btn btn-sm btn-ghost', '← Back to the conversation'); b.onclick = () => { mode = 'chat'; paint(); }; return b; };
 
 async function paintWaiting(my) {
-  list.textContent = ''; chips.hidden = true;
+  list.textContent = '';
   const f = ctx.farm();
   list.append(backBtn(), el('div', 'ai-impact-head', 'Waiting for you'));
   let cards = [];
@@ -113,56 +132,17 @@ async function paintWaiting(my) {
   });
 }
 
-async function paintSettings(my) {
-  list.textContent = ''; chips.hidden = true;
-  const f = ctx.farm();
-  list.append(backBtn(), el('div', 'ai-impact-head', 'What the assistant\'s cards do on this FarmBox'));
-  let s;
-  try { s = await rpc('ai_settings', { p_farm: f.id }, { quiet: true }); } catch (e) { if (my === paintSeq) list.append(el('div', 'ai-msg error', e.message)); return; }
-  if (my !== paintSeq) return;
-  const form = el('div', 'ai-card open');
-  const box = (label, on) => { const l = el('label', 'ai-set'); const i = el('input'); i.type = 'checkbox'; i.checked = !!on; i.disabled = !s.may_edit; l.append(i, ' ' + label); form.append(l); return i; };
-  const num = (label, v) => { const l = el('label', 'ai-set'); const i = el('input', 'input'); i.type = 'number'; i.min = 0; i.placeholder = 'no limit'; i.value = v == null ? '' : v; i.disabled = !s.may_edit; l.append(label + ' ', i); form.append(l); return i; };
-  const imp = box('Show what a change would do on each card', s.impact);
-  const grow = box('A grower may apply a change to one running batch (class B)', s.class_b_growers);
-  const days = num('Most days a reported harvest may differ from the forecast:', s.tolerance_days);
-  const pct = num('Most % a reported yield may differ:', s.tolerance_yield_pct);
-  form.append(el('div', 'ai-card-state', 'Empty means no limit. Above a limit the change waits for a manager or the agronomist.'));
-  // learning from finished batches (0278): off until a manager turns it on, because the planner then uses what was learned
-  form.append(el('div', 'ai-impact-head', 'Learning from finished batches'));
-  const learn = box('Learn how long each phase really lasts from the dates observed on finished batches (once enough batches agree, the planner uses it for new batches)', s.learning);
-  const ltol = num('Propose a change to a crop\'s phase days when they differ by more than (days):', s.learned_tolerance_days);
-  form.append(el('div', 'ai-card-state', 'Empty means no proposals. A proposal waits in To decide for a manager or the agronomist; nothing changes until they accept it. Turning learning off goes back to each crop\'s own days.'));
-  if (s.may_edit) {
-    const save = el('button', 'btn btn-sm btn-primary', 'Save');
-    save.onclick = async () => {
-      save.disabled = true;
-      try {
-        await rpc('save_ai_settings', { p_farm: f.id, p: { impact: imp.checked, class_b_growers: grow.checked,
-          tolerance_days: days.value === '' ? null : Number(days.value), tolerance_yield_pct: pct.value === '' ? null : Number(pct.value),
-          learning: learn.checked, learned_tolerance_days: ltol.value === '' ? null : Number(ltol.value) } });
-        toast('Saved', 'ok');
-      } catch (e) { toast(e.message, 'bad'); }
-      save.disabled = false;
-    };
-    form.append(save);
-  } else form.append(el('div', 'ai-card-state', 'Only a manager of this FarmBox changes these.'));
-  list.append(form);
-}
-
 function paint() {
   const my = ++paintSeq;
   if (mode === 'waiting') { paintWaiting(my); return; }
-  if (mode === 'settings') { paintSettings(my); return; }
   const c = convo();
   list.textContent = '';
-  if (!c.view.length) {
-    list.append(el('div', 'ai-hello', 'Ask about this FarmBox, plan crops, change a procedure, import a spreadsheet or a photo of a list, or have a report written. Changes come as cards: nothing happens until you press Do it.'));
+  if (!c.view.length && !sending) {
+    list.append(el('div', 'ai-hello', ctx.farm() ? 'Ask, or tell it what to set up. Changes come as cards: nothing happens until you press Do it.' : 'Choose a FarmBox first.'));
   }
   c.view.forEach((v, i) => list.append(item(v, i)));
-  chips.hidden = !!c.view.length;
   list.scrollTop = list.scrollHeight;
-  paintPeek(); paintContext();
+  paintTitle(); paintPeek(); paintContext();
 }
 
 function item(v, i) {
@@ -173,8 +153,8 @@ function item(v, i) {
     return b;
   }
   if (v.role === 'error') return el('div', 'ai-msg error', v.text);
-  // the assistant's own words carry its face, as a person's note carries theirs (0.7.239)
-  if (v.role === 'assistant') { const r = el('div', 'ai-row'), b = el('div', 'ai-msg bot'); b.append(md(v.text)); r.append(g1Face('sm', 'The assistant'), b); return r; }
+  // no face beside the assistant's words since the compact band (19 Nov 2026, owner)
+  if (v.role === 'assistant') { const b = el('div', 'ai-msg bot'); b.append(md(v.text)); return b; }
   if (v.role === 'action') return card(v, i);
   return el('div');
 }
@@ -273,24 +253,6 @@ function record(v, state) {
   rpc('ai_card_decide', { p_card: v.card_id, p_state: state, p_result: state === 'dismissed' ? null : (v.result || null) }, { quiet: true }).catch(() => { /* an old card, or offline */ });
 }
 
-// the conversation of this person on this FarmBox, kept in the database, when this browser has none of its own
-const hydrated = new Set();
-async function hydrate() {
-  const f = ctx.farm();
-  if (!f || hydrated.has(f.id)) return;
-  hydrated.add(f.id);
-  const c = convo();
-  if (c.view.length || c.fresh) return;   // `fresh`: the person pressed New conversation here; the old one is not brought back
-  try {
-    const r = await rpc('ai_chat_latest', { p_farm: f.id }, { quiet: true });
-    if (r?.chat_id && !c.view.length && ctx.farm()?.id === f.id) {
-      c.chatId = r.chat_id; c.messages = r.messages || []; c.view = r.view || [];
-      save(f.id);
-      paint();
-    }
-  } catch { /* offline, or the migration is not applied: the conversation stays in this browser */ }
-}
-
 const short = r => {
   if (r == null) return '';
   if (typeof r !== 'object') return String(r).slice(0, 80);
@@ -300,6 +262,7 @@ const short = r => {
 
 async function doIt(v, btn) {
   if (!ALLOWED.has(v.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
+  const c = convo(), key = ckey();   // the page it was pressed on: a slow change must not write into the page shown by then
   btn.disabled = true; btn.textContent = 'Doing…';
   try {
     const r = await rpc(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args);
@@ -309,63 +272,89 @@ async function doIt(v, btn) {
     }
     if (r && r.needs_manager) {   // above the limit: nothing was applied, the manager decides (the door has marked the card)
       v.state = 'needs_manager'; v.result = r.message || '';
-      convo().notes.push(`asked a manager: ${v.summary}`);
+      c.notes.push(`asked a manager: ${v.summary}`);
       toast('Sent to a manager: it is above the limit', 'ok');
-      save(); paint(); return;
+      save(key); paint(); return;
     }
     v.state = 'done'; v.result = short(r);
     if (v.rpc !== 'apply_batch_adjustment') record(v, 'done');
-    convo().notes.push(`did: ${v.summary}` + (v.result ? ` (${v.result})` : ''));
+    c.notes.push(`did: ${v.summary}` + (v.result ? ` (${v.result})` : ''));
     toast('Done: ' + (v.summary || v.rpc), 'ok');
     ctx.refresh();
   } catch (e) {
     v.state = 'failed'; v.result = e.message;
     record(v, 'failed');
-    convo().notes.push(`tried "${v.summary}" and it failed: ${e.message}`);
+    c.notes.push(`tried "${v.summary}" and it failed: ${e.message}`);
   }
-  save(); paint();
+  save(key); paint();
 }
 
 let sending = false;   // one question at a time: Enter or a chip during an answer used to start a second one
-async function send(text) {
-  if (sending) return;
-  // the conversation kept in the database first: the band is closed but the box is there, so a question can come
-  // before anything opened it — it would start a new conversation and lose the old one (verifier, 19 Nov 2026)
-  await hydrate();
-  const c = convo();
+// opts.check: the "To check" button — the person sees "To check", the assistant reads CHECK_ASK, and neither the files nor a
+// dropped chip change it; opts.voice: asked by voice
+// → { reply, cards } of the answer, for the voice to read out; null when nothing came back
+async function send(text, opts = {}) {
+  if (sending) return null;
+  sending = true;   // before the first await: a second Enter, or a phrase, while the first reads the database is refused
+  try { return await sendNow(text, opts); } finally { sending = false; }
+}
+async function sendNow(text, opts) {
+  const c = convo(), key = ckey();
   const f = ctx.farm();
   text = (text ?? input.value).trim();
-  if (!f) { toast('Choose a FarmBox first', 'bad'); return; }
-  if (!text && !files.length) return;
+  if (!f) { toast('Choose a FarmBox first', 'bad'); return null; }
+  if (!text && !files.length) return null;
   if (mode !== 'chat') { mode = 'chat'; paint(); }
   if (closed()) setFrac(AUTO);   // a question slides the band open to a fifth of the screen (owner, 19 Nov 2026)
-  const sent = files.slice(); files = []; paintFiles();
-  input.value = '';
+  const sent = opts.check ? [] : files.slice();
+  if (!opts.check) { files = []; paintFiles(); }
+  if (!opts.check) input.value = '';
   const notes = c.notes.length ? `(Since your last answer I ${c.notes.join('; ')}.)\n` : '';
   const w = ctx.where?.() || {}, about = [];
-  if (!ctxOff.page && w.page) about.push('the page ' + w.page);
-  if (!ctxOff.units && w.units?.length) about.push((w.units.length > 1 ? 'the units ' : 'the unit ') + w.units.join(' and '));
+  if ((opts.check || !ctxOff.page) && w.page) about.push('the page ' + w.page);
+  if ((opts.check || !ctxOff.units) && w.units?.length) about.push((w.units.length > 1 ? 'the units ' : 'the unit ') + w.units.join(' and '));
   const where = about.length ? `(On screen: ${about.join(', ')}.)\n`
-              : ctxOff.page || ctxOff.units ? '(This question is about the whole FarmBox, not the page on screen.)\n' : '';
-  const messages = [...c.messages, { role: 'user', content: notes + where + (text || 'Here is a file.') }];
+              : !opts.check && (ctxOff.page || ctxOff.units) ? '(This question is about the whole FarmBox, not the page on screen.)\n' : '';
+  const asked = opts.check ? CHECK_ASK : text;
+  const messages = [...c.messages, { role: 'user', content: notes + where + (asked || 'Here is a file.') }];
   c.view.push({ role: 'user', text: text || '(a file)', files: sent.map(x => x.name) });
   paint();
-  busyRow.hidden = false; sendBtn.disabled = true; sending = true;
+  busyRow.hidden = false; sendBtn.disabled = true; checkBtn.disabled = true; sending = true;
+  let out = null;
   try {
-    const r = await fn('assistant', { farm_id: f.id, route: ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
+    const r = await fn('assistant', { farm_id: f.id, route: !opts.check && ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
     c.chatId = r.chat_id || null;
-    c.notes = [];
+    c.notes = []; c.at = Date.now();
     if (r.reply) c.view.push({ role: 'assistant', text: r.reply });
+    out = { reply: r.reply || '', cards: (r.actions || []).length };
     (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null }));
   } catch (e) {
     c.view.push({ role: 'error', text: e.message });
-    if (ctx.farm()?.id === f.id) { if (text) input.value = text; if (!files.length) { files = sent; paintFiles(); } }   // the attachments too
+    if (ctx.farm()?.id === f.id) { if (text && !opts.check) input.value = text; if (!files.length) { files = sent; paintFiles(); } }   // the attachments too
   }
-  busyRow.hidden = true; sendBtn.disabled = false; sending = false;
-  save(f.id); paint();
-  if (closed() && ctx.farm()?.id === f.id) setFrac(AUTO);   // closed meanwhile: the answer is here, show it
+  busyRow.hidden = true; sendBtn.disabled = false; checkBtn.disabled = false; sending = false;
+  save(key); paint();
+  if (closed() && ctx.farm()?.id === f.id && key === ckey()) setFrac(AUTO);   // closed meanwhile: the answer is here, show it
+  return out;
+}
+
+// the title of the conversation: the first words of its first question ("To check" when that was the button); before one,
+// the name of the page. Beside it, how old the conversation is
+const ago = ms => {
+  const m = Math.round((Date.now() - ms) / 60000);
+  return m < 60 ? '' : m < 1440 ? Math.round(m / 60) + ' h ago' : (d => d === 1 ? 'yesterday' : d + ' days ago')(Math.round(m / 1440));
+};
+function paintTitle() {
+  if (!titleEl) return;
+  const c = convo();
+  const first = c.view.find(v => v.role === 'user' && v.text && v.text !== '(a file)');
+  const words = first ? first.text.replace(/[?!.…:;,]+\s*$/g, '').split(/\s+/).filter(Boolean) : [];
+  const t = words.length ? words.slice(0, 5).join(' ') : (ctx.farm() ? ctx.where?.()?.page : '') || 'New chat';
+  titleEl.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+  titleEl.title = first ? first.text : 'A new conversation on this page';
+  if (ageEl) ageEl.textContent = c.at && c.view.length ? ago(c.at) : '';
 }
 
 function paintFiles() {
@@ -404,6 +393,7 @@ function setFrac(f, keep = true) {
   frac = Math.max(0, Math.min(MAX, f));
   if (frac > 0) lastOpen = frac;
   band.classList.toggle('closed', frac === 0);
+  if (frac === 0) voice?.stop();   // the voice buttons are hidden when closed: nothing may keep listening unseen
   band.style.height = frac === 0 ? '' : Math.round(frac * innerHeight) + 'px';
   grip.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
   grip.title = frac === 0 ? 'Click to open the assistant, or drag it down' : 'Click to close the assistant, or drag to make it taller or shorter';
@@ -474,7 +464,6 @@ function paintContext() {
     b.onclick = () => { ctxOff[key] = !ctxOff[key]; paintContext(); };
     ctxRow.append(b);
   };
-  if (w.page) chip('page', w.page, 'The page on screen goes with the question');
   if (w.units?.length) chip('units', w.units.join(' + '), 'The units on screen go with the question');
 }
 
@@ -491,25 +480,28 @@ export function initAssistant(context) {
   band = document.getElementById('aiBand');
   const out = el('div', 'ai-out'), inn = el('div', 'ai-in');
   const head = el('div', 'ai-head');
-  const fresh = el('button', 'btn btn-sm btn-ghost', 'New conversation');
-  fresh.onclick = () => { mode = 'chat'; const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [], chatId: null, fresh: true }); hydrated.add(f?.id); save(); paint(); };
-  const gear = el('button', 'btn btn-sm btn-ghost', '⚙');
-  gear.title = 'What the cards do on this FarmBox'; gear.setAttribute('aria-label', 'Settings of the cards');
-  gear.onclick = () => { mode = 'settings'; if (closed()) openBand(); paint(); };
+  // the voice: two icons — the browser's own voice, and the realtime one when it is connected (assistant-voice.js)
+  voice = createVoice({
+    ask: t => send(t, { voice: true }),
+    heard: (t, final) => { if (!final) input.value = t; else input.value = ''; },
+    state: (kind, st) => { voiceBtns?.paint(kind, st); },
+    realtime: null,   // the service is not chosen yet
+  });
+  voiceBtns = voiceButtons(voice, { realtime: false });
+  titleEl = el('b', 'ai-title', 'New chat');
+  ageEl = el('span', 'ai-age');
   peek = el('span', 'ai-peek');
-  head.append(g1Face('sm', 'The assistant'), peek, el('div', 'spacer'), gear, fresh);
+  head.append(voiceBtns, titleEl, ageEl, peek);
   list = el('div', 'ai-list');
-  chips = el('div', 'ai-chips');
-  SUGGEST.forEach(s => { const c = el('button', 'chip', s); c.onclick = () => send(s); chips.append(c); });
   busyRow = el('div', 'ai-busy'); busyRow.hidden = true;
   const bar = el('div', 'loading-bar busy'); bar.append(el('i'));
   busyRow.append(el('span', 'hint', 'Reading the farm and thinking…'), bar);
-  out.append(head, list, chips, busyRow);
+  out.append(head, list, busyRow);
 
   ctxRow = el('div', 'ai-ctx');
   input = el('textarea', 'input ai-input');
   input.rows = 2;
-  input.placeholder = 'Ask, or tell it what to set up… (Enter to send, Shift+Enter for a new line)';
+  input.placeholder = 'Ask, or tell it what to set up…';
   input.setAttribute('aria-label', 'Ask the assistant');
   input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
   fileIn = el('input'); fileIn.type = 'file'; fileIn.multiple = true; fileIn.hidden = true;
@@ -524,8 +516,21 @@ export function initAssistant(context) {
   attach.onclick = () => fileIn.click();
   sendBtn = el('button', 'btn btn-sm btn-primary', 'Send');
   sendBtn.onclick = () => send();
-  const row = el('div', 'row ai-send'); row.append(attach, el('div', 'ai-attached'), el('div', 'spacer'), sendBtn);
-  inn.append(ctxRow, input, row, fileIn);
+  // "New chat": the conversation on screen is left (it stays in the database); the next question starts a new one
+  const fresh = el('button', 'btn btn-sm btn-ghost ai-fresh', 'New chat');
+  fresh.title = 'Start a new conversation';
+  fresh.onclick = () => {
+    if (sending) return;   // an answer on its way would land in a conversation that is gone
+    voice.stop(); mode = 'chat';
+    convos.set(ckey(), { messages: [], view: [], notes: [], chatId: null, at: 0 }); save();
+    paint(); input.focus();
+  };
+  // "To check": what on this page needs checking — in place of the page summary that opened the band (owner, 19 Nov 2026)
+  checkBtn = el('button', 'btn btn-sm ai-check', CHECK);
+  checkBtn.title = 'Ask the assistant what on this page needs checking';
+  checkBtn.onclick = () => send(CHECK, { check: true });
+  const row = el('div', 'row ai-send'); row.append(attach, ctxRow, el('div', 'ai-attached'), el('div', 'spacer'), fresh, checkBtn, sendBtn);
+  inn.append(input, row, fileIn);
   band.replaceChildren(out, inn);
 
   grip = el('div', 'ai-grip');
@@ -541,13 +546,19 @@ export function initAssistant(context) {
 }
 
 // signed in (or another person on this tab): their own height on this screen, their conversation
-export function assistantReady() { mode = 'chat'; ctxOff = { page: false, units: false }; loadFrac(); paint(); hydrate(); }
+export function assistantReady() { mode = 'chat'; ctxOff = { page: false, units: false }; prune(); loadFrac(); paint(); }
 // another page or another choice of units: the chips follow, and what was dropped comes back
-export function assistantRouteChanged() { ctxOff = { page: false, units: false }; paintContext(); }
+let shownKey = '';
+export function assistantRouteChanged() {
+  ctxOff = { page: false, units: false };
+  const k = ckey();
+  if (k !== shownKey) { shownKey = k; voice?.stop(); }   // another page: its own conversation, and the voice does not follow
+  if (band && mode === 'chat') paint(); else paintContext();
+}
 
 // a farm switch shows that farm's conversation
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
 // the dashboard's "To decide" tile for cards that wait for a manager opens them here
 export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
-export function forgetAssistant() { mode = 'chat'; convos.clear(); hydrated.clear(); if (band) { setFrac(0, false); paint(); } }
-export function assistantFarmChanged() { mode = 'chat'; if (band) { paint(); hydrate(); } }
+export function forgetAssistant() { voice?.stop(); mode = 'chat'; convos.clear(); if (band) { setFrac(0, false); paint(); } }
+export function assistantFarmChanged() { voice?.stop(); mode = 'chat'; if (band) paint(); }

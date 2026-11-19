@@ -6,6 +6,7 @@
 // the two Notion syncs. A setting that belongs to a FarmBox lives on Farm setup,
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
+import { cardSettings } from './assistant-settings.js';
 import { api, fn, select, rpc } from './api.js';
 import { el, toast, drawer, confirmDrawer, busy, icon, avatar, input, pref, emptyState } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
@@ -62,6 +63,7 @@ export function openSettings(ctx) {
     section('Notion', notion(ctx)),
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Task feedback', taskFeedback(ctx)),
+    section('Assistant', cardSettings(ctx.farmId)),
     section('Automatic AI scan', aiScan(ctx)),
     section('Integrations', integrations(ctx)),
     section('Account', account(ctx, d)),

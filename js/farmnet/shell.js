@@ -1,9 +1,54 @@
 // FarmNet pages: the shared frame (ask/send, readings helpers, kept answers, pins, page, card, table, centres)
-import { fn } from '../api.js';
+import { fn, rpc } from '../api.js';
 import { el, pageHead, toast, loading, farmDate, farmLocal, pref, addDays, ymd } from '../ui.js';
 
 const FN = 'farmnet';
-export const ask = (farm, action, args = {}) => fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => r?.data);
+// ── the last answers, kept on this computer (stale while revalidate) ────────
+// FarmNet is slow to answer (the function asks the controller on the farm), and a page that waits for it is white.
+// So every answer is also kept in localStorage; opening a page first draws it from what was kept (dimmed, with the time
+// of the reading, nothing to press), then asks FarmNet and draws it again. A page that needs an answer never kept
+// shows "Asking FarmNet…" as before. Kept answers go on sign-out (forgetFarmnet) and after 24 h.
+const KEEP = 'fbc_fnc_', KEEP_MAX = 24 * 3600000, KEEP_ONE = 300000;   // characters of one answer
+let replaying = false, missed = false, oldest = Infinity;
+export const isReplay = () => replaying;                 // a memo must not keep an answer drawn from the copy
+const stable = a => JSON.stringify(a, Object.keys(a || {}).sort());
+// a history asks "the last 24 h" with the clock in its arguments: kept by its length, not by the minute it was asked
+const keyArgs = a => {
+  const s = fnTime(a?.startTime), e = fnTime(a?.endTime);
+  if (s === null || e === null) return a;
+  const { startTime, endTime, ...rest } = a;
+  return { ...rest, span: Math.round((e - s) / 60000) };
+};
+const keepGet = k => {
+  const raw = pref.get(k);
+  if (!raw) return null;
+  try { const c = JSON.parse(raw); return c && Date.now() - c.at < KEEP_MAX ? c : null; } catch { return null; }
+};
+function keepPut(k, v) {
+  if (v === undefined) return;
+  let raw;
+  try { raw = JSON.stringify({ at: Date.now(), v }); } catch { return; }
+  if (raw.length > KEEP_ONE) return;
+  try { localStorage.setItem(k, raw); }
+  catch { forgetFarmnet(); try { localStorage.setItem(k, raw); } catch { /* full, or a private window */ } }
+}
+export function forgetFarmnet() {
+  try { Object.keys(localStorage).filter(k => k.startsWith(KEEP)).forEach(k => localStorage.removeItem(k)); } catch { /* nothing kept */ }
+}
+// read the network, keep the answer; while replaying: the kept answer or a miss (the whole replay is then dropped)
+export function cached(k, load) {
+  if (replaying) {
+    const c = keepGet(k);
+    if (!c) { missed = true; return Promise.reject(new Error('not kept')); }
+    oldest = Math.min(oldest, c.at);
+    return Promise.resolve(c.v);
+  }
+  return load().then(v => { keepPut(k, v); return v; });
+}
+export const ask = (farm, action, args = {}) =>
+  cached(`${KEEP}${farm.id}|${action}|${stable(keyArgs(args))}`, () => fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => r?.data));
+export const commandLog = (farm, limit) =>
+  cached(`${KEEP}${farm.id}|log|${limit}`, () => rpc('farmnet_commands', { p_farm: farm.id, p_limit: limit }, { quiet: true }));
 export const send = (farm, action, args, changes) => fn(FN, { farm: farm.id, action, args, changes });
 export const soft = p => Promise.resolve(p).then(v => ({ v }), e => ({ e: e?.message || String(e) }));   // one section failing does not blank the page
 
@@ -26,6 +71,7 @@ export const colour = i => `hsl(${HUES[i % HUES.length]} 60% 52%)`;
 // ── what is kept between tabs (per farm): who may control, the sensor list ──
 const memo = new Map();
 async function kept(farm, key, ms, load) {
+  if (replaying) return load();               // a copy is never remembered as if it were fresh
   const k = farm.id + '|' + key, m = memo.get(k);
   if (m && Date.now() - m.at < ms) return m.p;
   const p = load();
@@ -33,7 +79,8 @@ async function kept(farm, key, ms, load) {
   p.catch(() => memo.delete(k));            // a failure is not kept
   return p;
 }
-const helloOf = farm => kept(farm, 'hello', 5 * 60000, () => fn(FN, { farm: farm.id, action: 'hello' }, { quiet: true }));
+const helloKey = farm => `${KEEP}${farm.id}|hello`;
+const helloOf = farm => kept(farm, 'hello', 5 * 60000, () => fn(FN, { farm: farm.id, action: 'hello' }, { quiet: true }).then(h => { keepPut(helloKey(farm), h); return h; }));
 
 // every signal source FarmNet has, flat: { id, label, unit, dec, group, path }
 export const GROUPS = { general: 'General', climate: 'Climate', irrigate: 'Irrigation', energy: 'Energy' };
@@ -70,17 +117,47 @@ const READ_ONLY = 'Read only: the farm admin and the farm manager may send comma
 
 export async function page(mount, farm, blurb, draw, opts = {}) {
   const my = ++token;
-  if (!opts.quiet) { mount.textContent = ''; mount.append(loading('Asking FarmNet…')); }
   const again = q => page(mount, farm, blurb, draw, { ...opts, quiet: q });
-  let h;
-  try { h = await helloOf(farm); } catch (e) {
-    if (my !== token) return;
-    // a quiet re-read that fails keeps what is on screen and tries again at the next minute
-    if (opts.quiet && mount.querySelector('.fn-page')) {
-      toast(`FarmNet: ${e.message}`, 'bad');
-      if (opts.every) setTimeout(() => { if (mount.isConnected && my === token) again(true); }, opts.every);
-      return;
+  const hello = helloOf(farm);              // FarmNet is asked at once, while the kept copy is drawn
+  hello.catch(() => {});
+  const head = (text, refresh) => pageHead(null, blurb, el('span', 'hint', text), refresh);
+  const refreshBtn = () => {
+    const b = el('button', 'btn btn-sm', 'Refresh'); b.type = 'button';
+    b.onclick = () => page(mount, farm, blurb, draw, { ...opts, quiet: false, noStale: true });
+    return b;
+  };
+
+  // 1. the kept copy, if there is one and it holds everything the page asks
+  let shownStale = false;
+  const kh = !opts.quiet && !opts.noStale ? keepGet(helloKey(farm)) : null;
+  if (kh?.v?.connected) {
+    const h0 = kh.v;
+    const ctx0 = { farm, may: false, actions: h0.actions || {}, fresh: false, stale: true, live: () => mount.isConnected && my === token, redraw: () => {} };
+    const body0 = el('div', 'fn-page fn-stale');
+    replaying = true; missed = false; oldest = Infinity;
+    let ok = true;
+    try { await draw(ctx0, body0); } catch { ok = false; } finally { replaying = false; }
+    if (ok && !missed && my === token && mount.isConnected) {
+      const at = Number.isFinite(oldest) ? oldest : kh.at;
+      mount.replaceChildren(head(`last reading ${farmLocal(new Date(at).toISOString()).slice(5, 16).replace('T', ' ')} · updating…`, refreshBtn()), body0);
+      shownStale = true;
     }
+  }
+  if (my !== token) return;
+  if (!opts.quiet && !shownStale) { mount.textContent = ''; mount.append(loading('Asking FarmNet…')); }
+
+  // 2. FarmNet itself
+  const onScreen = shownStale || (opts.quiet && mount.querySelector('.fn-page'));
+  const failedAsk = e => {
+    // a failed re-read keeps what is on screen (the copy, dimmed, says so) and tries again at the next minute
+    toast(`FarmNet: ${e.message}`, 'bad');
+    if (shownStale) mount.querySelector('.hint')?.replaceChildren('FarmNet did not answer: this is the last reading');
+    if (opts.quiet && opts.every) setTimeout(() => { if (mount.isConnected && my === token) again(true); }, opts.every);
+  };
+  let h;
+  try { h = await hello; } catch (e) {
+    if (my !== token) return;
+    if (onScreen) { failedAsk(e); return; }
     mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return;
   }
   if (my !== token) return;
@@ -97,8 +174,13 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
     redraw: () => { if (mount.isConnected) again(true); },
   };
   const body = el('div', 'fn-page');
-  try { await draw(ctx, body); } catch (e) { body.replaceChildren(el('div', 'note bad', e.message)); }
+  let failed = null;
+  try { await draw(ctx, body); } catch (e) { failed = e; }
   if (!ctx.live()) return;
+  if (failed) {
+    if (shownStale) { failedAsk(failed); return; }   // the copy on screen is better than an error
+    body.replaceChildren(el('div', 'note bad', failed.message));
+  }
   const refresh = el('button', 'btn btn-sm', 'Refresh'); refresh.type = 'button';
   refresh.onclick = () => again(false);
   const stamp = el('span', 'hint', `read ${farmLocal(new Date().toISOString()).slice(11)}${opts.every ? ' · again every minute' : ''}`);

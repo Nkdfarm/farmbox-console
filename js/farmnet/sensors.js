@@ -1,8 +1,7 @@
 // FarmNet Sensors and Alarms pages, the Commands page, the command log card
-import { rpc } from '../api.js';
 import { el, toast, icon, pref, emptyState } from '../ui.js';
 import { history, liveVals } from './overview.js';
-import { GROUPS, MAX_PINS, ask, bad, card, fnTime, nice, page, pinsOf, range, secs, setPins, soft, sourcesOf, spanPicker, table } from './shell.js';
+import { GROUPS, MAX_PINS, ask, bad, card, fnTime, nice, page, pinsOf, range, secs, setPins, soft, sourcesOf, spanPicker, table, commandLog } from './shell.js';
 
 // ═══ Sensors ════════════════════════════════════════════════════════════════
 const SENSOR_SPANS = [[360, '6 h'], [1440, '24 h'], [4320, '3 days']];
@@ -120,7 +119,7 @@ export async function renderFnAlarms(mount, farm, _app, quiet) {
 // ═══ Commands ═══════════════════════════════════════════════════════════════
 export async function renderFnCommands(mount, farm) {
   await page(mount, farm, 'Every command sent to FarmNet from Naked Heart, done or not, with who sent it and FarmNet\'s answer.', async (ctx, body) => {
-    const log = await soft(rpc('farmnet_commands', { p_farm: farm.id, p_limit: 200 }, { quiet: true }));
+    const log = await soft(commandLog(farm, 200));
     body.append(logCard(ctx, log, 'Commands sent'));
   });
 }

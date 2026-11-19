@@ -330,8 +330,8 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     return { cls: c, noted: !!x?.notes, title: longDay(day) + (said ? ' — ' + said : '') + (x?.opinion?.headline ? '\n' + x.opinion.headline : '') };
   };
   function cell(day, k, label) {
-    const m = mark(day), t = now();
-    const b = el('button', 'pd-ghp-cell' + (m.cls ? ' ' + m.cls : '') + (m.noted ? ' noted' : '') + (day === k ? ' sel' : '') + (day === t ? ' today' : ''), label);
+    const m = mark(day), t = now(), walked = new Set((scouted() || []).map(String)).has(day);   // the squares of the row and of the calendar mark a scouted day alike
+    const b = el('button', 'pd-ghp-cell' + (m.cls ? ' ' + m.cls : '') + (m.noted ? ' noted' : '') + (walked ? ' scouted' : '') + (day === k ? ' sel' : '') + (day === t ? ' today' : ''), label);
     b.type = 'button'; b.title = m.title;
     b.setAttribute('aria-label', m.title.replace('\n', '. '));
     if (day === k) b.setAttribute('aria-current', 'date');
@@ -355,15 +355,11 @@ export function greenhouseKit({ farm, today, scouted, relist, openRef, bottom })
     ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(w => grid.append(el('span', 'wd', w)));
     const lead = (new Date(y, m - 1, 1, 12).getDay() + 6) % 7, n = new Date(y, m, 0, 12).getDate();
     for (let i = 0; i < lead; i++) grid.append(el('span'));
-    const walked = new Set((scouted() || []).map(String));
-    for (let i = 1; i <= n; i++) {
-      const day = `${calMonth}-${String(i).padStart(2, '0')}`, c = cell(day, k, String(i));
-      if (walked.has(day)) c.classList.add('scouted');
-      grid.append(c);
-    }
+    for (let i = 1; i <= n; i++) grid.append(cell(`${calMonth}-${String(i).padStart(2, '0')}`, k, String(i)));
     const key = el('div', 'pd-ghp-key');
     [['ok', 'OK'], ['warn', 'Watch'], ['bad', 'Act now']].forEach(([c, w]) => { const s = el('span'); s.append(el('i', 'pd-ghp-cell ' + c), w); key.append(s); });
     const s = el('span'); s.append(el('i', 'pd-ghp-cell noted'), 'a note'); key.append(s);
+    const sc = el('span'); sc.append(el('i', 'pd-ghp-cell scouted'), 'scouted'); key.append(sc);
     box.append(head, grid, key);
     box.onclick = e => e.stopPropagation();
     return box;

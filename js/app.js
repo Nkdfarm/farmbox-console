@@ -35,7 +35,7 @@ import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { drop3d } from './farmnet3d.js';
-import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet.js';
+import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands, forgetFarmnet } from './farmnet.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant, assistantReady, assistantRouteChanged } from './assistant.js';
 import { liveOpen } from './live.js';
 import { loadCatalog } from './catalog.js';
@@ -364,7 +364,8 @@ function endSession(message) {
   warmed.clear();   // the next person on this tab gets their own offline copies
   forgetConversations();
   drop3d();
-  forgetPass();     // the camera's pass was the last person's
+  forgetFarmnet();  // FarmNet's kept answers are the last person's too
+  forgetPass();    // the camera's pass was the last person's
   signOut();
   resetState();
   location.hash = '';

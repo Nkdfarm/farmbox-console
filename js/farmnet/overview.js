@@ -1,11 +1,10 @@
 // FarmNet Overview: the plan view, bay window, live values, history, centre and mixer buttons
-import { rpc } from '../api.js';
 import { lineChart } from '../connect.js';
 import { site3d } from '../farmnet3d.js';
 import { el, drawer, icon, loading, farmLocal, pref } from '../ui.js';
 import { pause, resume, startIrrigation, startMixing, stop } from './commands.js';
 import { logCard } from './sensors.js';
-import { GROUPS, NO_SENSOR, ask, bad, btn, card, centres, colour, fnTime, link, nextOf, nowLocal, num, page, pinsOf, range, short, show, soft, sourcesOf, unit } from './shell.js';
+import { GROUPS, NO_SENSOR, ask, bad, btn, card, centres, colour, commandLog, isReplay, fnTime, link, nextOf, nowLocal, num, page, pinsOf, range, short, show, soft, sourcesOf, unit } from './shell.js';
 
 // ═══ Overview ═══════════════════════════════════════════════════════════════
 export async function renderFnOverview(mount, farm) {
@@ -13,7 +12,7 @@ export async function renderFnOverview(mount, farm) {
     const today = range(0);
     const [cs, zones, alarms, log, src] = await Promise.all([
       soft(centres(farm)), soft(ask(farm, 'zones')), soft(ask(farm, 'alarms_now')),
-      soft(rpc('farmnet_commands', { p_farm: farm.id, p_limit: 5 }, { quiet: true })), soft(sourcesOf(farm)),
+      soft(commandLog(farm, 5)), soft(sourcesOf(farm)),
     ]);
     const zs = zones.v || [], cl = cs.v || [];
     const pins = pinsOf(farm, src.v || []);
@@ -322,7 +321,8 @@ export async function history(farm, pins, minutes, charts) {
     const ids = g.list.map(p => p.id).join(',');
     const key = `${farm.id}|${ids}|${minutes}`;
     let m = histMemo.get(key);
-    if (!m || Date.now() - m.at > 5 * 60000) {                // history moves slowly: asked again after 5 min
+    if (isReplay()) m = { at: 0, p: ask(farm, 'source_history', { srcId: ids, startTime: nowLocal(minutes), endTime: nowLocal(0) }) };   // the kept copy: never memoised
+    else if (!m || Date.now() - m.at > 5 * 60000) {           // history moves slowly: asked again after 5 min
       m = { at: Date.now(), p: ask(farm, 'source_history', { srcId: ids, startTime: nowLocal(minutes), endTime: nowLocal(0) }) };
       histMemo.set(key, m);
       m.p.catch(() => histMemo.delete(key));

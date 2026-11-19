@@ -26,3 +26,4 @@
 export { renderFnOverview } from './farmnet/overview.js';
 export { renderFnIrrigation, renderFnMixing, renderFnClimate } from './farmnet/control.js';
 export { renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet/sensors.js';
+export { forgetFarmnet } from './farmnet/shell.js';   // the answers kept for opening a page at once (shell.js): gone at sign-out

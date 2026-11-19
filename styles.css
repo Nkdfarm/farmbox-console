@@ -1611,6 +1611,8 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 /* FarmNet page (farmnet.js) */
 .fn-tiles .tile.ok .tile-value { color: var(--success); }
 .fn-tiles a.tile { cursor: pointer; }
+/* the kept copy, drawn while FarmNet is asked: dimmed, nothing to press until the live reading replaces it */
+.fn-page.fn-stale { opacity: .55; pointer-events: none; transition: opacity .2s; }
 .fn-tiles .tile-value { font-size: var(--text-xl, 1.25rem); overflow-wrap: anywhere; }
 .fn-zones { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
 .fn-zones .fc-unit > b { display: block; margin-bottom: 4px; }
@@ -2436,7 +2438,7 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .pd-ghp-cell.ok { background: var(--success-bg); color: var(--success); border-color: transparent; font-weight: 700; }
 .pd-ghp-cell.warn { background: var(--warning-bg); color: var(--warning); border-color: transparent; font-weight: 700; }
 .pd-ghp-cell.bad { background: var(--error-bg); color: var(--error); border-color: transparent; font-weight: 700; }
-.pd-ghp-cell.scouted:not(.ok):not(.warn):not(.bad) { color: var(--text); border-color: var(--border-strong); }
+.pd-ghp-cell.scouted:not(.ok):not(.warn):not(.bad) { color: var(--text); font-weight: 700; background: var(--accent-soft); border-color: var(--accent); }
 .pd-ghp-cell.noted::after { content: ''; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
 .pd-ghp-cell.today { box-shadow: inset 0 -2px 0 var(--accent); }
 .pd-ghp-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }

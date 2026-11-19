@@ -1,5 +1,5 @@
 {
-  "version": "0.9.7",
+  "version": "0.9.8",
   "released": "2026-11-19",
-  "note": "Scouted days marked in the greenhouse day row"
+  "note": "FarmNet opens at once from its last reading"
 }

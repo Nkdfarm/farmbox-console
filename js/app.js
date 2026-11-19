@@ -168,8 +168,13 @@ const unitsOf = f => f?.site ? f.units : f ? [f] : [];
 // `sel` is the units switched on — an overview page shows each of them in turn (Both when they are all on); `focus` is
 // the one a working page opens (the planner, FarmNet, Farm setup), the last one pressed. A page both units share
 // (Tasks, Office, the libraries) shows the buttons greyed: it is the same for all of them.
+// FarmNet keeps a unit of its own (owner, 5 Nov 2026, again 19 Nov 2026): one controller per unit, and only Box1 has
+// one — the site's choice opened FarmNet on Lab, "no controller", and FarmNet looked gone. Its tabs share
+// `fbc_unit_farmnet` (the key from before the new shell, so the unit chosen then is kept); pressing a unit there
+// changes FarmNet only.
+const OWN_FOCUS = { farmnet: 'fbc_unit_farmnet' };
 const shortName = u => (u.name || u.code || '').replace(/^farm(?=[a-z])/i, '') || u.name;
-function unitState(site) {
+function unitState(site, sec = null) {
   const ids = site.units.map(u => u.id);
   let st = null;
   try { st = JSON.parse(pref.get('fbc_units_' + site.id) || 'null'); } catch { /* none */ }
@@ -178,16 +183,18 @@ function unitState(site) {
   if (st?.known) sel = ids.filter(i => sel.includes(i) || !st.known.includes(i));
   if (!sel.length) sel = ids.slice();
   const focus = sel.includes(st?.focus) ? st.focus : sel[0];
+  const own = OWN_FOCUS[sec] && pref.get(OWN_FOCUS[sec]);
+  if (OWN_FOCUS[sec]) return { sel, focus: ids.includes(own) ? own : focus, own: true };
   return { sel, focus };
 }
 const keepUnitState = (site, st) => pref.set('fbc_units_' + site.id, JSON.stringify({ ...st, known: site.units.map(u => u.id) }));
 
-function paintUnitPick(kind) {
+function paintUnitPick(kind, sec) {
   const box = $('unitPick');
   box.textContent = '';
   box.hidden = !farm?.site;
   if (!farm?.site) return;
-  const site = farm, st = unitState(site);
+  const site = farm, st = unitState(site, sec);
   box.classList.toggle('shared', !kind);
   box.title = !kind ? 'This page is the same for every unit of the site'
             : kind === 'work' ? 'This page shows one unit at a time' : 'Switch each unit on or off';
@@ -200,7 +207,11 @@ function paintUnitPick(kind) {
     b.setAttribute('aria-pressed', String(on));
     b.disabled = !kind;
     b.onclick = () => {
-      let { sel, focus } = unitState(site);
+      let { sel, focus, own } = unitState(site, sec);
+      if (kind === 'work' && own) {
+        if (u.id !== focus) { pref.set(OWN_FOCUS[sec], u.id); route(); }
+        return;
+      }
       if (kind === 'work') {
         if (u.id === focus) return;
         focus = u.id;
@@ -218,7 +229,7 @@ function paintUnitPick(kind) {
 }
 
 async function renderUnits(page, site, key, tab, kind) {
-  const { sel, focus } = unitState(site);
+  const { sel, focus } = unitState(site, key.split('/')[0]);
   page.textContent = '';
   const ctx = { switchFarm, reloadFarms: loadFarms, site };
   if (kind === 'work') return tab[2](page, site.units.find(u => u.id === focus), ctx);
@@ -635,8 +646,8 @@ async function route() {
   const title = SECTIONS[sec].title;
   document.title = `${tab[1] === title ? title : tab[1] + ' · ' + title} · Naked Heart`;
   paintTabs(sec, tab);
-  paintUnitPick(farm?.site ? PAGE_KIND[`${sec}/${tab[0]}`] : null);
-  const aiKey = `${sec}/${tab[0]}|${farm?.id || ''}|${farm?.site ? JSON.stringify(unitState(farm)) : ''}`;
+  paintUnitPick(farm?.site ? PAGE_KIND[`${sec}/${tab[0]}`] : null, sec);
+  const aiKey = `${sec}/${tab[0]}|${farm?.id || ''}|${farm?.site ? JSON.stringify(unitState(farm, sec)) : ''}`;
   if (booted && aiKey !== lastAiKey) { lastAiKey = aiKey; assistantRouteChanged(); }
 
   newPage();
@@ -678,7 +689,7 @@ function aiWhere() {
   const page = tab[1] === SECTIONS[sec].title ? tab[1] : `${SECTIONS[sec].title} › ${tab[1]}`;
   let units = null;
   if (farm?.site) {
-    const kind = PAGE_KIND[`${sec}/${tab[0]}`], st = unitState(farm);
+    const kind = PAGE_KIND[`${sec}/${tab[0]}`], st = unitState(farm, sec);
     const on = kind === 'work' ? [st.focus] : kind ? st.sel : farm.units.map(u => u.id);
     units = farm.units.filter(u => on.includes(u.id)).map(u => u.name);
   }

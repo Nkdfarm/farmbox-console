@@ -9,7 +9,7 @@
 // Bump CACHE when the shell changes; the old one is deleted on activate.
 // TAG is the ?v= index.html puts on styles.css and app.js: the two must match
 // (the precached URL is the requested URL), so bump both together.
-const TAG = '20261119e';
+const TAG = '20261119f';
 const CACHE = 'farmbox-console-' + TAG;
 
 const SHELL = [
@@ -106,6 +106,7 @@ const SHELL = [
   './js/scouting/state.js',
   './js/scouting/thumbs.js',
   './js/scouting/zones.js',
+  './js/scouting/zapi.js',
   './js/team/index.js',
   './js/team/jobs.js',
   './js/team/plan.js',

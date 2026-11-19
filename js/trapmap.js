@@ -14,7 +14,7 @@
 // zone's health section, all of them in the All zones report), every trap's list, a trap's window with its history,
 // Map size… and Traps and limits…. A kit per page copy, so two units drawn side by side do not share a farm.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc } from './api.js';
+import { rpc } from './scouting/zapi.js';   // zones by their number only, as on the scouting report
 import { el, drawer, num, toast, busy, input, field, trapCheckPill, shortDay, farmDay, emptyState } from './ui.js';
 import { openViewer } from './viewer.js';
 import { renderIpm } from './ipm.js';

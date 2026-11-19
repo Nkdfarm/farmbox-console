@@ -1,5 +1,5 @@
 // Scouting page: the greenhouse reference, the extra scoutings, section pills
-import { rpc, cachedRpc } from '../api.js';
+import { rpc, cachedRpc } from './zapi.js';
 import { openCase } from '../cases.js';
 import { openSump } from '../sump.js';
 import { el, toast } from '../ui.js';

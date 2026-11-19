@@ -1,5 +1,5 @@
 // Scouting page: shared state S, constants, small helpers, robot helpers, zone filters, the read queue
-import { rpc } from '../api.js';
+import { rpc } from './zapi.js';
 import { robotStrip } from '../robot.js';
 import { el, parseNoon as parse, readNote } from '../ui.js';
 import { reload } from './index.js';

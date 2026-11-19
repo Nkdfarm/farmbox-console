@@ -1,5 +1,5 @@
 // Scouting page: what was found (window, pressure line, case strip, crop bar)
-import { rpc } from '../api.js';
+import { rpc } from './zapi.js';
 import { openCase } from '../cases.js';
 import { loading, el, num, cropAvatar, toast, busy, drawer, ymd, parseNoon as parse, shortDay, farmDay, emptyState } from '../ui.js';
 import { openViewer, photoTitle } from '../viewer.js';

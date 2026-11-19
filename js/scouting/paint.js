@@ -1,5 +1,5 @@
 // Scouting page: the page paint (day rows, zone bar, dashboard)
-import { rpc } from '../api.js';
+import { rpc } from './zapi.js';
 import { newCase } from '../cases.js';
 import { el, pageHead, emptyState } from '../ui.js';
 import { unfiledButton } from '../unfiled.js';

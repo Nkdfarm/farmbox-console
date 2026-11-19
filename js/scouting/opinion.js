@@ -1,5 +1,5 @@
 // Scouting page: the AI opinion card of a zone
-import { rpc, fn } from '../api.js';
+import { rpc, fn } from './zapi.js';
 import { el, toast, busy, shortDay, farmWhen } from '../ui.js';
 import { paint } from './paint.js';
 import { S, cur } from './state.js';

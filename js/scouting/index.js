@@ -1,5 +1,5 @@
 // Scouting page: render, older-days read, load and reload
-import { rpc, openFast } from '../api.js';
+import { rpc, openFast } from './zapi.js';
 import { useFarm } from '../cases.js';
 import { greenhouseKit } from '../greenhouse.js';
 import { trapKit } from '../trapmap.js';

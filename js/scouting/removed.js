@@ -1,5 +1,5 @@
 // Scouting page: removing a picture and the removed-pictures window
-import { rpc } from '../api.js';
+import { rpc } from './zapi.js';
 import { el, num, toast, busy, drawer, confirmDrawer, shortDay, farmWhen, emptyState } from '../ui.js';
 import { reload } from './index.js';
 import { S, dayData } from './state.js';

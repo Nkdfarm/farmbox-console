@@ -1,5 +1,5 @@
 // Scouting page: one day row, its zone bands and the viewer context
-import { rpc, cachedRpc } from '../api.js';
+import { rpc, cachedRpc } from './zapi.js';
 import { openCase } from '../cases.js';
 import { robotSection } from '../robot.js';
 import { el, cropAvatar, farmTime, farmWhen, emptyState } from '../ui.js';

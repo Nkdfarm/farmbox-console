@@ -1,5 +1,5 @@
 // Scouting page: the opinions button and the feed window
-import { rpc } from '../api.js';
+import { rpc } from './zapi.js';
 import { loading, el, num, toast, busy, drawer, farmWhen, emptyState } from '../ui.js';
 import { openViewer, tagChips, noteChip, partLabel, openOpinions, firstComments, aiBlocks } from '../viewer.js';
 import { socialLine } from './cards.js';

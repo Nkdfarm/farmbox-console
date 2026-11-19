@@ -1,5 +1,5 @@
 // Scouting page: photo thumbnails and panel reads per day (queued, kept copy, live)
-import { cachedRpc } from '../api.js';
+import { cachedRpc } from './zapi.js';
 import { el, ymd, parseNoon as parse } from '../ui.js';
 import { S, calm } from './state.js';
 

@@ -10,8 +10,8 @@
 // validates a plan, approves anything or marks a task done. Pictures, PDFs,
 // Excel and CSV files can be attached; the function reads them.
 //
-// The compact band (19 Nov 2026, owner): the head is the voice buttons and the conversation's title (no avatar, no gear, no
-// prepared questions); the question box has the page and units as one small line, "New chat" and Send at the bottom; the
+// The compact band (19 Nov 2026, owner): the head is the conversation's title (no avatar, no gear, no
+// prepared questions); the question box has the voice button, the units as one small line, "New chat", "To check" and Send; the
 // settings of the cards are in Settings › Assistant. Each page keeps its own conversation; "To check" asks what on the page needs checking.
 //
 // The band (19 Nov 2026): the answers on the left two thirds, the question on the right third, with the page and the units
@@ -21,7 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
-import { createVoice, voiceButtons } from './assistant-voice.js';
+import { createMic } from './assistant-local.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -33,8 +33,7 @@ const CHECK_ASK = 'Check the page on screen and tell me what needs checking: lat
 const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dropped from this browser
 
 let ctx = null;              // { farm(), refresh() } from app.js
-let local = null;   // assistant-local.js, once loaded
-let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, voice, voiceBtns;
+let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, mic;
 let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
 const convos = new Map();    // farm id | page → { messages (as the function returned them), view, notes, chatId, at }
 let files = [];
@@ -295,7 +294,11 @@ let sending = false;   // one question at a time: Enter or a chip during an answ
 // dropped chip change it; opts.voice: asked by voice
 // → { reply, cards } of the answer, for the voice to read out; null when nothing came back
 async function send(text, opts = {}) {
-  if (sending) { if (opts.voice) toast('Still answering the last question: ask again in a moment', ''); return null; }
+  if (sending) {
+    if (opts.voice) { if (!input.value.trim()) input.value = text || ''; toast('Still answering the last question: your words are in the box, press Send', ''); }   // what was said is not lost
+    return null;
+  }
+  if (!opts.voice) mic?.hush();
   sending = true;   // before the first await: a second Enter, or a phrase, while the first reads the database is refused
   try { return await sendNow(text, opts); } finally { sending = false; }
 }
@@ -303,13 +306,13 @@ async function sendNow(text, opts) {
   const c = convo(), key = ckey();
   const f = ctx.farm();
   text = (text ?? input.value).trim();
-  if (!f) { toast('Choose a FarmBox first', 'bad'); return null; }
+  if (!f) { if (opts.voice && !input.value.trim()) input.value = text; toast('Choose a FarmBox first', 'bad'); return null; }
   if (!text && !files.length) return null;
   if (mode !== 'chat') { mode = 'chat'; paint(); }
   if (closed()) setFrac(AUTO);   // a question slides the band open to a fifth of the screen (owner, 19 Nov 2026)
   const sent = opts.check ? [] : files.slice();
   if (!opts.check) { files = []; paintFiles(); }
-  if (!opts.check) input.value = '';
+  if (!opts.check && !opts.voice) input.value = '';   // what was said does not wipe a half-typed draft
   const notes = c.notes.length ? `(Since your last answer I ${c.notes.join('; ')}.)\n` : '';
   const w = ctx.where?.() || {}, about = [];
   if ((opts.check || !ctxOff.page) && w.page) about.push('the page ' + w.page);
@@ -394,7 +397,7 @@ function setFrac(f, keep = true) {
   frac = Math.max(0, Math.min(MAX, f));
   if (frac > 0) lastOpen = frac;
   band.classList.toggle('closed', frac === 0);
-  if (frac === 0) voice?.stop();   // the voice buttons are hidden when closed: nothing may keep listening unseen
+  if (frac === 0) mic?.cancel();   // closed: nothing keeps recording or reading unseen
   band.style.height = frac === 0 ? '' : Math.round(frac * innerHeight) + 'px';
   grip.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
   grip.title = frac === 0 ? 'Click to open the assistant, or drag it down' : 'Click to close the assistant, or drag to make it taller or shorter';
@@ -411,7 +414,7 @@ function loadFrac() {
 const snap = f => f < 0.12 ? 0 : SNAPS.reduce((a, x) => Math.abs(x - f) < Math.abs(a - f) ? x : a, SNAPS[1]);
 function openBand() { setFrac(lastOpen || AUTO); }
 function setOpen(open) {
-  if (open) { if (closed()) openBand(); paint(); setTimeout(() => input.focus(), 30); }
+  if (open) { if (closed()) openBand(); paint(); setTimeout(() => input.focus(), 30); mic?.warm(); }
   else setFrac(0);
 }
 
@@ -481,20 +484,12 @@ export function initAssistant(context) {
   band = document.getElementById('aiBand');
   const out = el('div', 'ai-out'), inn = el('div', 'ai-in');
   const head = el('div', 'ai-head');
-  // the voice: two icons — the browser's own voice, and the realtime one when it is connected (assistant-voice.js)
-  voice = createVoice({
-    ask: t => send(t, { voice: true }),
-    heard: (t, final) => { if (!final) input.value = t; else input.value = ''; },
-    state: (kind, st) => { voiceBtns?.paint(kind, st); },
-    note: t => voiceBtns?.note(t),
-    // the on-device voice (Whisper + Kokoro): its code and models load when the icon is first pressed
-    realtime: { start: async ctl => { local = await import('./assistant-local.js'); return local.startLocal(ctl); }, stop: () => local?.stopLocal() },
-  });
-  voiceBtns = voiceButtons(voice, { realtime: true });
+  // the voice: one button in the question box, record by clicks (assistant-local.js)
+  mic = createMic({ ask: t => send(t, { voice: true }) });
   titleEl = el('b', 'ai-title', 'New chat');
   ageEl = el('span', 'ai-age');
   peek = el('span', 'ai-peek');
-  head.append(voiceBtns, titleEl, ageEl, peek);
+  head.append(titleEl, ageEl, peek);
   list = el('div', 'ai-list');
   busyRow = el('div', 'ai-busy'); busyRow.hidden = true;
   const bar = el('div', 'loading-bar busy'); bar.append(el('i'));
@@ -524,7 +519,7 @@ export function initAssistant(context) {
   fresh.title = 'Start a new conversation';
   fresh.onclick = () => {
     if (sending) return;   // an answer on its way would land in a conversation that is gone
-    voice.stop(); mode = 'chat';
+    mic.cancel(); mode = 'chat';
     convos.set(ckey(), { messages: [], view: [], notes: [], chatId: null, at: 0 }); save();
     paint(); input.focus();
   };
@@ -532,9 +527,21 @@ export function initAssistant(context) {
   checkBtn = el('button', 'btn btn-sm ai-check', CHECK);
   checkBtn.title = 'Ask the assistant what on this page needs checking';
   checkBtn.onclick = () => send(CHECK, { check: true });
-  const row = el('div', 'row ai-send'); row.append(attach, ctxRow, el('div', 'ai-attached'), el('div', 'spacer'), fresh, checkBtn, sendBtn);
+  const row = el('div', 'row ai-send'); row.append(attach, mic.button, mic.note, ctxRow, el('div', 'ai-attached'), el('div', 'spacer'), fresh, checkBtn, sendBtn);
   inn.append(input, row, fileIn);
   band.replaceChildren(out, inn);
+
+  // the middle mouse button starts and stops the voice from anywhere on the page (not over a link or a field, where it keeps
+  // its own job: a new tab, a paste). mousedown is stopped so that Windows does not begin its scroll-by-mouse
+  // a middle drag dollies the 3D map and pans the photo viewer, so only a click that did not move counts, and never there
+  const middle = e => e.button === 1 && band?.isConnected && ctx.farm() && !e.target.closest?.('a[href], input, textarea, select, canvas, .viewer');
+  let mid = null;
+  document.addEventListener('mousedown', e => { if (middle(e)) { e.preventDefault(); mid = { x: e.clientX, y: e.clientY }; } else mid = null; }, true);
+  document.addEventListener('mouseup', e => {
+    const d = mid; mid = null;
+    if (d && e.button === 1 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) mic.toggle();
+  }, true);
+  document.addEventListener('auxclick', e => { if (middle(e)) e.preventDefault(); }, true);
 
   grip = el('div', 'ai-grip');
   grip.setAttribute('role', 'separator');
@@ -555,7 +562,7 @@ let shownKey = '';
 export function assistantRouteChanged() {
   ctxOff = { page: false, units: false };
   const k = ckey();
-  if (k !== shownKey) { shownKey = k; voice?.stop(); }   // another page: its own conversation, and the voice does not follow
+  if (k !== shownKey) { shownKey = k; mic?.cancel(); }   // another page: its own conversation, and the voice does not follow
   if (band && mode === 'chat') paint(); else paintContext();
 }
 
@@ -563,5 +570,5 @@ export function assistantRouteChanged() {
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
 // the dashboard's "To decide" tile for cards that wait for a manager opens them here
 export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
-export function forgetAssistant() { voice?.stop(); mode = 'chat'; convos.clear(); if (band) { setFrac(0, false); paint(); } }
-export function assistantFarmChanged() { voice?.stop(); mode = 'chat'; if (band) paint(); }
+export function forgetAssistant() { mic?.destroy(); mode = 'chat'; convos.clear(); if (band) { setFrac(0, false); paint(); } }
+export function assistantFarmChanged() { mic?.cancel(); mode = 'chat'; if (band) paint(); }

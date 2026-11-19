@@ -2693,6 +2693,9 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .sec-tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
 .sec-tabs + .page { padding-top: 0; }
 
+.tb-slot { display: flex; align-items: center; gap: 6px; align-self: center; flex: none; }
+.tb-slot:empty { display: none; }
+.tb-slot .btn-icon svg { width: 16px; height: 16px; }
 .unit-pick { display: flex; gap: 6px; align-self: center; flex: none; }
 .unit-pick .unit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px; font: inherit; font-size: var(--text-sm);
   font-weight: 500; color: var(--text-muted); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius-md); cursor: pointer; }

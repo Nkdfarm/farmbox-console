@@ -1,6 +1,6 @@
 // FarmNet pages: the shared frame (ask/send, readings helpers, kept answers, pins, page, card, table, centres)
 import { fn, rpc } from '../api.js';
-import { el, pageHead, toast, loading, farmDate, farmLocal, pref, addDays, ymd } from '../ui.js';
+import { el, pageHead, toast, loading, farmDate, farmLocal, pref, addDays, ymd, icon } from '../ui.js';
 
 const FN = 'farmnet';
 // ── the last answers, kept on this computer (stale while revalidate) ────────
@@ -112,20 +112,31 @@ export const setPins = (farm, list) => pref.set(PIN_KEY(farm), JSON.stringify(li
 
 // ── the frame every tab shares ──────────────────────────────────────────────
 let token = 0;   // a newer page or refresh wins: an older one draws nothing
-const MAY = 'Commands go straight to the greenhouse: each one asks you to confirm and is logged (Commands).';
 const READ_ONLY = 'Read only: the farm admin and the farm manager may send commands.';
+
+// 19 Nov 2026 (owner: "more compact"): no sentence under the tabs any more (the blurb the tabs pass is not shown; only
+// a person who may not send commands is told so), and Refresh is a button with no text, lifted by the shell into the
+// tool bar next to the unit buttons (class tb-refresh, app.js collectActions). What was printed beside it — the time of
+// the reading, "again every minute", "updating…" — is its tooltip.
+const refreshButton = (onclick, tip) => {
+  const b = el('button', 'btn btn-sm btn-icon tb-refresh'); b.type = 'button';
+  b.append(icon('refresh')); b.setAttribute('aria-label', 'Refresh'); b.title = tip; b.onclick = onclick;
+  return b;
+};
+// a head with nothing to say is not drawn (its buttons are in the tool bar)
+const headOf = (note, refresh) => {
+  const h = pageHead(null, note, refresh);
+  if (!note) h.style.display = 'none';
+  return h;
+};
 
 export async function page(mount, farm, blurb, draw, opts = {}) {
   const my = ++token;
   const again = q => page(mount, farm, blurb, draw, { ...opts, quiet: q });
   const hello = helloOf(farm);              // FarmNet is asked at once, while the kept copy is drawn
   hello.catch(() => {});
-  const head = (text, refresh) => pageHead(null, blurb, el('span', 'hint', text), refresh);
-  const refreshBtn = () => {
-    const b = el('button', 'btn btn-sm', 'Refresh'); b.type = 'button';
-    b.onclick = () => page(mount, farm, blurb, draw, { ...opts, quiet: false, noStale: true });
-    return b;
-  };
+  let staleBtn = null;                      // the Refresh of the kept copy on screen, to say when FarmNet did not answer
+  const refreshBtn = tip => refreshButton(() => page(mount, farm, blurb, draw, { ...opts, quiet: false, noStale: true }), tip);
 
   // 1. the kept copy, if there is one and it holds everything the page asks
   let shownStale = false;
@@ -139,7 +150,8 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
     try { await draw(ctx0, body0); } catch { ok = false; } finally { replaying = false; }
     if (ok && !missed && my === token && mount.isConnected) {
       const at = Number.isFinite(oldest) ? oldest : kh.at;
-      mount.replaceChildren(head(`last reading ${farmLocal(new Date(at).toISOString()).slice(5, 16).replace('T', ' ')} · updating…`, refreshBtn()), body0);
+      staleBtn = refreshBtn(`Refresh · last reading ${farmLocal(new Date(at).toISOString()).slice(5, 16).replace('T', ' ')} · updating…`);
+      mount.replaceChildren(headOf(null, staleBtn), body0);
       shownStale = true;
     }
   }
@@ -151,7 +163,7 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
   const failedAsk = e => {
     // a failed re-read keeps what is on screen (the copy, dimmed, says so) and tries again at the next minute
     toast(`FarmNet: ${e.message}`, 'bad');
-    if (shownStale) mount.querySelector('.hint')?.replaceChildren('FarmNet did not answer: this is the last reading');
+    if (shownStale && staleBtn) staleBtn.title = 'Refresh · FarmNet did not answer: this is the last reading';
     if (opts.quiet && opts.every) setTimeout(() => { if (mount.isConnected && my === token) again(true); }, opts.every);
   };
   let h;
@@ -181,10 +193,8 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
     if (shownStale) { failedAsk(failed); return; }   // the copy on screen is better than an error
     body.replaceChildren(el('div', 'note bad', failed.message));
   }
-  const refresh = el('button', 'btn btn-sm', 'Refresh'); refresh.type = 'button';
-  refresh.onclick = () => again(false);
-  const stamp = el('span', 'hint', `read ${farmLocal(new Date().toISOString()).slice(11)}${opts.every ? ' · again every minute' : ''}`);
-  mount.replaceChildren(pageHead(null, opts.commands ? `${blurb} ${ctx.may ? MAY : READ_ONLY}` : blurb, stamp, refresh), body);
+  const refresh = refreshButton(() => again(false), `Refresh · read ${farmLocal(new Date().toISOString()).slice(11)}${opts.every ? ' · again every minute' : ''}`);
+  mount.replaceChildren(headOf(opts.commands && !ctx.may ? READ_ONLY : null, refresh), body);
   // the Overview reads again by itself while it is on screen (not while the window is hidden, not while a drawer is open)
   if (opts.every) {
     const tick = () => {

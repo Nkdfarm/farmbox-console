@@ -197,13 +197,17 @@ function paintUnitPick(kind, sec) {
   const site = farm, st = unitState(site, sec);
   box.classList.toggle('shared', !kind);
   box.title = !kind ? 'This page is the same for every unit of the site'
-            : kind === 'work' ? 'This page shows one unit at a time' : 'Switch each unit on or off';
+            : kind === 'work' ? 'This page shows one unit at a time' : 'Lab, Box1 or both';
+  // one choice among the units and Both — nothing is switched on or off one by one any more (19 Nov 2026).
+  // A working page shows one unit at a time: Both is greyed there.
+  const all = site.units.map(u => u.id);
+  const both = st.sel.length === all.length;
   site.units.forEach(u => {
     const b = el('button', 'unit-btn'); b.type = 'button';
     const d = el('span', 'unit-dot'); d.style.background = u.badge_colour || 'var(--text-muted)';
     b.append(d, el('span', null, shortName(u)));
     b.title = u.name;
-    const on = kind === 'work' ? u.id === st.focus : st.sel.includes(u.id);
+    const on = kind === 'work' ? u.id === st.focus : !both && st.sel.length === 1 && st.sel[0] === u.id;
     b.setAttribute('aria-pressed', String(on));
     b.disabled = !kind;
     b.onclick = () => {
@@ -216,16 +220,27 @@ function paintUnitPick(kind, sec) {
         if (u.id === focus) return;
         focus = u.id;
         if (!sel.includes(u.id)) sel = [u.id];
-      } else if (sel.includes(u.id)) {
-        if (sel.length === 1) return;              // one unit stays on
-        sel = sel.filter(i => i !== u.id);
-        if (focus === u.id) focus = sel[0];
-      } else { sel = site.units.map(x => x.id).filter(i => i === u.id || sel.includes(i)); focus = u.id; }
+      } else {
+        if (sel.length === 1 && sel[0] === u.id) return;
+        sel = [u.id]; focus = u.id;
+      }
       keepUnitState(site, { sel, focus });
       route();
     };
     box.append(b);
   });
+  const bb = el('button', 'unit-btn'); bb.type = 'button';
+  bb.append(el('span', null, all.length > 2 ? 'All' : 'Both'));
+  bb.title = 'Every unit of the site, each in turn';
+  bb.setAttribute('aria-pressed', String(kind !== 'work' && both));
+  bb.disabled = !kind || kind === 'work';
+  bb.onclick = () => {
+    const { sel, focus } = unitState(site, sec);
+    if (sel.length === all.length) return;
+    keepUnitState(site, { sel: all, focus });
+    route();
+  };
+  box.append(bb);
 }
 
 async function renderUnits(page, site, key, tab, kind) {
@@ -264,9 +279,13 @@ let actsQueued = false;
 let lastAiKey = '';   // the page and units the assistant's chips were last drawn for
 function collectActions() {
   actsQueued = false;
-  const groups = [];
+  const groups = [], bar = [];
   $('page').querySelectorAll('.page-head').forEach(h => {
     const acts = h._acts;
+    // a button marked tb-refresh goes to the tool bar, before the unit buttons (FarmNet's Refresh, no text); remembered on
+    // the head, because once lifted it is no longer among the head's buttons
+    if (acts && !h._bar) { const l = [...acts.querySelectorAll(':scope > .tb-refresh')]; if (l.length) h._bar = l; }
+    if (h._bar) bar.push(...h._bar);
     if (!acts || !acts.childElementCount) return;
     const g = el('div', 'act-group');
     const blk = h.closest('.unit-block');
@@ -279,6 +298,7 @@ function collectActions() {
     groups.push(g);
   });
   $('pageActions').replaceChildren(...groups);
+  $('tbRefresh').replaceChildren(...bar);
   paintActionsRow();
 }
 const paintActionsRow = () => { $('actions').hidden = !$('pageActions').childElementCount && $('upd').hidden; };

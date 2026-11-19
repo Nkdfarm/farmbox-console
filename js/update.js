@@ -12,12 +12,13 @@
 // plain reload can be answered from the browser's own HTTP cache (GitHub
 // Pages sends max-age=600) and the card would come straight back.
 // ═══════════════════════════════════════════════════════════════════════════
-import { el, icon } from './ui.js';
+import { el } from './ui.js';
 
-export const VERSION = '0.9.8';
+export const VERSION = '0.9.9';
 
 const DISMISSED = 'fbc_update_dismissed';
 const TARGET    = 'fbc_update_target';
+const TARGET_AT = 'fbc_update_target_at';   // when Update now was pressed for it
 const LAST      = 'fbc_last_version';
 // Every minute: version.json is a few bytes, and at five minutes a person who
 // had just been told "it is published" sat looking at a console that said nothing.
@@ -58,58 +59,57 @@ async function check() {
   const steady = latest && latest !== VERSION && seen === latest;
   seen = latest;
   if (Date.now() - notYet < 5 * 60 * 1000) return;
-  offer(steady ? latest : null);
   if (!steady) return;
   if (get(sessionStorage, DISMISSED) === latest) return;
 
-  // "Update now" was already pressed for this version and here we are, still
-  // on the old one. Say that instead of offering the same button again.
-  show(latest, get(sessionStorage, TARGET) === latest);
+  // "Update now" was pressed for this version and here we are, still on the old one: the CDN served the old files
+  // again (the loop of 18 Sept and again 19 Nov 2026, when 0.9.7 and 0.9.8 went out minutes apart). Do not offer the
+  // button straight away, for the person to press again and land here again: say so, hold five minutes since the
+  // press, then offer it once more as new.
+  if (get(sessionStorage, TARGET) === latest) {
+    const since = Date.now() - (Number(get(sessionStorage, TARGET_AT)) || 0);
+    if (since < 5 * 60 * 1000) { show(latest, true); return; }
+    try { sessionStorage.removeItem(TARGET); sessionStorage.removeItem(TARGET_AT); } catch { /* ignore */ }
+  }
+  show(latest, false);
 }
 
 function show(latest, stuck) {
-  document.getElementById('updateCard')?.remove();
+  const old = document.getElementById('updateCard');
+  if (old && old.dataset.v === latest && old.dataset.stuck === String(stuck)) return;   // already there: not rebuilt (it flickered every minute)
+  old?.remove();
 
   const card = el('div', 'update-card');
   card.id = 'updateCard';
+  card.dataset.v = latest;
+  card.dataset.stuck = String(stuck);
   card.setAttribute('role', 'status');
 
   const text = el('div', 'update-text');
   text.append(el('b', null, `Version ${latest} is ready`));
   text.append(el('span', null, stuck
-    ? 'The update did not finish — close every Naked Heart tab and open it again.'
+    ? 'This connection still serves the old files. It will be offered again in a few minutes.'
     : `You are on ${VERSION}. Nothing you have typed is lost by updating.`));
-
-  const go = el('button', 'btn btn-primary btn-sm', 'Update now');
-  go.onclick = () => update(latest);
 
   const no = el('button', 'btn btn-ghost btn-sm', '✕');
   no.setAttribute('aria-label', 'Not now');
   no.onclick = () => { set(sessionStorage, DISMISSED, latest); card.remove(); };
 
-  card.append(el('span', 'update-mark', '✦'), text, go, no);
+  card.append(el('span', 'update-mark', '✦'), text);
+  if (!stuck) {
+    const go = el('button', 'btn btn-primary btn-sm', 'Update now');
+    go.onclick = () => update(latest);
+    card.append(go);
+  }
+  card.append(no);
   document.body.append(card);
 }
 
-// ── the top bar: an Update button, then a progress bar ─────────────────────
-// Between Connected and the gear. The card above explains; this is the part a
-// person cannot miss, and where the update shows it is actually happening.
+// ── the top bar: the progress of an update, nothing to press ───────────────
+// Between Connected and the gear. The card above is the one place the update is offered (owner, 19 Nov 2026: "the
+// pop up only on bottom"); this is where it shows it is actually happening.
 const slot = () => document.getElementById('upd');
 let hideTimer;
-
-function offer(latest) {
-  const s = slot();
-  if (!s || updating || justUpdated) return;
-  s.textContent = '';
-  s.hidden = !latest;
-  if (!latest) return;
-  const b = el('button', 'btn btn-sm btn-primary upd-btn');
-  b.type = 'button';
-  b.append(icon('download'), el('span', null, `Update to ${latest}`));
-  b.title = `Version ${latest} is ready — you are on ${VERSION}`;
-  b.onclick = () => update(latest);
-  s.append(b);
-}
 
 function progress(pct, label, busy = false) {
   const s = slot();
@@ -182,6 +182,7 @@ async function update(latest) {
   // Reloading into the old files is the loop the owner saw: the new files were checked above.
 
   set(sessionStorage, TARGET, latest);
+  set(sessionStorage, TARGET_AT, String(Date.now()));
   const params = new URLSearchParams(location.search);
   params.set('updated', Date.now());
   location.replace(location.pathname + '?' + params + location.hash);
@@ -228,7 +229,7 @@ function afterUpdate() {
   }
   const pressed = get(sessionStorage, TARGET) === VERSION;
   if (pressed) {
-    try { sessionStorage.removeItem(TARGET); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(TARGET); sessionStorage.removeItem(TARGET_AT); } catch { /* ignore */ }
   }
 
   const last = get(localStorage, LAST);

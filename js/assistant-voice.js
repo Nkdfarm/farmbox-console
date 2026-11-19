@@ -5,8 +5,8 @@
 //  · Browser voice: the browser's own speech recognition and speech synthesis. Free and nothing of ours is involved, but
 //    Chrome and Edge send the audio to their own speech service (Google's, Microsoft's) to recognise it. It takes turns: it listens, the assistant answers, it speaks, it listens again. It cannot be interrupted by
 //    speaking over it (the microphone would hear the speaker), a tap on the icon stops it.
-//  · Realtime voice: a streaming voice service the person can talk over. Built in its own file when the service is
-//    chosen (assistant-realtime.js); until then the icon says so.
+//  · On-device voice (the second icon): Whisper for hearing and Kokoro for a natural female voice, both running in the
+//    browser (assistant-local.js), you can talk over it. No account; the first use downloads about 200 MB.
 //
 // Neither of them presses "Do it": a card is read out as "a card is waiting" and stays a tap on the screen.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -54,7 +54,7 @@ export function createVoice(cb) {
   let kind = 'off';       // 'off' | 'browser' | 'realtime'
   let state = 'off';
   let rec = null, silent = 0, token = 0;
-  const set = s => { state = s; cb.state?.(kind, s); };
+  const set = s => { state = s; cb.state?.(kind, s); if (s === 'off') cb.note?.(''); };
 
   function stopAll() {
     token++;
@@ -128,10 +128,10 @@ export function createVoice(cb) {
     },
     async toggleRealtime() {
       if (kind === 'realtime') { stopAll(); return; }
-      if (!cb.realtime) { toast('Realtime voice is not connected yet', ''); return; }
+      if (!cb.realtime) { toast('The on-device voice is not available', ''); return; }
       stopAll();
-      kind = 'realtime';
-      try { await cb.realtime.start({ set, stop: () => stopAll() }); }
+      kind = 'realtime'; set('loading');   // the icon answers at once; the first press has a download behind it
+      try { await cb.realtime.start({ set, stop: () => stopAll(), ask: cb.ask, heard: cb.heard, note: cb.note }); }
       catch (e) { toast(e.message || 'Realtime voice did not start', 'bad'); stopAll(); }
     },
     stop: stopAll,
@@ -148,9 +148,11 @@ export function voiceButtons(voice, { realtime }) {
     return b;
   };
   const b1 = mk('browser', MIC, 'Talk to it: browser voice — it listens, answers aloud, listens again. A tap stops it. The browser sends the audio to its own speech service', () => voice.toggleBrowser());
-  const b2 = mk('realtime', WAVES, realtime ? 'Talk to it: realtime voice — natural, you can talk over it' : 'Realtime voice — not connected yet', () => voice.toggleRealtime());
+  const b2 = mk('realtime', WAVES, realtime ? 'Talk to it: on-device voice — natural, you can talk over it, nothing leaves this computer. The first use downloads about 200 MB' : 'On-device voice — not available', () => voice.toggleRealtime());
   if (!realtime) b2.classList.add('soon');
-  wrap.append(b1, b2);
+  const note = el('span', 'ai-vnote');
+  wrap.append(b1, b2, note);
+  wrap.note = t => { note.textContent = t || ''; };
   wrap.paint = (kind, state) => {
     [[b1, 'browser'], [b2, 'realtime']].forEach(([b, k]) => {
       const on = kind === k && state !== 'off';

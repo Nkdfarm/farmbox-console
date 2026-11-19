@@ -2723,12 +2723,15 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .ai-title { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
 .ai-age { flex: none; color: var(--text-faint); font-size: var(--text-xs); white-space: nowrap; }
 .ai-age:empty { display: none; }
-.ai-voice { display: inline-flex; gap: 2px; flex: none; }
+.ai-vnote { margin-left: 6px; color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; align-self: center; }
+.ai-vnote:empty { display: none; }
+.ai-voice { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 .ai-vbtn { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; }
 .ai-vbtn.on { color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
 .ai-vbtn.soon { opacity: .45; }
 .ai-vbtn[data-state="listening"] { animation: ai-pulse 1.4s ease-in-out infinite; }
-.ai-vbtn[data-state="thinking"] { animation: ai-pulse .7s ease-in-out infinite; }
+.ai-vbtn[data-state="thinking"], .ai-vbtn[data-state="loading"] { animation: ai-pulse .7s ease-in-out infinite; }
+.ai-vbtn[data-state="capturing"] { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); }
 .ai-vbtn[data-state="speaking"] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 @keyframes ai-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 25%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .ai-vbtn[data-state] { animation: none; } }

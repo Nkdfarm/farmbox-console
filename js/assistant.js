@@ -33,6 +33,7 @@ const CHECK_ASK = 'Check the page on screen and tell me what needs checking: lat
 const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dropped from this browser
 
 let ctx = null;              // { farm(), refresh() } from app.js
+let local = null;   // assistant-local.js, once loaded
 let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, voice, voiceBtns;
 let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
 const convos = new Map();    // farm id | page → { messages (as the function returned them), view, notes, chatId, at }
@@ -294,7 +295,7 @@ let sending = false;   // one question at a time: Enter or a chip during an answ
 // dropped chip change it; opts.voice: asked by voice
 // → { reply, cards } of the answer, for the voice to read out; null when nothing came back
 async function send(text, opts = {}) {
-  if (sending) return null;
+  if (sending) { if (opts.voice) toast('Still answering the last question: ask again in a moment', ''); return null; }
   sending = true;   // before the first await: a second Enter, or a phrase, while the first reads the database is refused
   try { return await sendNow(text, opts); } finally { sending = false; }
 }
@@ -485,9 +486,11 @@ export function initAssistant(context) {
     ask: t => send(t, { voice: true }),
     heard: (t, final) => { if (!final) input.value = t; else input.value = ''; },
     state: (kind, st) => { voiceBtns?.paint(kind, st); },
-    realtime: null,   // the service is not chosen yet
+    note: t => voiceBtns?.note(t),
+    // the on-device voice (Whisper + Kokoro): its code and models load when the icon is first pressed
+    realtime: { start: async ctl => { local = await import('./assistant-local.js'); return local.startLocal(ctl); }, stop: () => local?.stopLocal() },
   });
-  voiceBtns = voiceButtons(voice, { realtime: false });
+  voiceBtns = voiceButtons(voice, { realtime: true });
   titleEl = el('b', 'ai-title', 'New chat');
   ageEl = el('span', 'ai-age');
   peek = el('span', 'ai-peek');

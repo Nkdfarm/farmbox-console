@@ -7,9 +7,9 @@
 export function spokenText(text, cards = 0) {
   let t = String(text || '').replace(/```[\s\S]*?```/g, ' ').replace(/[*`#_>|]/g, '').replace(/^\s*[-•]\s+/gm, '').replace(/\s+/g, ' ').trim();
   let cut = false;
-  if (t.length > 600) {
-    const end = Math.max(t.lastIndexOf('. ', 600), t.lastIndexOf('? ', 600), t.lastIndexOf('! ', 600));
-    t = t.slice(0, end > 200 ? end + 1 : 600); cut = true;
+  if (t.length > 350) {   // about half a minute of speech: the rest is on screen (owner, 19 Nov 2026: it took too long to read)
+    const end = Math.max(t.lastIndexOf('. ', 350), t.lastIndexOf('? ', 350), t.lastIndexOf('! ', 350));
+    t = t.slice(0, end > 120 ? end + 1 : 350); cut = true;
   }
   if (cut) t += ' The rest is on screen.';
   if (cards) t += cards === 1 ? ' One card is waiting for you on screen.' : ` ${cards} cards are waiting for you on screen.`;

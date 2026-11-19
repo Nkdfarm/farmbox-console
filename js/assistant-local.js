@@ -13,7 +13,8 @@
 // (assistant.js). Nothing here presses "Do it": a card is announced as waiting and stays a tap.
 //
 // Whisper base.en and Kokoro 82M (both Apache-2.0, quantised) run in a worker (assistant-local-worker.js), so the page
-// stays alive; about 200 MB are downloaded the first time and kept by the browser. Recording does not wait for them:
+// stays alive; about 450 MB are downloaded the first time and kept by the browser (WebGPU: the graphics chip does the work;
+// without it, a smaller 200 MB set on wasm, which is slow). Recording does not wait for them:
 // they load while the person talks. Nothing leaves the computer. Chrome or Edge (a 16 kHz microphone context).
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, toast, pref } from './ui.js';
@@ -26,7 +27,7 @@ const URLS = {
 const ASR_MODEL = 'onnx-community/whisper-base.en';
 const TTS_MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 export const VOICES = { af_heart: 'Heart (American)', af_bella: 'Bella (American)', af_nicole: 'Nicole (American)', bf_emma: 'Emma (British)' };
-const VOICE_KEY = 'fbc_local_voice', READY_KEY = 'fbc_local_voice_ready';
+const VOICE_KEY = 'fbc_local_voice', READY_KEY = 'fbc_local_voice_ready2';   // the second: the models of 0.11.03 are larger, so the first set kept by a browser does not start a download in the background
 export const localVoice = () => { const v = pref.get(VOICE_KEY); return VOICES[v] ? v : 'af_heart'; };
 
 const CHUNK = 1600;            // the microphone is taken in 100 ms pieces of 16 kHz audio
@@ -54,12 +55,19 @@ registerProcessor('tap', Tap);`;
 
 const MIC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 const TITLES = {
-  idle: 'Talk to it: click to record, click again to send (2 minutes at most). The middle mouse button does the same. Nothing leaves this computer; the first use downloads about 200 MB',
+  idle: 'Talk to it: click to record, click again to send (2 minutes at most). The middle mouse button does the same. Nothing leaves this computer; the first use downloads about 450 MB',
   loading: 'Opening the microphone…',
   recording: 'Recording: click to stop and send',
   transcribing: 'Writing down what you said: click to cancel',
   thinking: 'The assistant is answering: click to cancel the voice',
   speaking: 'Reading the answer: click to stop it and record again',
+};
+// the first sentence is the one that is waited for: when it is long, its first clause goes out alone
+const lead = ss => {
+  const [a, ...rest] = ss;
+  if (!a || a.length < 90) return ss;
+  const i = a.slice(30).search(/[,;:] /);
+  return i < 0 ? ss : [a.slice(0, 30 + i + 1), a.slice(30 + i + 2), ...rest];
 };
 const clock = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 
@@ -91,7 +99,7 @@ export function createMic({ ask }) {
     w.onmessage = ({ data: m }) => {
       if (w !== worker) return;
       if (m.type === 'progress') { loadNote = 'Loading the voice ' + m.pct + '%'; if (state !== 'recording' && state !== 'speaking' && state !== 'thinking') paintNote(loadNote); }
-      else if (m.type === 'ready') { loadNote = ''; if (state === 'idle') paintNote(''); try { localStorage.setItem(READY_KEY, '1'); } catch { /* none */ } ok(); }
+      else if (m.type === 'ready') { loadNote = ''; if (m.mode === 'wasm') toast('This browser has no graphics acceleration for the voice: it will be slow', ''); if (state === 'idle') paintNote(''); try { localStorage.setItem(READY_KEY, '1'); } catch { /* none */ } ok(); }
       else if (m.type === 'text') { waits.get(m.id)?.(m.text); }
       else if (m.type === 'audio') playChunk(m);
       else if (m.type === 'done') { if (speech?.id === m.id) { speech.complete = true; finishSpeech(); } }
@@ -194,7 +202,7 @@ export function createMic({ ask }) {
       const id = ++seq;
       speech = { id, mine, next: 0, sources: [], complete: false, done };
       set('speaking', 'Reading… click to stop');
-      worker.postMessage({ type: 'speak', id, sentences: sentencesOf(text), voice: localVoice() });
+      worker.postMessage({ type: 'speak', id, sentences: lead(sentencesOf(text)), voice: localVoice() });
     });
   }
   function playChunk(m) {

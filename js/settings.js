@@ -7,6 +7,7 @@
 // not here: this panel is about the console, not the farm.
 // ═══════════════════════════════════════════════════════════════════════════
 import { cardSettings } from './assistant-settings.js';
+import { readAllOn, setReadAll } from './assistant-local.js';
 import { api, fn, select, rpc } from './api.js';
 import { el, toast, drawer, confirmDrawer, busy, icon, avatar, input, pref, emptyState } from './ui.js';
 import { VERSION, checkForUpdate, updateNow } from './update.js';
@@ -63,7 +64,12 @@ export function openSettings(ctx) {
     section('Notion', notion(ctx)),
     section('Task families', (() => { const l = el('div', 'set-list'); l.append(familiesRow()); return l; })()),
     section('Task feedback', taskFeedback(ctx)),
-    section('Assistant', cardSettings(ctx.farmId)),
+    section('Assistant', (() => {
+      const box = el('div', 'set-list');
+      box.append(row('Read every answer aloud', 'On this device, typed questions and To check too. An answer to a spoken question is always read; any answer has its own speaker button. The first reading downloads the voice, about 450 MB.',
+        switchBox(readAllOn(), on => setReadAll(on), 'Read every answer aloud')), cardSettings(ctx.farmId));
+      return box;
+    })()),
     section('Automatic AI scan', aiScan(ctx)),
     section('Integrations', integrations(ctx)),
     section('Account', account(ctx, d)),

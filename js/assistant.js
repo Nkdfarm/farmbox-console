@@ -21,13 +21,14 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
-import { createMic } from './assistant-local.js';
+import { createMic, readAllOn } from './assistant-local.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
   'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop']);
 // "To check" (owner, 19 Nov 2026): the button beside Send; the person sees "To check", the assistant reads the longer ask
+const SPEAKER = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 const CHECK = 'To check';
 const CHECK_ASK = 'Check the page on screen and tell me what needs checking: late or overdue items, readings or numbers that look wrong, anything waiting for a decision. A short list, the most important first, at most 6 lines. Say plainly if nothing needs attention.';
 const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dropped from this browser
@@ -75,21 +76,36 @@ function prune() {
   } catch { /* no storage */ }
 }
 
-// a little markdown: paragraphs, **bold**, `code`, lists — escaped first
+// a little markdown: paragraphs, **bold**, `code`, lists — escaped first. And the answer's own marks (19 Nov 2026, owner:
+// "more visual, colour and blocks, for ADHD people"): the first line large; [[70 planned | 18 done]] as figure tiles;
+// a line starting with 🔴 🟠 🟢 🔵 ❓ as a coloured block (red: act now, orange: watch, green: fine, blue: next step / info)
+const MARK = { '🔴': 'red', '🟠': 'amber', '🟡': 'amber', '🟢': 'green', '🔵': 'blue', '❓': 'ask' };
+const MARK_RE = /^\s*(?:[-•*]\s+)?(🔴|🟠|🟡|🟢|🔵|❓)️?\s*(.*)$/u;
 function md(text) {
   const inline = s => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
   const box = el('div', 'ai-md');
-  let html = '', listOpen = null;
+  let html = '', listOpen = null, first = true;
   const close = () => { if (listOpen) { html += `</${listOpen}>`; listOpen = null; } };
-  String(text || '').split(/\n/).forEach(line => {
+  const lines = String(text || '').split(/\n/);
+  const visual = lines.some(l => MARK_RE.test(l) || /^\s*\[\[.+\]\]\s*$/.test(l));   // a lead line only in a drawn answer
+  lines.forEach(line => {
+    const kpi = /^\s*\[\[(.+)\]\]\s*$/.exec(line), mark = MARK_RE.exec(line);
     const ul = /^\s*[-•*]\s+(.*)$/.exec(line), ol = /^\s*\d+[.)]\s+(.*)$/.exec(line), h = /^#{1,4}\s+(.*)$/.exec(line);
-    if (ul || ol) {
+    if (kpi) {
+      close();
+      html += '<div class="ai-kpis">' + kpi[1].split('|').map(p => p.trim()).filter(Boolean).map(p => {
+        const m = /^([-+]?[\d.,]+\s*(?:%|kg|R|h|d)?)\s+(.+)$/.exec(p);
+        return m ? `<div class="ai-kpi"><b>${escapeHtml(m[1])}</b><span>${escapeHtml(m[2])}</span></div>` : `<div class="ai-kpi"><span>${escapeHtml(p)}</span></div>`;
+      }).join('') + '</div>';
+    } else if (mark) { close(); html += `<div class="ai-blk ${MARK[mark[1]]}">${inline(mark[2])}</div>`; }
+    else if (ul || ol) {
       const kind = ul ? 'ul' : 'ol';
       if (listOpen !== kind) { close(); html += `<${kind}>`; listOpen = kind; }
       html += `<li>${inline((ul || ol)[1])}</li>`;
     } else if (h) { close(); html += `<p><b>${inline(h[1])}</b></p>`; }
-    else if (!line.trim()) { close(); }
-    else { close(); html += `<p>${inline(line)}</p>`; }
+    else if (!line.trim()) { close(); return; }
+    else { close(); html += `<p${visual && first ? ' class="ai-lead"' : ''}>${inline(line)}</p>`; }
+    first = false;
   });
   close();
   box.innerHTML = html;
@@ -154,7 +170,13 @@ function item(v, i) {
   }
   if (v.role === 'error') return el('div', 'ai-msg error', v.text);
   // no face beside the assistant's words since the compact band (19 Nov 2026, owner)
-  if (v.role === 'assistant') { const b = el('div', 'ai-msg bot'); b.append(md(v.text)); return b; }
+  if (v.role === 'assistant') {
+    const b = el('div', 'ai-msg bot'); b.append(md(v.text));
+    const r = el('button', 'ai-read'); r.type = 'button'; r.innerHTML = SPEAKER;   // read this answer aloud, all of it
+    r.title = 'Read aloud (click again to stop)'; r.setAttribute('aria-label', 'Read this answer aloud');
+    r.onclick = () => mic?.read(v.text, 0, true);
+    b.append(r); return b;
+  }
   if (v.role === 'action') return card(v, i);
   return el('div');
 }
@@ -341,6 +363,8 @@ async function sendNow(text, opts) {
   busyRow.hidden = true; sendBtn.disabled = false; checkBtn.disabled = false; sending = false;
   save(key); paint();
   if (closed() && ctx.farm()?.id === f.id && key === ckey()) setFrac(AUTO);   // closed meanwhile: the answer is here, show it
+  // a typed question or To check: read aloud only when this device asks for every answer (a spoken one is read by the mic itself)
+  if (out && !opts.voice && readAllOn() && key === ckey()) mic?.read(out.reply, out.cards);
   return out;
 }
 

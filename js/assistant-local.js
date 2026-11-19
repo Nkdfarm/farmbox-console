@@ -27,6 +27,9 @@ const URLS = {
 const ASR_MODEL = 'onnx-community/whisper-base.en';
 const TTS_MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 export const VOICES = { af_heart: 'Heart (American)', af_bella: 'Bella (American)', af_nicole: 'Nicole (American)', bf_emma: 'Emma (British)' };
+const READ_ALL_KEY = 'fbc_ai_read_all';   // this device reads every answer, typed questions too (Settings › Assistant)
+export const readAllOn = () => pref.get(READ_ALL_KEY) === '1';
+export const setReadAll = on => pref.set(READ_ALL_KEY, on ? '1' : '');
 const VOICE_KEY = 'fbc_local_voice', READY_KEY = 'fbc_local_voice_ready2';   // the second: the models of 0.11.03 are larger, so the first set kept by a browser does not start a download in the background
 export const localVoice = () => { const v = pref.get(VOICE_KEY); return VOICES[v] ? v : 'af_heart'; };
 
@@ -61,6 +64,7 @@ const TITLES = {
   transcribing: 'Writing down what you said: click to cancel',
   thinking: 'The assistant is answering: click to cancel the voice',
   speaking: 'Reading the answer: click to stop it and record again',
+  preparing: 'Preparing the voice: click to cancel',
 };
 // the first sentence is the one that is waited for: when it is long, its first clause goes out alone
 const lead = ss => {
@@ -236,15 +240,31 @@ export function createMic({ ask }) {
   function toggle() {
     if (state === 'recording') { stopRecording(true); return; }
     if (state === 'speaking') { stopSpeech(); run = null; startRecording(); return; }   // click over the voice: it stops, and you talk
-    if (state === 'transcribing' || state === 'thinking' || state === 'loading') { cancel(); return; }
+    if (state === 'transcribing' || state === 'thinking' || state === 'loading' || state === 'preparing') { cancel(); return; }
     if (state === 'idle') startRecording();
   }
   button.onclick = toggle;
 
+  // an answer read aloud without a spoken question: its own button, or every answer when this device asks for it
+  function read(text, cards = 0, full = false) {
+    if (state === 'speaking') { stopSpeech(); run = null; set('idle'); return; }   // the same button again stops it
+    if (state !== 'idle') return;   // not over a recording, nor while a spoken question is on its way
+    const t = spokenText(text, cards, full);
+    if (!t) return;
+    try { out ||= new AudioContext(); out.resume().catch(() => { /* none */ }); } catch { return; }
+    const mine = run = Symbol();
+    set('preparing', loadNote || 'Preparing the voice…');
+    boot().then(async () => {
+      if (run !== mine) return;
+      await speak(t, mine);
+      if (run === mine) { run = null; set('idle'); }
+    }).catch(e => { if (run === mine) { run = null; set('idle'); if (e.message !== 'stopped') toast('The voice could not load: ' + e.message, 'bad'); } });
+  }
+
   return {
-    button, note, toggle, cancel,
+    button, note, toggle, cancel, read,
     warm() { let was = false; try { was = !!localStorage.getItem(READY_KEY); } catch { /* none */ } if (!worker && was) boot().catch(() => { /* heard again at the first press */ }); },
-    hush() { if (state === 'speaking') { stopSpeech(); run = null; set('idle'); } },   // a typed question: the old answer stops being read
+    hush() { if (state === 'speaking' || state === 'preparing') { stopSpeech(); run = null; set('idle'); } },   // a typed question: the old answer stops being read
     destroy() { cancel(); drop(); try { out?.close().catch(() => {}); } catch { /* none */ } out = null; },
   };
 }

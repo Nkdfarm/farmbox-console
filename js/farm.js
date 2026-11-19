@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawer,
-         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays, ymd, emptyState } from './ui.js';
+         systemTypes, mediaList, systemLabel, mediumLabel, farmDate, addDays, ymd, emptyState, pageHead } from './ui.js';
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 import { patch } from './api.js';
@@ -52,15 +52,9 @@ function paint() {
   mount.textContent = '';
   const may = data.may_edit;
 
-  const head = el('div', 'page-head');
-  const titles = el('div');
-  titles.append(el('h1', null, data.name));
-  titles.append(el('p', null,
+  mount.append(pageHead(data.name,
     'What this FarmBox is. The price book takes its market and its seasons from ' +
     'here, and the task generator takes the days somebody is on site.'));
-  head.append(titles, el('div', 'spacer'));
-  head.append(el('span', 'pill', data.code));
-  mount.append(head);
 
   if (!data.country_code) {
     mount.append(el('div', 'note warn',

@@ -44,7 +44,7 @@ export const startPage = () => { const s = get(START_KEY); return !s ? 'dashboar
 
 // ── the panel ──────────────────────────────────────────────────────────────
 // ctx comes from app.js: { user, name, roleText, roleTone, isFranchisor,
-// railFolded(), setRailFolded(bool), signOut(), refresh() }
+// signOut(), refresh() }  (the menu folds no more: icons only since 19 Nov 2026)
 //
 // The theme and the menu apply as they are changed. The calendar's view is the
 // one setting the page on screen has to be redrawn for, so the page is
@@ -343,9 +343,6 @@ function appearance() {
 // ── layout ─────────────────────────────────────────────────────────────────
 function layout(ctx, touched) {
   const list = el('div', 'set-list');
-  list.append(row('Fold the menu to icons', 'The same as the arrow beside the logo.',
-    switchBox(ctx.railFolded(), v => ctx.setRailFolded(v), 'Fold the menu to icons')));
-
   list.append(row('Crop calendar opens on', 'The view the dashboard calendar starts with.',
     segmented([['week', 'Week'], ['month', 'Month'], ['year', 'Year']],
       calendarView(), v => { setCalendarView(v); touched.page = true; }, 'Calendar view')));

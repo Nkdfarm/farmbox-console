@@ -14,7 +14,7 @@ import { rpc, openFast, cachedRpc } from './api.js';
 import { weatherTile } from './weather.js';
 import { showAssistantWaiting } from './assistant.js';
 import { cameraTiles } from './cameras.js';
-import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate, emptyState, readNote } from './ui.js';
+import { loading, el, icon, num, pref, ymd, parseYmd, addDays, isoDow, mondayOf, shortDate, farmDate, emptyState, readNote, pageHead } from './ui.js';
 
 const FAMILY_CLASS = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 const DAY_NAME = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -50,13 +50,7 @@ const dayLabel = s => { const d = parse(s); return `${DAY_NAME[d.getDay() === 0 
 function paint() {
   mount.textContent = '';
 
-  const head = el('div', 'page-head');
-  const titles = el('div');
-  titles.append(el('h1', null, data.farm.name));
-  titles.append(el('p', null, weatherOfTheDay()));
-  head.append(titles, el('div', 'spacer'));
-  head.append(el('span', 'pill', data.farm.code));
-  mount.append(head);
+  mount.append(pageHead(data.farm.name, weatherOfTheDay()));
   mount.append(decideStrip());
 
   mount.append(tiles());

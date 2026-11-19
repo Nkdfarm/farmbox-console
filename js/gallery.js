@@ -201,7 +201,7 @@ function makeGrid(farm, o = {}) {
 // ── Office › Gallery ──
 export async function renderGallery(container, farm) {
   container.textContent = '';
-  container.append(pageHead('Gallery', 'The farm\'s photos, sent from the phone (Naked Brain › Gallery): find one here and use it where a photo belongs — a product\'s label first. '
+  container.append(pageHead(null, 'The farm\'s photos, sent from the phone (Naked Brain › Gallery): find one here and use it where a photo belongs — a product\'s label first. '
     + 'Unused photos are never deleted by themselves; after 90 days unused they show under "To tidy".'));
   const grid = makeGrid(farm, { onOpen: p => openPhoto(farm, p, { onEdited: grid.rerender, onReload: grid.reload }) });
   container.append(grid.root);

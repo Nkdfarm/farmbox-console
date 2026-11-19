@@ -45,7 +45,7 @@ function paint() {
   add.title = 'Steps 1–3 of the wizard: the unit and its configuration from a model.';
   add.onclick = () => commission();
 
-  mount.append(pageHead('All FarmBoxes',
+  mount.append(pageHead(null,
     `${farms.length} unit${farms.length === 1 ? '' : 's'} · ` +
     `${pos ? Math.round(100 * occ / pos) : 0}% of ${num(pos)} positions growing · ` +
     `${num(kg, 1)} kg harvested this month.`,

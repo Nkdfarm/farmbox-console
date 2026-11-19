@@ -191,13 +191,17 @@ export function table(columns, rows, opts = {}) {
 // Head of a page: title, one sentence saying what it is for, and whatever
 // buttons belong to the whole screen.
 // title null: the section's tab already names the page (0.7.109), so only the blurb and the buttons
+// The page's buttons (`right`) are kept in head._acts: the shell lifts them into the actions row under the tabs
+// (app.js collectActions, 19 Nov 2026), so every page has its actions in the same place. Outside the shell they stay here.
 export function pageHead(title, blurb, ...right) {
   const head = el('div', 'page-head');
   const titles = el('div');
   if (title) titles.append(el('h1', null, title));
   if (blurb) titles.append(el('p', null, blurb));
-  head.append(titles, el('div', 'spacer'));
-  right.filter(Boolean).forEach(n => head.append(n));
+  const acts = el('div', 'page-acts');
+  right.filter(Boolean).forEach(n => acts.append(n));
+  head.append(titles, el('div', 'spacer'), acts);
+  head._acts = acts;
   return head;
 }
 

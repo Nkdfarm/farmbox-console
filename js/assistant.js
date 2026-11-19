@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// The assistant — a side panel that helps set up and use the console
-// (console 0.7.122, edge function `assistant`)
+// The assistant — a band across the top of the console that helps set up and use it
+// (console 0.7.122, edge function `assistant`; a side panel until 19 Nov 2026)
 //
 // A conversation per FarmBox. The assistant reads the farm as the person
 // signed in (their permissions, nothing more) and answers; when it wants to
@@ -9,6 +9,11 @@
 // them, exactly like pressing the same button on the page would. It never
 // validates a plan, approves anything or marks a task done. Pictures, PDFs,
 // Excel and CSV files can be attached; the function reads them.
+//
+// The band (19 Nov 2026): the answers on the left two thirds, the question on the right third, with the page and the units
+// on screen as chips that go with the question (a click drops one). A click on its grip opens or closes it; a drag
+// makes it taller or shorter, snapping to closed, a fifth, a third or half the window; the height is kept per person and
+// per screen (fbc_band_…). Closed it is one line — the question box stays — and a question slides it open to a fifth.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
 import { el, toast, pref, g1Face, escapeHtml } from './ui.js';
@@ -17,7 +22,6 @@ import { el, toast, pref, g1Face, escapeHtml } from './ui.js';
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
   'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop']);
-const OPEN_KEY = 'fbc_ai_open';
 const SUGGEST = [
   'Explain this page',
   'Plan a steady lettuce harvest in Zone 2',
@@ -27,7 +31,8 @@ const SUGGEST = [
 ];
 
 let ctx = null;              // { farm(), refresh() } from app.js
-let panel, list, input, sendBtn, fileIn, chips, busyRow;
+let band, grip, list, input, sendBtn, fileIn, chips, busyRow, peek, ctxRow;
+let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
 const convos = new Map();    // farm id → { messages (as the function returned them), view, notes }
 let files = [];
 
@@ -157,6 +162,7 @@ function paint() {
   c.view.forEach((v, i) => list.append(item(v, i)));
   chips.hidden = !!c.view.length;
   list.scrollTop = list.scrollHeight;
+  paintPeek(); paintContext();
 }
 
 function item(v, i) {
@@ -280,7 +286,7 @@ async function hydrate() {
     if (r?.chat_id && !c.view.length && ctx.farm()?.id === f.id) {
       c.chatId = r.chat_id; c.messages = r.messages || []; c.view = r.view || [];
       save(f.id);
-      if (!panel.hidden) paint();
+      paint();
     }
   } catch { /* offline, or the migration is not applied: the conversation stays in this browser */ }
 }
@@ -323,21 +329,30 @@ async function doIt(v, btn) {
 let sending = false;   // one question at a time: Enter or a chip during an answer used to start a second one
 async function send(text) {
   if (sending) return;
+  // the conversation kept in the database first: the band is closed but the box is there, so a question can come
+  // before anything opened it — it would start a new conversation and lose the old one (verifier, 19 Nov 2026)
+  await hydrate();
   const c = convo();
   const f = ctx.farm();
   text = (text ?? input.value).trim();
   if (!f) { toast('Choose a FarmBox first', 'bad'); return; }
   if (!text && !files.length) return;
   if (mode !== 'chat') { mode = 'chat'; paint(); }
+  if (closed()) setFrac(AUTO);   // a question slides the band open to a fifth of the screen (owner, 19 Nov 2026)
   const sent = files.slice(); files = []; paintFiles();
   input.value = '';
   const notes = c.notes.length ? `(Since your last answer I ${c.notes.join('; ')}.)\n` : '';
-  const messages = [...c.messages, { role: 'user', content: notes + (text || 'Here is a file.') }];
+  const w = ctx.where?.() || {}, about = [];
+  if (!ctxOff.page && w.page) about.push('the page ' + w.page);
+  if (!ctxOff.units && w.units?.length) about.push((w.units.length > 1 ? 'the units ' : 'the unit ') + w.units.join(' and '));
+  const where = about.length ? `(On screen: ${about.join(', ')}.)\n`
+              : ctxOff.page || ctxOff.units ? '(This question is about the whole FarmBox, not the page on screen.)\n' : '';
+  const messages = [...c.messages, { role: 'user', content: notes + where + (text || 'Here is a file.') }];
   c.view.push({ role: 'user', text: text || '(a file)', files: sent.map(x => x.name) });
   paint();
   busyRow.hidden = false; sendBtn.disabled = true; sending = true;
   try {
-    const r = await fn('assistant', { farm_id: f.id, route: location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
+    const r = await fn('assistant', { farm_id: f.id, route: ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
     c.chatId = r.chat_id || null;
@@ -350,10 +365,11 @@ async function send(text) {
   }
   busyRow.hidden = true; sendBtn.disabled = false; sending = false;
   save(f.id); paint();
+  if (closed() && ctx.farm()?.id === f.id) setFrac(AUTO);   // closed meanwhile: the answer is here, show it
 }
 
 function paintFiles() {
-  const box = panel.querySelector('.ai-attached');
+  const box = band.querySelector('.ai-attached');
   box.textContent = '';
   files.forEach((f, i) => {
     const chip = el('span', 'ai-file', f.name + ' ✕');
@@ -378,38 +394,123 @@ function readFile(file) {
   });
 }
 
+// ── the band's height ─────────────────────────────────────────────────────────────────────────────────────────────
+// a fraction of the window's height, so a third stays a third on a bigger screen; 0 is closed
+const AUTO = 0.2, SNAPS = [0, AUTO, 1 / 3, 0.5], MAX = 0.6;
+let frac = 0, lastOpen = AUTO;
+const bandKey = () => `fbc_band_${ctx.user?.() || 'none'}_${screen.width}x${screen.height}`;
+const closed = () => frac === 0;
+function setFrac(f, keep = true) {
+  frac = Math.max(0, Math.min(MAX, f));
+  if (frac > 0) lastOpen = frac;
+  band.classList.toggle('closed', frac === 0);
+  band.style.height = frac === 0 ? '' : Math.round(frac * innerHeight) + 'px';
+  grip.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+  grip.title = frac === 0 ? 'Click to open the assistant, or drag it down' : 'Click to close the assistant, or drag to make it taller or shorter';
+  grip.setAttribute('aria-expanded', String(frac > 0));
+  if (keep) pref.set(bandKey(), JSON.stringify({ f: frac, open: lastOpen }));
+  if (frac > 0) list.scrollTop = list.scrollHeight;
+}
+function loadFrac() {
+  let v = null;
+  try { v = JSON.parse(pref.get(bandKey()) || 'null'); } catch { /* none */ }
+  lastOpen = v && v.open > 0 ? Math.min(MAX, v.open) : AUTO;
+  setFrac(v ? Number(v.f) || 0 : 0, false);
+}
+const snap = f => f < 0.12 ? 0 : SNAPS.reduce((a, x) => Math.abs(x - f) < Math.abs(a - f) ? x : a, SNAPS[1]);
+function openBand() { setFrac(lastOpen || AUTO); }
 function setOpen(open) {
-  panel.hidden = !open;
-  document.body.classList.toggle('ai-open', open);
-  pref.set(OPEN_KEY, open ? '1' : null);
-  if (open) { paint(); hydrate(); setTimeout(() => input.focus(), 30); }
+  if (open) { if (closed()) openBand(); paint(); setTimeout(() => input.focus(), 30); }
+  else setFrac(0);
+}
+
+function wireGrip() {
+  let y0 = 0, h0 = 0, moved = false;
+  grip.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    y0 = e.clientY; h0 = band.getBoundingClientRect().height; moved = false;
+    grip.setPointerCapture(e.pointerId);
+    band.classList.add('dragging');
+  });
+  grip.addEventListener('pointermove', e => {
+    if (!grip.hasPointerCapture(e.pointerId)) return;
+    if (Math.abs(e.clientY - y0) > 3) moved = true;
+    if (!moved) return;
+    band.classList.remove('closed');
+    band.style.height = Math.max(44, Math.min(MAX * innerHeight, h0 + e.clientY - y0)) + 'px';
+  });
+  const end = e => {
+    if (!grip.hasPointerCapture(e.pointerId)) return;
+    grip.releasePointerCapture(e.pointerId);
+    band.classList.remove('dragging');
+    // a click on the grip, not a drag: open to the last height, or close (owner, 19 Nov 2026)
+    if (!moved) { if (e.type === 'pointerup') setOpen(closed()); return; }
+    setFrac(snap(band.getBoundingClientRect().height / innerHeight));
+    if (!closed()) paint();
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  grip.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(closed()); return; }
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const at = SNAPS.indexOf(snap(frac));
+    setFrac(SNAPS[Math.max(0, Math.min(SNAPS.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))]);
+    if (!closed()) paint();
+  });
+  addEventListener('resize', () => { if (!closed()) band.style.height = Math.round(frac * innerHeight) + 'px'; });
+}
+
+// the chips beside the question: what is on screen goes with it, unless dropped
+function paintContext() {
+  if (!ctxRow) return;
+  const w = ctx.farm() ? ctx.where?.() || {} : {};
+  ctxRow.textContent = '';
+  const chip = (key, text, title) => {
+    const b = el('button', 'ai-ctx-chip' + (ctxOff[key] ? ' off' : ''), text);
+    b.type = 'button';
+    b.title = ctxOff[key] ? 'Left out of the question — click to send it again' : title + ' — click to leave it out';
+    b.setAttribute('aria-pressed', String(!ctxOff[key]));
+    b.onclick = () => { ctxOff[key] = !ctxOff[key]; paintContext(); };
+    ctxRow.append(b);
+  };
+  if (w.page) chip('page', w.page, 'The page on screen goes with the question');
+  if (w.units?.length) chip('units', w.units.join(' + '), 'The units on screen go with the question');
+}
+
+// closed, the band says in one line what the assistant last said (or that it is thinking)
+function paintPeek() {
+  if (!peek) return;
+  const last = mode === 'chat' ? [...convo().view].reverse().find(v => v.role === 'assistant') : null;
+  peek.textContent = sending ? 'Reading the farm and thinking…'
+    : last ? String(last.text).replace(/[*`#]/g, '').split('\n').find(l => l.trim()) || '' : 'Ask about this page or the whole FarmBox.';
 }
 
 export function initAssistant(context) {
   ctx = context;
-  panel = el('aside', 'ai-panel');
-  panel.hidden = true;
-  panel.setAttribute('aria-label', 'Assistant');
+  band = document.getElementById('aiBand');
+  const out = el('div', 'ai-out'), inn = el('div', 'ai-in');
   const head = el('div', 'ai-head');
   const fresh = el('button', 'btn btn-sm btn-ghost', 'New conversation');
   fresh.onclick = () => { mode = 'chat'; const f = ctx.farm(); convos.set(f?.id || 'none', { messages: [], view: [], notes: [], chatId: null, fresh: true }); hydrated.add(f?.id); save(); paint(); };
-  const x = el('button', 'btn btn-sm btn-ghost', '⟩');
-  x.title = 'Fold the assistant away'; x.setAttribute('aria-label', 'Close the assistant');
-  x.onclick = () => setOpen(false);
   const gear = el('button', 'btn btn-sm btn-ghost', '⚙');
   gear.title = 'What the cards do on this FarmBox'; gear.setAttribute('aria-label', 'Settings of the cards');
-  gear.onclick = () => { mode = 'settings'; paint(); };
-  head.append(g1Face('', 'The assistant'), el('b', null, 'Assistant'), el('div', 'spacer'), gear, fresh, x);
+  gear.onclick = () => { mode = 'settings'; if (closed()) openBand(); paint(); };
+  peek = el('span', 'ai-peek');
+  head.append(g1Face('sm', 'The assistant'), el('b', null, 'Assistant'), peek, el('div', 'spacer'), gear, fresh);
   list = el('div', 'ai-list');
   chips = el('div', 'ai-chips');
   SUGGEST.forEach(s => { const c = el('button', 'chip', s); c.onclick = () => send(s); chips.append(c); });
   busyRow = el('div', 'ai-busy'); busyRow.hidden = true;
   const bar = el('div', 'loading-bar busy'); bar.append(el('i'));
   busyRow.append(el('span', 'hint', 'Reading the farm and thinking…'), bar);
-  const foot = el('div', 'ai-foot');
+  out.append(head, list, chips, busyRow);
+
+  ctxRow = el('div', 'ai-ctx');
   input = el('textarea', 'input ai-input');
-  input.rows = 3;
+  input.rows = 2;
   input.placeholder = 'Ask, or tell it what to set up… (Enter to send, Shift+Enter for a new line)';
+  input.setAttribute('aria-label', 'Ask the assistant');
   input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
   fileIn = el('input'); fileIn.type = 'file'; fileIn.multiple = true; fileIn.hidden = true;
   fileIn.accept = 'image/*,.pdf,.xlsx,.xls,.csv';
@@ -417,24 +518,36 @@ export function initAssistant(context) {
     for (const f of fileIn.files) { try { files.push(await readFile(f)); } catch (e) { toast(e.message, 'bad'); } }
     fileIn.value = ''; paintFiles();
   };
-  const attach = el('button', 'btn btn-sm btn-ghost', '📎');
+  const attach = el('button', 'btn btn-sm btn-ghost ai-attach', '📎');
   attach.title = 'Attach a picture, a PDF, an Excel or a CSV file';
+  attach.setAttribute('aria-label', 'Attach a file');
   attach.onclick = () => fileIn.click();
   sendBtn = el('button', 'btn btn-sm btn-primary', 'Send');
   sendBtn.onclick = () => send();
-  const row = el('div', 'row'); row.append(attach, el('div', 'ai-attached'), el('div', 'spacer'), sendBtn);
-  foot.append(input, row, fileIn);
-  panel.append(head, list, chips, busyRow, foot);
-  document.body.append(panel);
+  const row = el('div', 'row ai-send'); row.append(attach, el('div', 'ai-attached'), el('div', 'spacer'), sendBtn);
+  inn.append(ctxRow, input, row, fileIn);
+  band.replaceChildren(out, inn);
 
-  const btn = document.getElementById('aiBtn');
-  if (btn) { btn.textContent = ''; btn.append(g1Face('xs', ''), 'Assistant'); btn.onclick = () => setOpen(panel.hidden); }
-  if (pref.get(OPEN_KEY) === '1') setOpen(true);
+  grip = el('div', 'ai-grip');
+  grip.setAttribute('role', 'separator');
+  grip.setAttribute('aria-orientation', 'horizontal');
+  grip.setAttribute('aria-label', 'Height of the assistant');
+  grip.setAttribute('aria-valuemin', '0'); grip.setAttribute('aria-valuemax', String(MAX * 100));
+  grip.tabIndex = 0;
+  grip.append(el('i'));
+  band.after(grip);
+  wireGrip();
+  setFrac(0, false);
 }
+
+// signed in (or another person on this tab): their own height on this screen, their conversation
+export function assistantReady() { mode = 'chat'; ctxOff = { page: false, units: false }; loadFrac(); paint(); hydrate(); }
+// another page or another choice of units: the chips follow, and what was dropped comes back
+export function assistantRouteChanged() { ctxOff = { page: false, units: false }; paintContext(); }
 
 // a farm switch shows that farm's conversation
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
 // the dashboard's "To decide" tile for cards that wait for a manager opens them here
 export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
-export function forgetAssistant() { mode = 'chat'; convos.clear(); hydrated.clear(); if (panel && !panel.hidden) paint(); }
-export function assistantFarmChanged() { mode = 'chat'; if (panel && !panel.hidden) { paint(); hydrate(); } }
+export function forgetAssistant() { mode = 'chat'; convos.clear(); hydrated.clear(); if (band) { setFrac(0, false); paint(); } }
+export function assistantFarmChanged() { mode = 'chat'; if (band) { paint(); hydrate(); } }

@@ -33,7 +33,7 @@ export function paint() {
   const removedBtn = el('button', 'btn', 'Removed photos…');
   removedBtn.title = 'The photos taken off the reports in the last 30 days; a manager can put one back';
   removedBtn.onclick = openRemoved;
-  S.mount.append(pageHead('Scouting',
+  S.mount.append(pageHead(null,
     'The whole greenhouse first, then each scouting day by zone. ' +
     'A dot marks the worst thing inside: red severe or over the limit, orange open or on watch, green improving or resolved.',
     scaleBtn, setupBtn, ...(S.tmap?.may_edit ? [sizeBtn] : []), removedBtn, unfiledButton(S.farm, reload), feedButton(), opinionsButton(), openBtn));

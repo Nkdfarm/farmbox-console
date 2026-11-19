@@ -36,7 +36,7 @@ import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { drop3d } from './farmnet3d.js';
 import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet.js';
-import { initAssistant, assistantFarmChanged, forgetAssistant } from './assistant.js';
+import { initAssistant, assistantFarmChanged, forgetAssistant, assistantReady, assistantRouteChanged } from './assistant.js';
 import { liveOpen } from './live.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -51,64 +51,16 @@ document.querySelectorAll('[data-icon]').forEach(n => n.prepend(icon(n.dataset.i
 // the page name as a tooltip, for when a narrow window folds the rail to icons
 document.querySelectorAll('.rail a').forEach(a => { a.title = a.textContent.trim(); });
 
-// The menu folds to its icons for more room on the page. A person's choice is
-// remembered; until they make one, a narrow window folds it and a wide one
-// opens it. The choice is also kept in memory, so a private window (no
-// localStorage) still toggles.
-const RAIL_KEY = 'fbc_rail';
-const narrow = matchMedia('(max-width: 900px)');
-let railChoice = pref.get(RAIL_KEY);
+// The rail is icons only since 19 Nov 2026 (the menu folded to them before); the name shows on hover.
+// The zoom of the top bar went with it: the browser's own zoom (Ctrl + / −) does the same.
+pref.set('fbc_rail', null); pref.set('fbc_zoom', null);
 
-function paintRail() {
-  const folded = railChoice ? railChoice === 'folded' : narrow.matches;
-  $('shell').classList.toggle('collapsed', folded);
-  const label = folded ? 'Expand the menu' : 'Collapse the menu';
-  const t = $('railToggle');
-  t.setAttribute('aria-expanded', String(!folded));
-  t.setAttribute('aria-label', label);
-  t.title = label;
-}
-$('railToggle').addEventListener('click', () => {
-  railChoice = $('shell').classList.contains('collapsed') ? 'open' : 'folded';
-  pref.set(RAIL_KEY, railChoice);
-  paintRail();
-});
-narrow.addEventListener('change', paintRail);
-paintRail();
-
-// ── zoom ───────────────────────────────────────────────────────────────────
-// − 100% + in the top bar scales the whole console (CSS zoom on <html>, see
-// styles.css). Remembered on this device as fbc_zoom and applied before the
-// first paint by index.html. Clicking the percentage goes back to 100%.
-const ZOOM_KEY = 'fbc_zoom';
-const ZOOM_MIN = 0.6, ZOOM_MAX = 1.6, ZOOM_STEP = 0.1;
-let zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat(pref.get(ZOOM_KEY)) || 1));
-
-function setZoom(z) {
-  zoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 10) / 10;
-  document.documentElement.style.setProperty('--zoom', zoom);
-  pref.set(ZOOM_KEY, zoom === 1 ? null : String(zoom));
-  paintZoom();
-}
-const zoomOut = el('button', null, '−');
-const zoomLevel = el('button', 'zoom-level');
-const zoomIn = el('button', null, '+');
-zoomOut.type = zoomLevel.type = zoomIn.type = 'button';
-zoomOut.setAttribute('aria-label', 'Zoom out');
-zoomIn.setAttribute('aria-label', 'Zoom in');
-zoomOut.title = 'Smaller';
-zoomIn.title = 'Bigger';
-zoomLevel.title = 'Back to 100%';
-zoomOut.onclick = () => setZoom(zoom - ZOOM_STEP);
-zoomIn.onclick = () => setZoom(zoom + ZOOM_STEP);
-zoomLevel.onclick = () => setZoom(1);
-function paintZoom() {
-  zoomLevel.textContent = Math.round(zoom * 100) + '%';
-  zoomOut.disabled = zoom <= ZOOM_MIN + 1e-9;
-  zoomIn.disabled = zoom >= ZOOM_MAX - 1e-9;
-}
-$('zoom').append(zoomOut, zoomLevel, zoomIn);
-setZoom(zoom);
+// the person's menu, on their picture at the foot of the rail: who, which role, Sign out
+const meMenu = $('meMenu'), meBtn = $('meBtn');
+function setMeMenu(open) { meMenu.hidden = !open; meBtn.setAttribute('aria-expanded', String(open)); }
+meBtn.addEventListener('click', e => { e.stopPropagation(); setMeMenu(meMenu.hidden); });
+document.addEventListener('click', e => { if (!meMenu.hidden && !meMenu.contains(e.target)) setMeMenu(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !meMenu.hidden) { setMeMenu(false); meBtn.focus(); } });
 
 let farms = [];          // every unit this account may open
 let choices = [];        // what the switcher offers: a site for sister units (0.7.158), else the unit
@@ -211,36 +163,77 @@ const PAGE_MOD = {
 };
 const unitsOf = f => f?.site ? f.units : f ? [f] : [];
 
-async function renderUnits(page, site, key, tab, kind) {
-  const units = site.units;
-  // FarmNet's tabs share one choice: the unit chosen on one stays chosen on the others (owner, 5 Nov 2026)
-  const pk = 'fbc_unit_' + (key.startsWith('farmnet/') ? 'farmnet' : key);
-  let choice = pref.get(pk) || (kind === 'overview' ? 'both' : units[0].id);
-  if (choice === 'both' ? kind !== 'overview' : !units.some(u => u.id === choice)) choice = kind === 'overview' ? 'both' : units[0].id;
-  page.textContent = '';
-  const bar = el('div', 'unit-bar');
-  bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Which unit');
-  [...(kind === 'overview' ? [['both', 'Both', null]] : []), ...units.map(u => [u.id, u.name, u])].forEach(([v, label, u]) => {
+// ── which units, in the tool bar (19 Nov 2026) ───────────────────────────────────
+// One choice for every page of the site, kept on this device (it was one per page, a bar on each page, until 19 Nov 2026).
+// `sel` is the units switched on — an overview page shows each of them in turn (Both when they are all on); `focus` is
+// the one a working page opens (the planner, FarmNet, Farm setup), the last one pressed. A page both units share
+// (Tasks, Office, the libraries) shows the buttons greyed: it is the same for all of them.
+const shortName = u => (u.name || u.code || '').replace(/^farm(?=[a-z])/i, '') || u.name;
+function unitState(site) {
+  const ids = site.units.map(u => u.id);
+  let st = null;
+  try { st = JSON.parse(pref.get('fbc_units_' + site.id) || 'null'); } catch { /* none */ }
+  let sel = (st?.sel || []).filter(i => ids.includes(i));
+  // a unit that joined the site after the choice was kept comes on (it was left off until pressed)
+  if (st?.known) sel = ids.filter(i => sel.includes(i) || !st.known.includes(i));
+  if (!sel.length) sel = ids.slice();
+  const focus = sel.includes(st?.focus) ? st.focus : sel[0];
+  return { sel, focus };
+}
+const keepUnitState = (site, st) => pref.set('fbc_units_' + site.id, JSON.stringify({ ...st, known: site.units.map(u => u.id) }));
+
+function paintUnitPick(kind) {
+  const box = $('unitPick');
+  box.textContent = '';
+  box.hidden = !farm?.site;
+  if (!farm?.site) return;
+  const site = farm, st = unitState(site);
+  box.classList.toggle('shared', !kind);
+  box.title = !kind ? 'This page is the same for every unit of the site'
+            : kind === 'work' ? 'This page shows one unit at a time' : 'Switch each unit on or off';
+  site.units.forEach(u => {
     const b = el('button', 'unit-btn'); b.type = 'button';
-    if (u) { const d = el('span', 'unit-dot'); d.style.background = u.badge_colour || 'var(--text-muted)'; b.append(d); }
-    b.append(el('span', null, label));
-    b.setAttribute('aria-pressed', String(v === choice));
-    b.onclick = () => { if (v === choice) return; pref.set(pk, v); route(); };
-    bar.append(b);
+    const d = el('span', 'unit-dot'); d.style.background = u.badge_colour || 'var(--text-muted)';
+    b.append(d, el('span', null, shortName(u)));
+    b.title = u.name;
+    const on = kind === 'work' ? u.id === st.focus : st.sel.includes(u.id);
+    b.setAttribute('aria-pressed', String(on));
+    b.disabled = !kind;
+    b.onclick = () => {
+      let { sel, focus } = unitState(site);
+      if (kind === 'work') {
+        if (u.id === focus) return;
+        focus = u.id;
+        if (!sel.includes(u.id)) sel = [u.id];
+      } else if (sel.includes(u.id)) {
+        if (sel.length === 1) return;              // one unit stays on
+        sel = sel.filter(i => i !== u.id);
+        if (focus === u.id) focus = sel[0];
+      } else { sel = site.units.map(x => x.id).filter(i => i === u.id || sel.includes(i)); focus = u.id; }
+      keepUnitState(site, { sel, focus });
+      route();
+    };
+    box.append(b);
   });
-  const body = el('div', 'unit-body');
-  page.append(bar, body);
+}
+
+async function renderUnits(page, site, key, tab, kind) {
+  const { sel, focus } = unitState(site);
+  page.textContent = '';
   const ctx = { switchFarm, reloadFarms: loadFarms, site };
-  if (choice !== 'both') return tab[2](body, units.find(u => u.id === choice), ctx);
+  if (kind === 'work') return tab[2](page, site.units.find(u => u.id === focus), ctx);
+  const units = site.units.filter(u => sel.includes(u.id));
+  if (units.length === 1) return tab[2](page, units[0], ctx);
   const [path, fn] = PAGE_MOD[key];
   await Promise.all(units.map(async u => {
     const block = el('section', 'unit-block');
     block.style.setProperty('--u', u.badge_colour || 'var(--text-muted)');
+    block.dataset.unit = shortName(u);
     const head = el('div', 'unit-head');
     head.append(el('span', 'unit-badge', u.badge_label || u.code), el('b', null, u.name));
     const inner = el('div', 'unit-inner');
     block.append(head, inner);
-    body.append(block);
+    page.append(block);
     // the ?unit= URL is new to this visit, so it comes from the network: after a release, the new page module into
     // this old page, whose ui.js/api.js may lack what it imports (review 16 Nov 2026) — offer the update, not a fault
     let m;
@@ -250,6 +243,43 @@ async function renderUnits(page, site, key, tab, kind) {
     catch (err) { inner.textContent = ''; inner.append(el('div', 'note bad', err.message)); }
   }));
 }
+
+// ── the page's actions, in the tool bar (19 Nov 2026) ─────────────────────────────
+// A page still builds its head with pageHead(title, blurb, ...buttons) (ui.js); the buttons are lifted from it into
+// the row under the tabs, so every page has its actions in the same place. Watching the page instead of asking each
+// page to call something: a page that draws its head again later (after a save, a filter) is followed by itself.
+// With several units on, each unit's buttons come under its own name.
+let actsQueued = false;
+let lastAiKey = '';   // the page and units the assistant's chips were last drawn for
+function collectActions() {
+  actsQueued = false;
+  const groups = [];
+  $('page').querySelectorAll('.page-head').forEach(h => {
+    const acts = h._acts;
+    if (!acts || !acts.childElementCount) return;
+    const g = el('div', 'act-group');
+    const blk = h.closest('.unit-block');
+    if (blk) {
+      const tag = el('span', 'act-unit', blk.dataset.unit || '');
+      tag.style.setProperty('--u', blk.style.getPropertyValue('--u'));
+      g.append(tag);
+    }
+    g.append(acts);
+    groups.push(g);
+  });
+  $('pageActions').replaceChildren(...groups);
+  paintActionsRow();
+}
+const paintActionsRow = () => { $('actions').hidden = !$('pageActions').childElementCount && $('upd').hidden; };
+new MutationObserver(() => {
+  if (actsQueued) return;
+  actsQueued = true;
+  queueMicrotask(collectActions);
+}).observe($('page'), { childList: true, subtree: true });
+// the head's height as --head-h, for what is sized to the window under it (the planner board, the Tasks people column)
+new ResizeObserver(() => document.documentElement.style.setProperty('--head-h', Math.round($('head').getBoundingClientRect().height) + 'px')).observe($('head'));
+// the update slot shares the row: the row shows when either has something
+new MutationObserver(paintActionsRow).observe($('upd'), { attributes: true, attributeFilter: ['hidden'] });
 
 function updateOffer(err) {
   const n = el('div', 'note bad');
@@ -313,7 +343,9 @@ function resetState() {
   booted = false; farm = null; farms = []; choices = []; myRoles = []; setMyRoles([]);
   startError = null; startRetried = false; bootBar = null;
   liveOpen(null);
-  const pick = $('farmPick'); if (pick) pick.textContent = '';
+  $('unitPick').hidden = true; $('pageActions').textContent = '';
+  setMeMenu(false);   // its Sign out is inside it: the next person found it open with their name (verifier, 19 Nov 2026)
+  lastAiKey = '';
 }
 // Every way a session ends goes through here (review 16 Nov 2026: each path cleared a different part): Sign out, a
 // session refused at start or in the middle of the day, a sign-out or another person's sign-in in another tab.
@@ -354,12 +386,6 @@ $('settingsBtn').addEventListener('click', () => {
     roleText: pill.textContent,
     roleTone: pill.classList.contains('ok') ? 'ok' : pill.classList.contains('warn') ? 'warn' : '',
     isFranchisor: myRoles.some(r => r.role === 'franchisor_admin'),
-    railFolded: () => $('shell').classList.contains('collapsed'),
-    setRailFolded: folded => {
-      railChoice = folded ? 'folded' : 'open';
-      pref.set(RAIL_KEY, railChoice);
-      paintRail();
-    },
     signOut: doSignOut,
     refresh: () => { if (farm) route(); },
     farms: choices,        // the switcher's list: sister units as one site (0.7.162)
@@ -386,21 +412,17 @@ async function loadFarms() {
   });
   const inSite = new Set(sites.flatMap(s => s.units.map(u => u.id)));
   choices = [...sites, ...farms.filter(f => !inSite.has(f.id))].sort((a, b) => a.name.localeCompare(b.name));
-  const pick = $('farmPick');
-  pick.textContent = '';
-  choices.forEach(f => {
-    const o = el('option', null,
-      f.site ? f.name : `${f.name} · ${f.code}` + (f.status === 'setup' ? ' · in setup' : ''));
-    o.value = f.id;
-    pick.append(o);
-  });
   // this tab's own FarmBox first, when it has one: the list is read again after some saves (Farm setup, a new
   // unit), and the kept choice may by then be another tab's — the page used to follow it (13 Oct 2026)
   const wanted = farm?.id || pref.get(FARM_KEY);
   farm = choices.find(f => f.id === wanted) || sites.find(s => s.units.some(u => u.id === wanted)) || choices[0] || null;
-  if (farm) pick.value = farm.id;
-  pick.disabled = choices.length < 2;
-  pick.parentElement.hidden = choices.length === 0;
+  // no picker in the top bar any more (19 Nov 2026): another FarmBox is chosen on All FarmBoxes (or in Settings),
+  // so the rail shows that page to whoever has more than one to choose from
+  paintUnitsLink();
+}
+function paintUnitsLink() {
+  const show = choices.length > 1 || myRoles.some(r => r.role === 'franchisor_admin');
+  $('unitsLink').hidden = !show; $('franchisorSep').hidden = !show;
 }
 
 // What am I here? Franchisor first — it outranks anything farm-level.
@@ -418,7 +440,9 @@ async function paintMyRole() {
                      : 'No role here';
     pill.className = 'pill' + (franchisor || here ? ' ok' : ' warn');
     pill.hidden = false;
-  } catch { myRoles = []; setMyRoles([]); pill.hidden = true; }   // never the previous farm's or person's roles
+    $('meBtn').title = $('whoName').textContent + ' · ' + pill.textContent;
+  } catch { myRoles = []; setMyRoles([]); pill.hidden = true; }
+  paintUnitsLink();   // never the previous farm's or person's roles
 }
 
 // Switching FarmBox from anywhere: the picker, or a row on All FarmBoxes.
@@ -426,21 +450,15 @@ function switchFarm(id) {
   const next = choices.find(f => f.id === id) || choices.find(f => f.site && f.units.some(u => u.id === id));
   if (!next) return;
   farm = next;
-  $('farmPick').value = farm.id;
   pref.set(FARM_KEY, farm.id);
   // no hashchange (0.7.162): it drew the dashboard once with the old unit's roles before paintMyRole answered
   history.replaceState(null, '', '#/dashboard/overview');
   paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
 }
 
-$('farmPick').addEventListener('change', e => {
-  farm = choices.find(f => f.id === e.target.value) || farm;
-  pref.set(FARM_KEY, farm.id);
-  paintMyRole().then(() => { route(); warm(); assistantFarmChanged(); });
-});
 
 // ── connected / offline ────────────────────────────────────────────────────
-// Top right, always: a person has to know whether what is on screen is live
+// At the foot of the rail, always (top right until 19 Nov 2026): a person has to know whether what is on screen is live
 // before acting on it. Offline, a bar under the top says how old it is.
 const clock = t => {
   const d = new Date(t);
@@ -456,11 +474,10 @@ function paintConnection({ phase, attempt, attempts, savedAt }) {
   if (n.dataset.phase !== phase) {
     n.dataset.phase = phase;
     n.textContent = '';
-    n.className = 'pill net ' +
+    n.className = 'rail-btn net ' +
       (phase === 'online' ? 'is-online' : phase === 'connecting' ? 'is-connecting' : 'warn');
-    n.append(icon(phase === 'offline' ? 'wifiOff' : 'wifi'),
-      el('span', null, phase === 'online' ? 'Connected'
-                     : phase === 'connecting' ? 'Connecting…' : 'Offline'));
+    const word = phase === 'online' ? 'Connected' : phase === 'connecting' ? 'Connecting…' : 'Offline';
+    n.append(icon(phase === 'offline' ? 'wifiOff' : 'wifi'), el('span', 'sr-only', word));
     if (phase === 'connecting') {
       const track = el('span', 'net-bar');
       track.append(el('i'));
@@ -574,7 +591,7 @@ function paintTabs(sec, active) {
   const nav = $('secTabs');
   nav.textContent = '';
   const tabs = tabsOf(sec);
-  nav.hidden = tabs.length < 2;
+  nav.hidden = false;      // one tab too: since 19 Nov 2026 the tab is the page's name (the pages have no title of their own)
   nav.setAttribute('aria-label', SECTIONS[sec].title);
   tabs.forEach(([key, label]) => {
     const a = el('a', null, label);
@@ -618,6 +635,9 @@ async function route() {
   const title = SECTIONS[sec].title;
   document.title = `${tab[1] === title ? title : tab[1] + ' · ' + title} · Naked Heart`;
   paintTabs(sec, tab);
+  paintUnitPick(farm?.site ? PAGE_KIND[`${sec}/${tab[0]}`] : null);
+  const aiKey = `${sec}/${tab[0]}|${farm?.id || ''}|${farm?.site ? JSON.stringify(unitState(farm)) : ''}`;
+  if (booted && aiKey !== lastAiKey) { lastAiKey = aiKey; assistantRouteChanged(); }
 
   newPage();
   const page = $('page');
@@ -652,13 +672,26 @@ async function route() {
 
 window.addEventListener('hashchange', route);
 
+// what the assistant is told about the screen (19 Nov 2026): the page and, on a site, the units switched on
+function aiWhere() {
+  const { sec, tab } = currentRoute();
+  const page = tab[1] === SECTIONS[sec].title ? tab[1] : `${SECTIONS[sec].title} › ${tab[1]}`;
+  let units = null;
+  if (farm?.site) {
+    const kind = PAGE_KIND[`${sec}/${tab[0]}`], st = unitState(farm);
+    const on = kind === 'work' ? [st.focus] : kind ? st.sel : farm.units.map(u => u.id);
+    units = farm.units.filter(u => on.includes(u.id)).map(u => u.name);
+  }
+  return { page, units };
+}
+
 // Say so when a newer console is deployed: an installed tab can sit on an old
 // copy of itself for days otherwise.
 watchForUpdates();
 
-// the assistant (0.7.122): a side panel, one conversation per FarmBox; a change it proposes
+// the assistant (0.7.122): a band on top since 19 Nov 2026 (a side panel before), one conversation per FarmBox; a change it proposes
 // runs only when the person presses Do it, and then the page on screen is drawn again
-initAssistant({ farm: () => farm, refresh: () => route() });
+initAssistant({ farm: () => farm, refresh: () => route(), user: () => myUserId, where: aiWhere });
 
 // ── boot ───────────────────────────────────────────────────────────────────
 let booted = false;
@@ -712,6 +745,7 @@ async function startOnce() {
     // replaceState, not location.hash: that queued a hashchange and drew the start page twice
     if (!location.hash) history.replaceState(null, '', '#/' + startPage());
     booted = true;
+    assistantReady();       // this person's height of the band on this screen, and their conversation
     bootBar = null;
     await route();
     warm();

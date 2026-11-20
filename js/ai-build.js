@@ -95,6 +95,7 @@ export function createBuild(plan, deps) {
     st.drafts.push({
       id: 'd' + (++seq), n: s.n, command: s.command, family: cmd.family, label: cmd.label, page, unit: s.unit || null, args: s.args,
       summary: s.summary || cmd.label, mark: s.mark || '~', switches_on: switchesOn(s.command, s.args), anchor: !!el, fixed: !!s.fixed,
+      reason: s.reason || '', warnings: Array.isArray(s.warnings) ? s.warnings : [], valves: Array.isArray(s.valves) ? s.valves : undefined,   // P6
       status: 'draft', error: null,
     });
     return { ok: true };

@@ -3063,3 +3063,27 @@ body.ai-building .toast { z-index: 1004; }
 .ai-tray.min { bottom: auto; }
 .ai-tray.min > :not(.ai-tray-head) { display: none; }
 @media (max-width: 640px) { body.ai-locked #page { padding-bottom: 60vh; } .ai-tray.min { top: auto; bottom: 8px; height: auto; } }
+
+/* AI build mode P6 (0288): a step's reason and what was not checked; FarmNet › Irrigation's Valves and bays, EC and pH per crop */
+.ai-step { flex-wrap: wrap; }
+.ai-step-why { color: var(--text-muted); }
+.ai-step-warn { flex-basis: 100%; margin-left: calc(1.1ch + 8px); font-size: var(--text-xs); color: var(--warning); }
+.ai-draft-why { font-size: var(--text-xs); color: var(--text-muted); margin: 2px 0 0 calc(1.1ch + 6px); }
+.ir-fold { margin-top: var(--space-2); }
+.ir-fold > summary { cursor: pointer; list-style: none; }
+.ir-fold > summary::-webkit-details-marker { display: none; }
+.ir-fold > summary .fc-sub::before { content: "▸ "; }
+.ir-fold[open] > summary .fc-sub::before { content: "▾ "; }
+.ir-fold-body { display: grid; gap: 6px; }
+.vz-list { display: grid; gap: 6px; }
+.vz-row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto; gap: 8px; align-items: center; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); }
+.vz-name { display: grid; } .vz-name .hint { font-size: var(--text-xs); }
+.vz-picks { display: flex; flex-wrap: wrap; gap: 4px; }
+.vz-zone { padding: 6px 0; border-bottom: 1px solid var(--divider); }
+.vz-zone-head { display: flex; align-items: baseline; gap: 4px; cursor: pointer; }
+.vz-pos { margin: 4px 0 0 22px; } .vz-pos > summary { cursor: pointer; }
+.vz-pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 2px 8px; margin-top: 4px; }
+.vz-pick { font-size: var(--text-xs); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.cr-pair { display: flex; align-items: center; gap: 6px; } .cr-pair .input { width: 7em; }
+@media (max-width: 640px) { .vz-row { grid-template-columns: 1fr; } }

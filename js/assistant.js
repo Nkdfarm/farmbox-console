@@ -39,7 +39,8 @@ import { startBuild, abandonBuild, building } from './ai-build-ui.js';
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
-  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop']);
+  'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop',
+  'save_valve_zones']);
 // "To check" (owner, 19 Nov 2026): the button beside Send; the person sees "To check", the assistant reads the longer ask
 const SPEAKER = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 const CHECK = 'To check';
@@ -181,7 +182,13 @@ function buildPlanBox(text, plan) {
   const lines = planLines(text);
   const lead = lines.find(l => l.kind === 'lead');
   if (lead) { const p = el('p', 'ai-lead'); p.innerHTML = inline(lead.text); box.append(p); }
-  (plan.steps || []).forEach(s => box.append(stepLine(STEP_MARK[s.mark] || 'changed', `**${s.summary}**` + (s.switches_on ? ' — switches the program ON' : ''))));
+  (plan.steps || []).forEach(s => {
+    const line = stepLine(STEP_MARK[s.mark] || 'changed', `**${s.summary}**` + (s.switches_on ? ' — switches the program ON' : ''));
+    // P6: each step's one-line reason, and what could not be checked against the crop ranges
+    if (s.reason) line.lastChild.append(el('span', 'ai-step-why', ' — ' + s.reason));
+    (s.warnings || []).forEach(w => line.append(el('div', 'ai-step-warn', '⚠ ' + w)));
+    box.append(line);
+  });
   lines.filter(l => l.kind === 'ask').forEach(l => { const d = el('div', 'ai-blk ask'); d.innerHTML = inline(l.text); box.append(d); });
   box.append(el('div', 'ai-plan-cards', planPagesLine(plan.pages)), el('div', 'ai-plan-cost', estimateLine(plan.estimate, plan.budget)));
   return box;

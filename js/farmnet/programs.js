@@ -33,7 +33,7 @@ const opt = (value, text) => { const o = el('option', null, text); o.value = Str
 const select = (pairs, value) => { const s = el('select', 'input'); pairs.forEach(([v, t]) => s.append(opt(v, t))); s.value = String(value); return s; };
 
 // FarmNet's list of water sources and the valves and valve groups under each (valve/group/list)
-function treeOf(data) {
+export function treeOf(data) {
   return (Array.isArray(data) ? data : []).filter(s => s && Number.isInteger(Number(s.id))).map(s => ({
     sid: Number(s.id), name: String(s.label ?? s.id), ff: s.FF === true,
     valves: (s.children || []).flatMap(g => g?.children || []).filter(v => v && Number.isInteger(Number(v.id))).map(v => ({ id: Number(v.id), name: String(v.label ?? v.id) })),

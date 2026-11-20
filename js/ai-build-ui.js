@@ -169,6 +169,8 @@ function draftCard(d, s) {
     head.append(x);
   }
   card.append(head, el('div', 'ai-draft-meta', d.label + (d.edited ? ' · changed by you' : '') + (d.fixed ? ' · fixed by the AI' : '')));
+  if (d.reason) card.append(el('div', 'ai-draft-why', 'Why: ' + d.reason));                                   // P6: its one-line reason
+  (d.warnings || []).forEach(w => card.append(el('div', 'ai-draft-note', '⚠ ' + w)));                         // P6: what was not checked
   if (!d.anchor) card.append(el('div', 'ai-draft-note', 'Its button was not found on the page: staged all the same.'));
   if (d.switches_on) card.append(el('div', 'ai-draft-warn', 'This switches the program ON when you validate.'));
   if (d.status === 'applied') card.append(el('div', 'ai-draft-ok', '✓ Applied'));
@@ -281,7 +283,7 @@ export async function startBuild(plan, ctx) {
   };
   const fix = async (step, error) => {
     const r = await fn('assistant', { farm_id: farm.id, units: ctx.units || undefined, messages: [{ role: 'user', content: 'Fix one step of a build.' }],
-      fix: { step: { command: step.command, args: step.args, page: step.page, summary: step.summary, unit: step.unit }, error } }, { quiet: true });
+      fix: { step: { command: step.command, args: step.args, page: step.page, summary: step.summary, unit: step.unit, reason: step.reason, valves: step.valves }, error } }, { quiet: true });
     return r?.ok ? { ok: true, step: r.step } : { ok: false, error: r?.error || 'no answer' };
   };
   current = { ctx, open: null, build: null };

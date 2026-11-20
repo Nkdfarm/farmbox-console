@@ -158,6 +158,15 @@ const RPC = [
   { name: 'save_farm_holiday', family: 'team', label: 'Add a closed day', pages: ['#/farm/zones'],
     args: { p_farm: uuid('FarmBox'), p_day: date('Day'), p_name: { type: 'string', required: true, max: 120, label: 'Name' },
             p_closed: { type: 'boolean', required: true, label: 'Closed' } } },
+  // a FarmNet valve's zones and positions (0288, AI build mode P6): a fact of the layout, kept on the platform. The AI may
+  // propose it (a card the person presses), never build it: a build could unlink a valve and loosen its own range check
+  { name: 'save_valve_zones', family: 'water', label: 'Link a valve to the zones it waters', pages: IRR, stageable: false,
+    args: { p_farm: uuid('FarmBox'), p_centre: { type: 'int', required: true, min: 0, label: 'Fertigation centre' },
+            p_valve: { type: 'int', required: true, min: 0, label: 'Valve' },
+            p_valve_name: { type: 'string', required: true, min: 1, max: 120, label: 'Valve name' },
+            p_targets: { type: 'array', required: true, max: 200, label: 'Zones and positions' } },
+    preview: a => { const n = (a?.p_targets || []).length; return `Valve ${a?.p_valve_name || a?.p_valve} waters ${n} zone${n === 1 ? '' : 's'} or position${n === 1 ? '' : 's'}`; },
+    anchor: keyed('save_valve_zones', a => a.p_valve) },
   { name: 'save_order', family: 'sales', label: 'Create or change a customer order', pages: ['#/office/orders'],
     args: { p: { type: 'object', required: true, label: 'The order' } } },
   { name: 'plan_order_line', family: 'sales', label: 'Plan an order line backwards from its delivery', pages: ['#/office/orders'],

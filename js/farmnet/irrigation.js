@@ -14,12 +14,15 @@
 //              deletes it — with the same blocks as Delete… in its drawer (owner, 20 Nov 2026)
 //   Runs       the run records (today / 2 days / 7 days), folded
 //   Deleted    the programs and recipes deleted here, kept by the function (0283), to make again, folded
+//   Valves and bays   which zones and positions each valve waters, folded (0288, valves.js); EC and pH per crop, once for
+//              the page, folded (0288)
 // The commands (start a program, pause, resume, stop) stay in the card's head, as before.
 import { el, drawer, field, pref, toast } from '../ui.js';
 import { centreButtons } from './overview.js';
 import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
 import { openProgram, newProgram } from './programs.js';
 import { quickDelete, assignRecipe, deletedList } from './irrigation-actions.js';
+import { valvesSection, rangesSection } from './valves.js';
 import { tagCmd } from '../registry.js';
 import { DAY_SPANS, ask, bad, card, centres, colour, nowLocal, num, page, range, short, show, soft, spanPicker, table } from './shell.js';
 
@@ -189,8 +192,10 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
         recs.slice().sort((a, b) => String(b.ST).localeCompare(String(a.ST))).slice(0, 200).map(r => [r.NM, say(r.MD), r.ST, r.ET, r.VLM, say(r.SC)]), [4]));
       k.append(runs);
       k.append(deletedList(ctx, c, new Set((programs.v || []).map(p => Number(p.ID))), new Set(recipes.map(r => Number(r.ID)))));
+      k.append(valvesSection(ctx, c));   // AI build mode P6 (0288)
       body.append(k);
     });
+    body.append(rangesSection(ctx));    // once for the page (0288)
   }, { commands: true, quiet });
 }
 

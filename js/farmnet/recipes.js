@@ -9,6 +9,7 @@
 // on FarmNet again before deleting.
 import { el, drawer, field, toast, busy, confirmDrawer, loading } from '../ui.js';
 import { askNow, bad, num, send } from './shell.js';
+import { copyThing, historyOf } from './irrigation-actions.js';
 
 // the scales the cards draw on; the band is where a hydroponic solution usually sits
 export const EC_SCALE = { lo: 0, hi: 4, band: [1, 2.6], unit: 'mS' };
@@ -231,6 +232,9 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
   tune.forEach(([k, v, u]) => { const r2 = el('div', 'fc-param'); r2.append(el('span', null, k), el('b', null, `${show2(v)}${u ? ' ' + u : ''}`), el('span')); adv.append(r2); });
   d.body.append(adv);
 
+  // its earlier states, kept by the function before each change (0283), each to put back
+  d.body.append(historyOf(ctx, c, 'recipe', { ID: r.ID, NM: full.NM || r.NM }, () => { dirty = () => false; d.close(); }));
+
   if (!ctx.may) { d.body.append(el('div', 'hint', 'Only the farm admin and farm manager change a recipe.')); return; }
 
   const changes = () => inputs.filter(x => Number.isFinite(x.read()) && x.read() !== x.from);
@@ -282,7 +286,13 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
     d.close();
     if (!after) setTimeout(ctx.redraw, 800);
   };
-  d.footer.append(del, save);
+  const copy = el('button', 'btn', 'Copy…'); copy.type = 'button';
+  copy.onclick = () => {
+    if (dirty()) { toast('Save or undo your changes first: the copy is made from what FarmNet holds', 'bad'); return; }
+    dirty = () => false; d.close();
+    copyThing(ctx, c, 'recipe', { ID: r.ID, NM: full.NM || r.NM }, c.names?.recipes, null, after);
+  };
+  d.footer.append(del, copy, save);
 }
 
 const show2 = v => { const n = num(v); return n === null ? (v ?? '—') : String(Number(n.toFixed(4))); };

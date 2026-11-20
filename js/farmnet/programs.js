@@ -12,6 +12,7 @@
 // (askNow), never from the copy kept on this computer: a change is built on what FarmNet holds now.
 import { el, drawer, toast, busy, confirmDrawer, loading } from '../ui.js';
 import { askNow, bad, num, send } from './shell.js';
+import { copyThing, historyOf } from './irrigation-actions.js';
 
 const DAY = 86400, MAX_RUN_MIN = 240;
 const diyV = x => (x && typeof x === 'object' && 'V' in x ? x.V : x);
@@ -297,6 +298,9 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
   const paintDay = () => { if (st.mode === 0) drawDay(); };   // a timer start's bar is as long as the valves' run
   drawWater();
 
+  // its earlier states, kept by the function before each change (0283), each to put back
+  d.body.append(historyOf(ctx, c, 'program', { ID: p.ID, NM: was.name || p.NM }, () => { dirty = () => false; d.close(); }));
+
   if (!ctx.may) { d.body.append(el('div', 'hint', 'Only the farm admin and farm manager change a program.')); return; }
 
   // ── what changed, in words, and as the function takes it ──
@@ -407,5 +411,11 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
     d.close();
     if (!after) setTimeout(ctx.redraw, 800);
   };
-  d.footer.append(del, save);
+  const copy = el('button', 'btn', 'Copy…'); copy.type = 'button';
+  copy.onclick = () => {
+    if (dirty()) { toast('Save or undo your changes first: the copy is made from what FarmNet holds', 'bad'); return; }
+    dirty = () => false; d.close();
+    copyThing(ctx, c, 'program', { ID: p.ID, NM: was.name || p.NM }, c.names?.programs, recipes, after);
+  };
+  d.footer.append(del, copy, save);
 }

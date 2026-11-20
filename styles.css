@@ -1763,6 +1763,24 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-flash { animation: irFlash .5s ease-in-out 3; border-radius: 6px; }
 @keyframes irFlash { 50% { background: var(--error-bg); box-shadow: 0 0 0 2px var(--error); } }
 @media (prefers-reduced-motion: reduce) { .ir-flash { animation: none; outline: 2px solid var(--error); } }
+/* the ✕ on a program row and a recipe card, groups, drag and drop, history (irrigation-actions.js) */
+.ir-card-wrap { position: relative; display: flex; }
+.ir-card-wrap > .ir-recipe { flex: 1; }
+.ir-card-wrap.is-dragging { opacity: .5; }
+.ir-label { position: relative; padding-right: 22px; }
+.ir-x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--divider);
+  background: var(--surface); color: var(--text-muted); font-size: 11px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s; z-index: 1; }
+.ir-label > .ir-x { top: 0; right: 0; }
+.ir-card-wrap:hover > .ir-x, .ir-row.is-open:hover .ir-x, .ir-x:focus-visible { opacity: 1; }
+.ir-x:hover { color: var(--error); border-color: var(--error); background: var(--error-bg); }
+@media (hover: none) { .ir-x { opacity: .8; } }
+.ir-row.is-drop .ir-track { box-shadow: 0 0 0 2px var(--accent); background-color: var(--accent-soft, var(--track-soft)); }
+.ir-group { margin: 10px 0 6px; }
+.ir-drag-hint { margin-top: 6px; font-size: 11px; }
+@media (hover: none) { .ir-drag-hint { display: none; } }   /* no dragging on a touch screen: the drawer's recipe list stays */
+.ir-recipe[draggable="true"] { cursor: grab; }
+.ir-history > summary { cursor: pointer; }
+.ir-history-list .fc-param { grid-template-columns: 1fr auto auto; }
 /* the recipe drawer */
 .ir-targets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .ir-target { padding: 10px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--divider); }

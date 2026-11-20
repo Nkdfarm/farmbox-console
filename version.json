@@ -1,5 +1,5 @@
 {
-  "version": "0.15.00",
+  "version": "0.16.00",
   "released": "2026-11-20",
-  "note": "Delete irrigation programs and recipes, never while in use"
+  "note": "Copy, quick delete, recipe groups, drag and drop, restore"
 }

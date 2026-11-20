@@ -8,12 +8,18 @@
 //              for a new start)
 //   Recipes    one card each, EC and pH on a scale, its channels; a press opens it in full (recipes.js), where
 //              the Admin and Farm manager change its EC, pH and channel ratios
+//              In use (by an irrigation program, a mixing program, or in a mixer now) and Library; a recipe card
+//              may be dragged onto a program's row to make it mix that recipe (irrigation-actions.js assignRecipe)
+//              A ✕ on a program's row and on a recipe card (shown under the pointer; always on a touch screen)
+//              deletes it — with the same blocks as Delete… in its drawer (owner, 20 Nov 2026)
 //   Runs       the run records (today / 2 days / 7 days), folded
+//   Deleted    the programs and recipes deleted here, kept by the function (0283), to make again, folded
 // The commands (start a program, pause, resume, stop) stay in the card's head, as before.
 import { el, drawer, field, pref, toast } from '../ui.js';
 import { centreButtons } from './overview.js';
 import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
 import { openProgram, newProgram } from './programs.js';
+import { quickDelete, assignRecipe, deletedList } from './irrigation-actions.js';
 import { DAY_SPANS, ask, bad, card, centres, colour, nowLocal, num, page, range, short, show, soft, spanPicker, table } from './shell.js';
 
 // FarmNet's device types (status/detail "type")
@@ -39,17 +45,23 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
         soft(ask(farm, 'irrigation_records', { id: c.id, type: 0, ...range(at) })),
       ]);
       const params = await Promise.all((programs.v || []).map(p => soft(ask(farm, 'program_param', { id: c.id, proId: p.ID }))));
-      return { programs, manual, formulas, records, params };
+      // each mixer's own programs: a recipe a mixing program uses is "in use" too
+      const mixProgs = await Promise.all((c.status.v?.fertList || []).map(f => soft(ask(farm, 'fert_programs', { id: c.id, devId: f.id }))));
+      return { programs, manual, formulas, records, params, mixProgs };
     }));
     if (!ctx.live()) return;
 
     cl.forEach((c, i) => {
-      const { programs, manual, formulas, records, params } = per[i];
+      const { programs, manual, formulas, records, params, mixProgs } = per[i];
       const s = c.status.v || {};
       const recipes = formulas.v || [];
       // a recipe's colour is its place in FarmNet's list; a program's recipe is the one its water source mixes
       const colourOf = name => { const k = recipes.findIndex(r => r.NM === name); return k < 0 ? 'var(--text-faint)' : colour(k); };
       const recipeOfProgram = id => {
+        // the program in full first (its water source's recipe number), else the name FarmNet shows for it
+        const par = params[(programs.v || []).findIndex(p => Number(p.ID) === Number(id))]?.v;
+        const byId = (Array.isArray(par?.SRC) ? par.SRC : []).map(x => recipes.find(r => Number(r.ID) === Number(x?.FID))?.NM).find(Boolean);
+        if (byId) return byId;
         const src = (manual.v || []).find(p => Number(p.ID) === Number(id))?.SRC || [];
         const f = src.map(x => x.FNM).find(n => n && n !== 'None');
         return f || null;
@@ -57,6 +69,17 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       const valvesOf = id => ((manual.v || []).find(p => Number(p.ID) === Number(id))?.SRC || [])
         .flatMap(x => (x.VALVE || []).map(v => `${v.NM} ${mins(v.STM ?? v.ATM)}`));
       const mixing = new Set((s.fertList || []).flatMap(f => (f.runList || []).map(x => x.FA)).filter(Boolean));
+      c.names = { programs: (programs.v || []).map(p => p.NM), recipes: recipes.map(r => r.NM) };   // for Copy…: no two alike
+      // who uses a recipe: an irrigation program's water source (its number, from the program in full; else the name
+      // FarmNet shows for it), a mixing program (by name: that list carries names)
+      const parOf = id => params[(programs.v || []).findIndex(p => Number(p.ID) === Number(id))]?.v || null;
+      const usersOf = r => (programs.v || []).filter(p => {
+        const par = parOf(p.ID);
+        return par && Array.isArray(par.SRC) ? par.SRC.some(x => Number(x?.FID) === Number(r.ID)) : recipeOfProgram(p.ID) === r.NM;
+      }).map(p => p.NM);
+      const mixUsersOf = r => mixProgs.flatMap(m => (Array.isArray(m.v) ? m.v : []).filter(x => String(x?.FNM ?? '').trim() === String(r.NM).trim()).map(x => `${x.NM} (mixing)`));
+      const mixUnknown = mixProgs.some(m => m.e);
+      const running = new Set((s.valve?.runList || []).map(x => String(x?.PN ?? '').trim()));
 
       // ── the card of the centre ──
       const k = card(`${c.name} — irrigation`, ...(ctx.may ? centreButtons(ctx, c) : []));
@@ -73,8 +96,32 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       }
       k.append(th);
       if (programs.e) k.append(bad(programs.e));
-      else k.append(clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
-        (p, at) => openProgram(ctx, c, p, recipes, at)));
+      else {
+        const box = clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
+          (p, at) => openProgram(ctx, c, p, recipes, at));
+        if (ctx.may) box.querySelectorAll('.ir-row.is-open[data-pid]').forEach(row => {
+          const p = (programs.v || []).find(x => String(x.ID) === row.dataset.pid);
+          if (!p) return;
+          const par = parOf(p.ID);
+          // the ✕: the same blocks as Delete… (switched on, running), said before anything is sent
+          const x = el('button', 'ir-x', '✕'); x.type = 'button'; x.title = `Delete "${p.NM}"`; x.setAttribute('aria-label', `Delete ${p.NM}`);
+          x.onclick = e => { e.stopPropagation(); quickDelete(ctx, c, 'program', p, { on: par ? Number(par.EN?.V) !== 0 : true, running: running.has(String(p.NM).trim()) }); };
+          x.onkeydown = e => e.stopPropagation();
+          row.querySelector('.ir-label')?.append(x);
+          // a recipe dropped on the row
+          row.ondragover = e => { if (e.dataTransfer?.types?.includes('text/x-fn-recipe')) { e.preventDefault(); row.classList.add('is-drop'); } };
+          row.ondragleave = () => row.classList.remove('is-drop');
+          row.ondrop = e => {
+            row.classList.remove('is-drop');
+            const rid = e.dataTransfer?.getData('text/x-fn-recipe');
+            const r = recipes.find(y => String(y.ID) === rid);
+            if (!r) return;
+            e.preventDefault();
+            assignRecipe(ctx, c, p, par, r, recipes);
+          };
+        });
+        k.append(box);
+      }
 
       const rh = el('div', 'fc-head fc-subhead');
       rh.append(el('h4', 'fc-sub', `Recipes · ${recipes.length}`), el('div', 'spacer'),
@@ -87,13 +134,42 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       k.append(rh);
       if (formulas.e) k.append(bad(formulas.e));
       else {
-        const grid = el('div', 'ir-recipes');
+        // two groups: in use (an irrigation program, a mixing program, a mixer now) and the library
+        const inUse = [], library = [];
         recipes.forEach(r => {
-          const used = (programs.v || []).filter(p => recipeOfProgram(p.ID) === r.NM).map(p => p.NM);
-          grid.append(recipeCard(r, colourOf(r.NM), used, mixing.has(r.NM), () => openRecipe(ctx, c, r, used)));
+          const used = usersOf(r), mix = mixUsersOf(r), now = mixing.has(r.NM);
+          const users = [...used, ...mix, ...(now ? ['a mixer now'] : [])];
+          const wrap = el('div', 'ir-card-wrap');
+          const cardEl = recipeCard(r, colourOf(r.NM), [...used, ...mix], now, () => openRecipe(ctx, c, r, users));
+          wrap.append(cardEl);
+          if (ctx.may) {
+            cardEl.draggable = true;
+            cardEl.title = `Drag onto a program on the clock to make it mix "${r.NM}"`;
+            cardEl.ondragstart = e => { e.dataTransfer.setData('text/x-fn-recipe', String(r.ID)); e.dataTransfer.effectAllowed = 'link'; wrap.classList.add('is-dragging'); };
+            cardEl.ondragend = () => wrap.classList.remove('is-dragging');
+            const x = el('button', 'ir-x', '✕'); x.type = 'button'; x.title = `Delete "${r.NM}"`; x.setAttribute('aria-label', `Delete ${r.NM}`);
+            x.onclick = e => {
+              e.stopPropagation();
+              if (mixUnknown && !users.length) { toast('FarmNet did not list the mixing programs just now: open the recipe and use Delete… (FarmNet is checked again)', 'bad'); return; }
+              quickDelete(ctx, c, 'recipe', r, { users });
+            };
+            wrap.append(x);
+          }
+          (users.length ? inUse : library).push(wrap);
         });
-        if (!recipes.length) grid.append(el('div', 'hint', 'FarmNet holds no recipe.'));
-        k.append(grid);
+        const group = (title, items, empty) => {
+          k.append(el('div', 'cx-kind-label ir-group', `${title} · ${items.length}`));
+          const grid = el('div', 'ir-recipes');
+          grid.append(...items);
+          if (!items.length) grid.append(el('div', 'hint', empty));
+          k.append(grid);
+        };
+        if (!recipes.length) k.append(el('div', 'hint', 'FarmNet holds no recipe.'));
+        else {
+          group('In use', inUse, 'No program uses a recipe.');
+          group('Library', library, 'Every recipe is in use.');
+          if (ctx.may) k.append(el('div', 'hint ir-drag-hint', 'Drag a recipe onto a program on the clock to make it mix that recipe.'));
+        }
       }
 
       const recs = records.v?.record || [];
@@ -109,6 +185,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       else runs.append(table(['Program', 'Mode', 'Start', 'End', 'Volume m³', 'How it ended'],
         recs.slice().sort((a, b) => String(b.ST).localeCompare(String(a.ST))).slice(0, 200).map(r => [r.NM, say(r.MD), r.ST, r.ET, r.VLM, say(r.SC)]), [4]));
       k.append(runs);
+      k.append(deletedList(ctx, c, new Set((programs.v || []).map(p => Number(p.ID))), new Set(recipes.map(r => Number(r.ID)))));
       body.append(k);
     });
   }, { commands: true, quiet });
@@ -292,6 +369,7 @@ function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf, o
     const par = params[i]?.v || null;
     const rec = recipeOfProgram(p.ID);
     const row = el('div', 'ir-row is-open');
+    row.dataset.pid = String(p.ID);
     row.style.setProperty('--rc', colourOf(rec));
     // a press opens the program; on the clock, the time pressed is offered for a new start
     row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-label', `${p.NM}: see it in full`);

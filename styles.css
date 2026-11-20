@@ -2915,6 +2915,24 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 .ai-ctx-chip { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; font: inherit; font-size: var(--text-xs); padding: 1px 7px; white-space: nowrap; border-radius: var(--radius-sm); cursor: pointer;
   color: var(--text); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .ai-ctx-chip.off { color: var(--text-faint); background: transparent; border-color: var(--border); text-decoration: line-through; }
+/* the shapes of an answer (AI build mode P1, 20 Nov 2026): the chips above the question, the answer box, the plan's steps */
+.ai-shapes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.ai-shape { font: inherit; font-size: var(--text-xs); padding: 1px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  color: var(--text-muted); background: transparent; border: 1px solid var(--border-strong, var(--border)); }
+.ai-shape:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.ai-shape.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.ai-band.closed .ai-shapes { display: none; }
+.ai-answer ul { margin: 0 0 0 18px; padding: 0; } .ai-answer li { margin: 2px 0; } .ai-answer li::marker { color: var(--accent); }
+.ai-step { display: flex; align-items: baseline; gap: 8px; margin: 3px 0; padding: 4px 10px; border-radius: 8px;
+  border-left: 4px solid var(--blk); background: color-mix(in srgb, var(--blk) 12%, transparent); }
+.ai-step.new { --blk: var(--accent); } .ai-step.changed { --blk: #f5a524; } .ai-step.removed { --blk: #e5484d; } .ai-step.same { --blk: #30a46c; }
+.ai-step-sign { flex: none; width: 1.1ch; text-align: center; color: var(--blk); }
+.ai-plan-cards { margin-top: 6px; font-size: var(--text-xs); color: var(--text-muted); }
+.ai-shapes .spacer { flex: 1; }
+.ai-follow.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ai-page-chip { display: inline-block; max-width: 100%; margin: 0 0 3px; padding: 0 7px; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+  font: inherit; font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); background: var(--surface); }
+.ai-page-chip:hover { color: var(--accent); }
 .ai-input { width: 100%; flex: 1; min-height: 40px; resize: none; }
 .ai-send { flex-wrap: wrap; row-gap: 6px; }   /* a narrow column: the buttons go to a second line rather than out of sight */
 /* closed: one line — what it last said on the left, the question box on the right */
@@ -2938,4 +2956,5 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
   .ai-out { border-right: 0; }
   .ai-band:not(.closed) .ai-in { border-top: 1px solid var(--border); }
   .ai-band.closed { grid-template-columns: minmax(0, 1fr) minmax(200px, 1.2fr); grid-template-rows: auto; }
+  .ai-band:not(.closed) .ai-shapes { flex-basis: 100%; }
 }

@@ -12,16 +12,22 @@
 //
 // The compact band (19 Nov 2026, owner): the head is the conversation's title (no avatar, no gear, no
 // prepared questions); the question box has the voice button, the units as one small line, "New chat", "To check" and Send; the
-// settings of the cards are in Settings › Assistant. Each page keeps its own conversation; "To check" asks what on the page needs checking.
+// settings of the cards are in Settings › Assistant. One conversation per person and FarmBox across pages since P2 (20 Nov 2026), each question stamped with its page; "To check" asks what on the page needs checking.
 //
 // The band (19 Nov 2026): the answers on the left two thirds, the question on the right third, with the page and the units
 // on screen as chips that go with the question (a click drops one). A click on its grip opens or closes it; a drag
 // makes it taller or shorter, snapping to closed, a fifth, a third or half the window; the height is kept per person and
 // per screen (fbc_band_…). Closed it is one line — the question box stays — and a question slides it open to a fifth.
+//
+// Answer shapes (AI build mode P1, 20 Nov 2026, docs/ai-build-mode.md): chips Answer · Brief · Plan above the question
+// (none ticked = auto; Build waits for P5), sent as `shape`; the reply starts with <<shape:…>>, stripped here and drawn
+// by assistant-shape.js's rules: answer = a compact box of short bullets (the default for a plain question), brief = the
+// coloured blocks, plan = coloured step lines and the count of its cards by page. No tag: drawn as before.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
 import { createMic, readAllOn } from './assistant-local.js';
+import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine } from './assistant-shape.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -36,44 +42,73 @@ const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dro
 let ctx = null;              // { farm(), refresh() } from app.js
 let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, mic;
 let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
-const convos = new Map();    // farm id | page → { messages (as the function returned them), view, notes, chatId, at }
+let shapePick = null, shapeRow;   // the shape ticked for the next question (null = auto); it goes back to auto once sent
+const convos = new Map();    // person | farm id → { messages (as the function returned them), view, notes, chatId, at, fresh, stamp }
 let files = [];
+let followPage = true;       // "Follow the page" (P2): on, a question is about the page on screen; off, about the page of the one before
 
-// one conversation for each page of each FarmBox (owner, 19 Nov 2026): the box on a page opens with the last
-// conversation held there, and is empty on a page where there was none. Kept in this browser; the database keeps each
-// chat as before, but only this browser knows which page it belongs to.
-const pageOf = () => (location.hash || '#/').split('?')[0];
-const ckey = () => (ctx.farm()?.id || 'none') + '|' + pageOf();
+// ONE conversation per person and FarmBox, across pages (AI build mode P2, 20 Nov 2026; it was one per page from 19 Nov).
+// It is kept on the platform (ai_chat, 0275) and loaded from there (ai_chat_latest, with each question's page since
+// 0284); this browser's copy (fbc_aic_<person>|<farm>) is only a cache, shown at once and replaced when the platform's is
+// newer (another device). The per-page copies of 19 Nov are deleted: the platform's latest chat, which is the one held
+// last on any page, becomes the farm's conversation. The answer text never changes when the page changes.
+const ckey = () => (ctx.user?.() || 'none') + '|' + (ctx.farm()?.id || 'none');
+const blank = () => ({ messages: [], view: [], notes: [], chatId: null, at: 0 });
+const synced = new Set();    // the conversations already asked of the platform in this tab
 const convo = () => {
   const id = ckey();
   if (!convos.has(id)) {
     let saved = null;
-    try { saved = JSON.parse(localStorage.getItem('fbc_ai_' + id) || 'null'); } catch { /* none */ }
-    if (saved) { saved.seen = Date.now(); try { localStorage.setItem('fbc_ai_' + id, JSON.stringify(saved)); } catch { /* full */ } }   // opened: it is kept another month
-    convos.set(id, saved || { messages: [], view: [], notes: [], chatId: null, at: 0 });
+    try { saved = JSON.parse(localStorage.getItem('fbc_aic_' + id) || 'null'); } catch { /* none */ }
+    if (saved) { saved.seen = Date.now(); try { localStorage.setItem('fbc_aic_' + id, JSON.stringify(saved)); } catch { /* full */ } }   // opened: it is kept another month
+    convos.set(id, saved || blank());
   }
+  if (!synced.has(id) && ctx.farm()) { synced.add(id); fromPlatform(id, ctx.farm().id); }
   return convos.get(id);
 };
-// id: the key of the conversation (farm | page) — an answer that lands after a switch of page or FarmBox is saved with
-// its own conversation, not the one now on screen (review 3 Oct 2026)
+// the platform's copy: taken when this browser has none, or when the platform's is newer (asked on another device);
+// never over a conversation the person has just started here ("New chat")
+async function fromPlatform(id, farmId) {
+  let r = null;
+  try { r = await rpc('ai_chat_latest', { p_farm: farmId }, { quiet: true }); } catch { return; }   // offline: the cache stands
+  const c = convos.get(id);
+  if (!r || !c || sending) return;
+  const at = Date.parse(r.updated_at || '') || 0;
+  const newer = at && at > (c.at || 0) + 2000;
+  if (c.fresh || !(c.view.length === 0 || newer)) return;
+  if (r.chat_id === c.chatId && !newer) return;
+  convos.set(id, { messages: Array.isArray(r.messages) ? r.messages : [], view: Array.isArray(r.view) ? r.view : [], notes: [],
+                   chatId: r.chat_id || null, at: at || Date.now() });
+  save(id);
+  if (id === ckey() && band && mode === 'chat') paint();
+}
+// id: the key of the conversation (person | farm) — an answer that lands after a switch of FarmBox is saved with its own
+// conversation, not the one now on screen (review 3 Oct 2026)
 const save = (id = ckey()) => {
   if (!id || !convos.has(id)) return;
   try {
     const s = JSON.stringify(convos.get(id));
-    if (s.length < 3_000_000) localStorage.setItem('fbc_ai_' + id, s); else localStorage.removeItem('fbc_ai_' + id);
+    if (s.length < 3_000_000) localStorage.setItem('fbc_aic_' + id, s); else localStorage.removeItem('fbc_aic_' + id);
   } catch { /* private window, or full */ }
 };
-// the conversations of pages not opened for a month go, and so do the single-conversation copies of before the pages
+// conversations not opened for a month go from this browser (they stay on the platform); the per-page copies of 19 Nov
+// (fbc_ai_<farm>|<page>) and the single ones before them go at once
 function prune() {
   try {
     const old = Date.now() - KEEP_DAYS * 864e5;
-    Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_')).forEach(k => {
-      if (!k.includes('|')) { localStorage.removeItem(k); return; }
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('fbc_ai_') && k.includes('|')) { localStorage.removeItem(k); return; }   // the old per-page copies; not the device's settings
+      if (!k.startsWith('fbc_aic_')) return;
       let at = 0;
       try { const o = JSON.parse(localStorage.getItem(k) || '{}'); at = Math.max(o.seen || 0, o.at || 0); } catch { /* unreadable: goes */ }
       if (at < old) localStorage.removeItem(k);
     });
   } catch { /* no storage */ }
+}
+// the page a question is about: the page on screen, or, with "Follow the page" off, the page of the question before
+function stampNow(c, w, check) {
+  const here = { route: (location.hash || '#/').split('?')[0], title: w.page || '', units: w.units || [], unitIds: w.unitIds || null, allUnitIds: w.allUnitIds || null };
+  return !check && !followPage && c.stamp ? c.stamp : here;
 }
 
 // a little markdown: paragraphs, **bold**, `code`, lists — escaped first. And the answer's own marks (19 Nov 2026, owner:
@@ -81,8 +116,8 @@ function prune() {
 // a line starting with 🔴 🟠 🟢 🔵 ❓ as a coloured block (red: act now, orange: watch, green: fine, blue: next step / info)
 const MARK = { '🔴': 'red', '🟠': 'amber', '🟡': 'amber', '🟢': 'green', '🔵': 'blue', '❓': 'ask' };
 const MARK_RE = /^\s*(?:[-•*]\s+)?(🔴|🟠|🟡|🟢|🔵|❓)️?\s*(.*)$/u;
+const inline = s => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
 function md(text) {
-  const inline = s => escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
   const box = el('div', 'ai-md');
   let html = '', listOpen = null, first = true;
   const close = () => { if (listOpen) { html += `</${listOpen}>`; listOpen = null; } };
@@ -111,6 +146,45 @@ function md(text) {
   box.innerHTML = html;
   return box;
 }
+
+// ── the shapes of an answer (AI build mode P1, 20 Nov 2026): answer · brief · plan ─────────────────────────────────
+// answer: one compact box of short bullets (the default for a plain question)
+function answerBox(text) {
+  const box = el('div', 'ai-md ai-answer');
+  const lines = answerLines(text);
+  const ul = el('ul');
+  lines.filter(l => !l.ask).forEach(l => { const li = el('li'); li.innerHTML = inline(l.text); ul.append(li); });
+  if (ul.children.length) box.append(ul);
+  lines.filter(l => l.ask).forEach(l => { const d = el('div', 'ai-blk ask'); d.innerHTML = inline(l.text); box.append(d); });
+  return box;
+}
+// plan: a lead line, one coloured line per step ([+] new blue, [~] changed amber, [-] removed red, [=] checked green), the
+// cards it comes with counted by page
+const STEP_SIGN = { new: '+', changed: '~', removed: '−', same: '=' };
+function planBox(text, cards) {
+  const box = el('div', 'ai-md ai-plan');
+  planLines(text).forEach(l => {
+    if (l.kind === 'step') {
+      const d = el('div', 'ai-step ' + l.mark);
+      d.append(el('b', 'ai-step-sign', STEP_SIGN[l.mark]));
+      const t = el('span'); t.innerHTML = inline(l.text); d.append(t);
+      box.append(d);
+    } else {
+      const d = el(l.kind === 'ask' ? 'div' : 'p', l.kind === 'ask' ? 'ai-blk ask' : l.kind === 'lead' ? 'ai-lead' : null);
+      d.innerHTML = inline(l.text); box.append(d);
+    }
+  });
+  box.append(el('div', 'ai-plan-cards', cardsLine(cards)));
+  return box;
+}
+// the answer drawn by its shape; no tag (an older answer, or the model forgot it) = drawn as before
+function drawAnswer(text, cards) {
+  const s = splitShape(text);
+  if (s.shape === 'answer') return answerBox(s.text);
+  if (s.shape === 'plan') return planBox(s.text, cards);
+  return md(s.text);
+}
+const words = text => splitShape(text).text;   // what is read aloud and shown in the closed band: no tag
 
 // ── what waits for a manager (0276) ─────────────────────────────────────────
 let mode = 'chat';   // 'chat' | 'waiting'  (the cards' settings are in Settings › Assistant since 19 Nov 2026)
@@ -156,14 +230,22 @@ function paint() {
   if (!c.view.length && !sending) {
     list.append(el('div', 'ai-hello', ctx.farm() ? 'Ask, or tell it what to set up. Changes come as cards: nothing happens until you press Do it.' : 'Choose a FarmBox first.'));
   }
-  c.view.forEach((v, i) => list.append(item(v, i)));
+  c.view.forEach((v, i) => list.append(item(v, i, c.view)));
   list.scrollTop = list.scrollHeight;
   paintTitle(); paintPeek(); paintContext();
 }
 
-function item(v, i) {
+function item(v, i, view = []) {
   if (v.role === 'user') {
     const b = el('div', 'ai-msg user');
+    // the page the question was about (P2): a small chip; a click goes back there
+    const pg = v.page && (v.page.title || v.page.route);
+    if (pg) {
+      const chip = el('button', 'ai-page-chip', pg + (v.page.units?.length ? ' · ' + v.page.units.join(' + ') : ''));
+      chip.type = 'button'; chip.title = 'Asked about this page — click to open it';
+      chip.onclick = () => { if (v.page.route && location.hash.split('?')[0] !== v.page.route) location.hash = v.page.route; };
+      b.append(chip);
+    }
     b.append(el('div', null, v.text));
     if (v.files?.length) b.append(el('div', 'ai-files', '📎 ' + v.files.join(', ')));
     return b;
@@ -171,10 +253,10 @@ function item(v, i) {
   if (v.role === 'error') return el('div', 'ai-msg error', v.text);
   // no face beside the assistant's words since the compact band (19 Nov 2026, owner)
   if (v.role === 'assistant') {
-    const b = el('div', 'ai-msg bot'); b.append(md(v.text));
+    const b = el('div', 'ai-msg bot'); b.append(drawAnswer(v.text, cardsAfter(view, i)));
     const r = el('button', 'ai-read'); r.type = 'button'; r.innerHTML = SPEAKER;   // read this answer aloud, all of it
     r.title = 'Read aloud (click again to stop)'; r.setAttribute('aria-label', 'Read this answer aloud');
-    r.onclick = () => mic?.read(v.text, 0, true);
+    r.onclick = () => mic?.read(words(v.text), 0, true);
     b.append(r); return b;
   }
   if (v.role === 'action') return card(v, i);
@@ -336,31 +418,42 @@ async function sendNow(text, opts) {
   if (!opts.check) { files = []; paintFiles(); }
   if (!opts.check && !opts.voice) input.value = '';   // what was said does not wipe a half-typed draft
   const notes = c.notes.length ? `(Since your last answer I ${c.notes.join('; ')}.)\n` : '';
-  const w = ctx.where?.() || {}, about = [];
-  if ((opts.check || !ctxOff.page) && w.page) about.push('the page ' + w.page);
-  if ((opts.check || !ctxOff.units) && w.units?.length) about.push((w.units.length > 1 ? 'the units ' : 'the unit ') + w.units.join(' and '));
-  const where = about.length ? `(On screen: ${about.join(', ')}.)\n`
-              : !opts.check && (ctxOff.page || ctxOff.units) ? '(This question is about the whole FarmBox, not the page on screen.)\n' : '';
+  // the page the question is about (P2): stamped on the question, sent to the function (its context line names it)
+  const w = ctx.where?.() || {};
+  const stamp = stampNow(c, w, opts.check);
+  if (!opts.check) c.stamp = stamp;
+  const allUnits = !opts.check && ctxOff.units && stamp.units?.length;   // the unit chip dropped: the whole site
+  const where = allUnits ? '(This question is about the whole FarmBox, not only the units on screen.)\n' : '';
+  const page = { route: stamp.route, title: stamp.title, units: allUnits ? [] : stamp.units || [] };
   const asked = opts.check ? CHECK_ASK : text;
+  // the shape: To check is a check list (brief); a ticked chip is for this question only; none = auto (the model chooses,
+  // a short answer for a plain question)
+  const picked = shapePick, shape = opts.check ? 'brief' : picked || 'auto';
+  if (!opts.check && picked) { shapePick = null; paintShapes(); }
   const messages = [...c.messages, { role: 'user', content: notes + where + (asked || 'Here is a file.') }];
-  c.view.push({ role: 'user', text: text || '(a file)', files: sent.map(x => x.name) });
+  c.view.push({ role: 'user', text: text || '(a file)', files: sent.map(x => x.name), page });
+  c.fresh = false;
   paint();
   busyRow.hidden = false; sendBtn.disabled = true; checkBtn.disabled = true; sending = true;
   let out = null;
   try {
     // the units it may read: those on screen (the unit chip left out = the whole site); none for a FarmBox that is alone
-    const units = (opts.check || !ctxOff.units ? w.unitIds : w.allUnitIds) || undefined;
-    const r = await fn('assistant', { farm_id: f.id, units, route: !opts.check && ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
+    const units = (allUnits ? stamp.allUnitIds : stamp.unitIds) || undefined;
+    const r = await fn('assistant', { farm_id: f.id, units, route: stamp.route, page, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name), shape }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
     c.chatId = r.chat_id || null;
     c.notes = []; c.at = Date.now();
     if (r.reply) c.view.push({ role: 'assistant', text: r.reply });
-    out = { reply: r.reply || '', cards: (r.actions || []).length };
+    out = { reply: words(r.reply || ''), cards: (r.actions || []).length };
     (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null }));
   } catch (e) {
     c.view.push({ role: 'error', text: e.message });
-    if (ctx.farm()?.id === f.id) { if (text && !opts.check) input.value = text; if (!files.length) { files = sent; paintFiles(); } }   // the attachments too
+    if (ctx.farm()?.id === f.id) {   // the words, the attachments and the shape come back for another try
+      if (text && !opts.check) input.value = text;
+      if (!files.length) { files = sent; paintFiles(); }
+      if (picked && !shapePick) { shapePick = picked; paintShapes(); }
+    }
   }
   busyRow.hidden = true; sendBtn.disabled = false; checkBtn.disabled = false; sending = false;
   save(key); paint();
@@ -381,9 +474,9 @@ function paintTitle() {
   const c = convo();
   const first = c.view.find(v => v.role === 'user' && v.text && v.text !== '(a file)');
   const words = first ? first.text.replace(/[?!.…:;,]+\s*$/g, '').split(/\s+/).filter(Boolean) : [];
-  const t = words.length ? words.slice(0, 5).join(' ') : (ctx.farm() ? ctx.where?.()?.page : '') || 'New chat';
+  const t = words.length ? words.slice(0, 5).join(' ') : 'New chat';
   titleEl.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-  titleEl.title = first ? first.text : 'A new conversation on this page';
+  titleEl.title = first ? first.text : 'A new conversation';
   if (ageEl) ageEl.textContent = c.at && c.view.length ? ago(c.at) : '';
 }
 
@@ -497,12 +590,46 @@ function paintContext() {
   if (w.units?.length) chip('units', w.units.join(' + '), 'The units on screen go with the question');
 }
 
+// the shape chips above the question (P1): Answer · Brief · Plan, at most one ticked, none = auto. Build (P5) is hidden
+// until creation mode exists: SHAPE_CHIPS marks it so, and nothing else needs to change to show it
+function paintShapes() {
+  if (!shapeRow) return;
+  shapeRow.querySelectorAll('.ai-shape:not(.ai-follow)').forEach(b => {
+    const on = b.dataset.shape === shapePick;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+function shapeChips() {
+  const row = el('div', 'ai-shapes');
+  row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'The shape of the answer (none ticked: the assistant chooses)');
+  SHAPE_CHIPS.filter(c => !c.hidden).forEach(c => {
+    const b = el('button', 'ai-shape', c.label);
+    b.type = 'button'; b.dataset.shape = c.shape;
+    b.title = c.title + ' — for the next question; untick for the assistant to choose (a short answer for a plain question)';
+    b.onclick = () => { shapePick = shapePick === c.shape ? null : c.shape; paintShapes(); input?.focus(); };
+    row.append(b);
+  });
+  // "Follow the page" (P2, on by default): off, the next questions stay about the page of the last question
+  const follow = el('button', 'ai-shape ai-follow', 'Follow the page');
+  follow.type = 'button';
+  const paintFollow = () => {
+    follow.classList.toggle('on', followPage); follow.setAttribute('aria-pressed', String(followPage));
+    follow.title = followPage ? 'Each question is about the page on screen — click to keep the page of the last question'
+      : 'The questions stay about the page of the last question — click to follow the page on screen again';
+  };
+  follow.onclick = () => { followPage = !followPage; paintFollow(); };
+  paintFollow();
+  row.append(el('div', 'spacer'), follow);
+  return row;
+}
+
 // closed, the band says in one line what the assistant last said (or that it is thinking)
 function paintPeek() {
   if (!peek) return;
   const last = mode === 'chat' ? [...convo().view].reverse().find(v => v.role === 'assistant') : null;
   peek.textContent = sending ? 'Reading the farm and thinking…'
-    : last ? String(last.text).replace(/[*`#]/g, '').split('\n').find(l => l.trim()) || '' : '';   // no label and no hint (owner, 19 Nov 2026)
+    : last ? words(last.text).replace(/[*`#]/g, '').replace(/^\s*(?:[-•]\s+)?\[[+~=\-]\]\s*/gm, '').split('\n').find(l => l.trim()) || '' : '';   // no label and no hint (owner, 19 Nov 2026)
 }
 
 export function initAssistant(context) {
@@ -546,7 +673,7 @@ export function initAssistant(context) {
   fresh.onclick = () => {
     if (sending) return;   // an answer on its way would land in a conversation that is gone
     mic.cancel(); mode = 'chat';
-    convos.set(ckey(), { messages: [], view: [], notes: [], chatId: null, at: 0 }); save();
+    convos.set(ckey(), { ...blank(), fresh: true, at: Date.now() }); save();   // the platform's older chat does not come back over it
     paint(); input.focus();
   };
   // "To check": what on this page needs checking — in place of the page summary that opened the band (owner, 19 Nov 2026)
@@ -554,7 +681,9 @@ export function initAssistant(context) {
   checkBtn.title = 'Ask the assistant what on this page needs checking';
   checkBtn.onclick = () => send(CHECK, { check: true });
   const row = el('div', 'row ai-send'); row.append(attach, mic.button, mic.note, ctxRow, el('div', 'ai-attached'), el('div', 'spacer'), fresh, checkBtn, sendBtn);
-  inn.append(input, row, fileIn);
+  shapeRow = shapeChips();
+  inn.append(shapeRow, input, row, fileIn);
+  paintShapes();
   band.replaceChildren(out, inn);
 
   // the middle mouse button starts and stops the voice from anywhere on the page (not over a link or a field, where it keeps
@@ -584,17 +713,18 @@ export function initAssistant(context) {
 // signed in (or another person on this tab): their own height on this screen, their conversation
 export function assistantReady() { mode = 'chat'; ctxOff = { page: false, units: false }; prune(); loadFrac(); paint(); }
 // another page or another choice of units: the chips follow, and what was dropped comes back
+// one conversation across pages (P2): the answers on screen stay as they are; only the chips follow the page
 let shownKey = '';
 export function assistantRouteChanged() {
   ctxOff = { page: false, units: false };
   const k = ckey();
-  if (k !== shownKey) { shownKey = k; mic?.cancel(); }   // another page: its own conversation, and the voice does not follow
-  if (band && mode === 'chat') paint(); else paintContext();
+  if (k !== shownKey) { shownKey = k; mic?.cancel(); if (band && mode === 'chat') { paint(); return; } }   // another person or FarmBox: its own conversation
+  paintContext();
 }
 
 // a farm switch shows that farm's conversation
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
 // the dashboard's "To decide" tile for cards that wait for a manager opens them here
 export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
-export function forgetAssistant() { mic?.destroy(); mode = 'chat'; convos.clear(); if (band) { setFrac(0, false); paint(); } }
+export function forgetAssistant() { mic?.destroy(); mode = 'chat'; convos.clear(); synced.clear(); followPage = true; if (band) { setFrac(0, false); paint(); } }
 export function assistantFarmChanged() { mic?.cancel(); mode = 'chat'; if (band) paint(); }

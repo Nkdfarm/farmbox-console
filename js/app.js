@@ -363,7 +363,9 @@ $('signinForm').addEventListener('submit', async e => {
 function forgetConversations() {
   // the kept copies first: with the panel open, forgetAssistant() repaints at once and read the conversation just
   // forgotten back from the storage — it stayed on screen for the next person (review 13 Oct 2026)
-  try { Object.keys(localStorage).filter(k => k.startsWith('fbc_ai_') && k !== 'fbc_ai_open').forEach(k => localStorage.removeItem(k)); }
+  // fbc_ai_… the per-page copies before 0.17.00, fbc_aic_… the one conversation per person and farm since (verifier, 21 Nov 2026);
+  // the device's own settings (panel open, read all answers) stay
+  try { Object.keys(localStorage).filter(k => (k.startsWith('fbc_ai_') || k.startsWith('fbc_aic_')) && k !== 'fbc_ai_open' && k !== 'fbc_ai_read_all').forEach(k => localStorage.removeItem(k)); }
   catch { /* storage off: nothing kept either */ }
   forgetAssistant();
 }

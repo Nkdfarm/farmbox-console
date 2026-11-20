@@ -4,7 +4,9 @@
 // clear recipes with visual as well"). The function `farmnet` (formula_set) reads the recipe again, changes only
 // those values within FarmNet's own limits, sends the rest back as it was, and logs the command. Since 0.14.00 also
 // its name, and a new recipe (newRecipe: formula_add — FarmNet makes it from its defaults, named, and it opens here
-// for its channels; owner, 20 Nov 2026: "the possibility to create a new program and recipe").
+// for its channels; owner, 20 Nov 2026: "the possibility to create a new program and recipe"). And Delete… (formula_remove)
+// — refused while a program uses the recipe; the function checks every irrigation and mixing program and the mixers
+// on FarmNet again before deleting.
 import { el, drawer, field, toast, busy, confirmDrawer, loading } from '../ui.js';
 import { askNow, bad, num, send } from './shell.js';
 
@@ -259,7 +261,28 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
     d.close();
     if (!after) setTimeout(ctx.redraw, 1200);
   };
-  d.footer.append(save);
+
+  // delete: refused while a program uses it (the page's list here; FarmNet's own, read again, in the function)
+  const del = el('button', 'btn btn-danger ir-del', 'Delete…'); del.type = 'button';
+  del.title = usedBy.length ? `Used by ${usedBy.join(', ')}: choose another recipe for ${usedBy.length === 1 ? 'it' : 'them'} first` : 'Delete this recipe on FarmNet';
+  del.onclick = async () => {
+    if (del.disabled) return;
+    if (usedBy.length) { toast(`"${r.NM}" is used by ${usedBy.join(', ')}: choose another recipe for ${usedBy.length === 1 ? 'it' : 'them'} first`, 'bad'); return; }
+    if (dirty()) { toast('Save or undo your changes first', 'bad'); return; }
+    del.disabled = true;
+    const ok = await confirmDrawer(`Delete "${full.NM || r.NM}" on FarmNet?`,
+      'The recipe is deleted on FarmNet, with its targets and channels. FarmNet is checked first: if any irrigation or mixing program uses it, nothing is deleted.', 'Delete it', true);
+    if (!ok) { del.disabled = false; return; }
+    busy(del, true, 'Deleting…');
+    try {
+      await send(ctx.farm, 'formula_remove', { id: c.id, proId: r.ID });
+      toast(`"${full.NM || r.NM}" deleted on FarmNet`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); busy(del, false, 'Delete…'); return; }
+    dirty = () => false;
+    d.close();
+    if (!after) setTimeout(ctx.redraw, 800);
+  };
+  d.footer.append(del, save);
 }
 
 const show2 = v => { const n = num(v); return n === null ? (v ?? '—') : String(Number(n.toFixed(4))); };

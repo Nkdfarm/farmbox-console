@@ -5,7 +5,9 @@
 //   its name · on or off · timer or cycle · its days · its start times (timer) or windows and interval (cycle), each
 //   with its run-time adjustment · its water sources, their recipe, their valves and each valve's run time.
 // and make a new one (newProgram: program_add — FarmNet makes it, named and switched off, and it opens here).
-// Not here (FarmNet's own screen): light, weight and AI starts, the seasonal adjustment, deleting a program.
+// and delete one (Delete…: program_remove) — only a program switched off and saved, and not running or waiting; the
+// button says so when it is not, and the function checks FarmNet again before deleting (owner, 20 Nov 2026).
+// Not here (FarmNet's own screen): light, weight and AI starts, the seasonal adjustment.
 // FarmNet holds times as seconds after midnight; they are shown and typed as hh:mm. The program is read fresh
 // (askNow), never from the copy kept on this computer: a change is built on what FarmNet holds now.
 import { el, drawer, toast, busy, confirmDrawer, loading } from '../ui.js';
@@ -380,5 +382,30 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
     d.close();
     if (!after) setTimeout(ctx.redraw, 1200);
   };
-  d.footer.append(save);
+
+  // delete: only a program FarmNet holds switched off (switched off on screen is not enough: it must be saved)
+  const del = el('button', 'btn btn-danger ir-del', 'Delete…'); del.type = 'button';
+  del.title = was.on ? 'Switch it off and save before deleting it' : 'Delete this program on FarmNet';
+  del.onclick = async () => {
+    if (del.disabled) return;
+    if (was.on) {
+      toast(st.on ? `"${was.name || p.NM}" is switched on: untick "Program on", save, then delete it` : `"${was.name || p.NM}" is still on at FarmNet: save the switch-off first, then delete it`, 'bad');
+      onRow.classList.add('ir-flash'); setTimeout(() => onRow.classList.remove('ir-flash'), 1600);
+      return;
+    }
+    if (dirty()) { toast('Save or undo your changes first', 'bad'); return; }
+    del.disabled = true;
+    const ok = await confirmDrawer(`Delete "${was.name || p.NM}" on FarmNet?`,
+      'The program, its start times and its valves are deleted on FarmNet. This cannot be undone here: it would have to be made again.', 'Delete it', true);
+    if (!ok) { del.disabled = false; return; }
+    busy(del, true, 'Deleting…');
+    try {
+      await send(ctx.farm, 'program_remove', { id: c.id, proId: p.ID });
+      toast(`"${was.name || p.NM}" deleted on FarmNet`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); busy(del, false, 'Delete…'); return; }
+    dirty = () => false;
+    d.close();
+    if (!after) setTimeout(ctx.redraw, 800);
+  };
+  d.footer.append(del, save);
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.14.00",
+  "version": "0.15.00",
   "released": "2026-11-20",
-  "note": "Irrigation programs and recipes: full edit, and new ones"
+  "note": "Delete irrigation programs and recipes, never while in use"
 }

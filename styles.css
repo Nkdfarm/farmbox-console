@@ -1759,6 +1759,10 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-prog-src b { min-width: 0; overflow-wrap: anywhere; }
 .ir-prog-valve > .ir-prog-inline:first-child { padding-left: 14px; }
 .ir-prog-add { width: 100%; margin: 6px 0 2px; }
+.drawer .ir-del { margin-right: auto; }
+.ir-flash { animation: irFlash .5s ease-in-out 3; border-radius: 6px; }
+@keyframes irFlash { 50% { background: var(--error-bg); box-shadow: 0 0 0 2px var(--error); } }
+@media (prefers-reduced-motion: reduce) { .ir-flash { animation: none; outline: 2px solid var(--error); } }
 /* the recipe drawer */
 .ir-targets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .ir-target { padding: 10px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--divider); }

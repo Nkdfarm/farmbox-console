@@ -2,7 +2,10 @@
 // to edit recipes for farm managers and admin, clear recipes with visual as well"). For each fertigation centre:
 //   Water      the water's way through the centre, left to right: the source tanks (drawn to their level), the
 //              disinfection, the mixer (EC and pH against their targets), the day tank, the irrigation valve
-//   Today      each program on a 24-hour clock: its planned starts (or its cycling window), what already ran, now
+//   Today      each program on a 24-hour clock: its planned starts (or its cycling window), what already ran, now;
+//              a press on a program's row opens it in full (programs.js), where the Admin and Farm manager change
+//              its on/off, start times or cycling windows, valve run times and recipe (the time pressed is offered
+//              for a new start)
 //   Recipes    one card each, EC and pH on a scale, its channels; a press opens it in full (recipes.js), where
 //              the Admin and Farm manager change its EC, pH and channel ratios
 //   Runs       the run records (today / 2 days / 7 days), folded
@@ -10,6 +13,7 @@
 import { el, drawer, field, pref, toast } from '../ui.js';
 import { centreButtons } from './overview.js';
 import { openRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
+import { openProgram } from './programs.js';
 import { DAY_SPANS, ask, bad, card, centres, colour, nowLocal, num, page, range, short, show, soft, spanPicker, table } from './shell.js';
 
 // FarmNet's device types (status/detail "type")
@@ -59,9 +63,13 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       if (c.status.e) k.append(bad(c.status.e));
       else k.append(waterPath(farm, s, colourOf, go));
 
-      k.append(el('h4', 'fc-sub', 'Today'));
+      const th = el('div', 'fc-head fc-subhead');
+      th.append(el('h4', 'fc-sub', 'Today'), el('div', 'spacer'),
+        el('span', 'hint', ctx.may ? 'Press a program to see it in full and change its times.' : 'Press a program to see it in full.'));
+      k.append(th);
       if (programs.e) k.append(bad(programs.e));
-      else k.append(clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf));
+      else k.append(clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
+        (p, at) => openProgram(ctx, c, p, recipes, at)));
 
       const rh = el('div', 'fc-head fc-subhead');
       rh.append(el('h4', 'fc-sub', `Recipes · ${recipes.length}`), el('div', 'spacer'),
@@ -257,7 +265,7 @@ export function tod(v) {
 }
 const diyV = x => (x && typeof x === 'object' && 'V' in x ? x.V : x);
 
-function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf) {
+function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf, open) {
   const today = nowLocal().slice(0, 10), now = tod(nowLocal());
   const box = el('div', 'ir-clock');
   const pct = m => `${(Math.max(0, Math.min(1440, m)) / 1440) * 100}%`;
@@ -273,8 +281,16 @@ function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf) {
   programs.forEach((p, i) => {
     const par = params[i]?.v || null;
     const rec = recipeOfProgram(p.ID);
-    const row = el('div', 'ir-row');
+    const row = el('div', 'ir-row is-open');
     row.style.setProperty('--rc', colourOf(rec));
+    // a press opens the program; on the clock, the time pressed is offered for a new start
+    row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-label', `${p.NM}: see it in full`);
+    row.onclick = e => {
+      const r = tr.getBoundingClientRect();
+      const at = e.clientX >= r.left && e.clientX <= r.right && r.width ? ((e.clientX - r.left) / r.width) * 1440 : undefined;
+      open(p, at);
+    };
+    row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(p); } };
     const lab = el('div', 'ir-label');
     const valves = valvesOf(p.ID);
     lab.append(el('b', null, p.NM),
@@ -294,10 +310,16 @@ function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf) {
       starts.forEach(x => {
         const a = tod(diyV(x.ST)), b = tod(diyV(x.ET));
         if (a === null) return;
-        const w = el('div', 'ir-window');
-        w.style.left = pct(a); w.style.width = `calc(${pct(b !== null && b > a ? b : a + runLen)} - ${pct(a)})`;
-        w.title = `cycles ${fmt(a)}–${b !== null ? fmt(b) : '…'}${every ? ' · every ' + Math.round(every) + ' min' : ''}`;
-        tr.append(w); drawn++;
+        const piece = (from, to) => {
+          const w = el('div', 'ir-window');
+          w.style.left = pct(from); w.style.width = `calc(${pct(to)} - ${pct(from)})`;
+          w.title = `cycles ${fmt(a)}–${b !== null ? fmt(b) : '…'}${every ? ' · every ' + Math.round(every) + ' min' : ''}`;
+          tr.append(w);
+        };
+        // a window that crosses midnight (FarmLab's EBB: 17:50 to 06:30) is drawn in two pieces
+        if (b !== null && b < a) { piece(a, 1440); if (b > 0) piece(0, b); }
+        else piece(a, b !== null && b > a ? b : a + runLen);
+        drawn++;
       });
     } else {
       starts.forEach(x => {

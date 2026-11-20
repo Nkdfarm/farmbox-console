@@ -1685,6 +1685,9 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-clock { display: grid; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
 .ir-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(420px, 1fr); gap: 10px; align-items: center; }
 .ir-row.is-off { opacity: .45; }
+.ir-row.is-open { cursor: pointer; border-radius: 6px; }
+.ir-row.is-open:hover .ir-track, .ir-row.is-open:focus-visible .ir-track { box-shadow: 0 0 0 1px var(--border-strong); }
+.ir-row.is-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ir-label { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .ir-label b { font-size: var(--text-sm); border-left: 3px solid var(--rc, var(--text-faint)); padding-left: 6px; }
 .ir-label .hint { font-size: 11px; padding-left: 9px; }
@@ -1731,6 +1734,16 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-runs > summary::-webkit-details-marker { display: none; }
 .ir-runs > summary .fc-sub::before { content: "▸ "; }
 .ir-runs[open] > summary .fc-sub::before { content: "▾ "; }
+/* the program drawer (programs.js) */
+.ir-prog-on { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; flex-wrap: wrap; }
+.ir-prog-bar { margin: 6px 0 10px; height: 22px; }
+.ir-prog-bar .ir-hour { top: 24px; }
+.ir-prog-slots { margin-bottom: 18px; }
+.ir-prog-slot { grid-template-columns: auto 1fr auto; }
+.ir-prog-slot[hidden] { display: none; }
+.ir-prog-slot-l, .ir-prog-slot-r, .ir-prog-times { display: inline-flex; align-items: center; gap: 6px; }
+.fc-param .ir-prog-times .input { width: 110px; }
+.fc-param .ir-prog-pct { width: 70px; }
 /* the recipe drawer */
 .ir-targets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .ir-target { padding: 10px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--divider); }
@@ -1746,6 +1759,10 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
   .ir-stage + .ir-stage::before { display: none; }
   .ir-machine { max-width: none; flex: 1; }
   .ir-targets { grid-template-columns: 1fr; }
+  .ir-prog-slot { grid-template-columns: auto 1fr; }
+  .ir-prog-slot-r { grid-column: 2; }
+  .ir-prog-times { flex-wrap: wrap; }
+  .fc-param .ir-prog-times .input { width: 104px; }
 }
 .bp-bay { --h: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 84px; min-height: 250px;
   padding: 8px 4px 10px; border-radius: 12px; cursor: pointer; text-align: center; font: inherit; color: var(--text);

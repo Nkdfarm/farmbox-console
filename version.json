@@ -1,5 +1,5 @@
 {
-  "version": "0.12.01",
+  "version": "0.13.00",
   "released": "2026-11-20",
-  "note": "FarmNet pages stay when FarmNet does not answer"
+  "note": "Irrigation programs: change them from the day's clock"
 }

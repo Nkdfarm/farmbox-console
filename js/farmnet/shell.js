@@ -67,6 +67,11 @@ export function cached(k, load) {
 }
 export const ask = (farm, action, args = {}) =>
   cached(`${KEEP}${farm.id}|${action}|${stable(keyArgs(args))}`, () => fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => r?.data));
+// FarmNet now, never the kept copy: what an editor builds a change on (the answer is still kept for the pages)
+export const askNow = (farm, action, args = {}) => {
+  const k = `${KEEP}${farm.id}|${action}|${stable(keyArgs(args))}`;
+  return fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => { keepPut(k, r?.data); return r?.data; });
+};
 export const commandLog = (farm, limit) =>
   cached(`${KEEP}${farm.id}|log|${limit}`, () => rpc('farmnet_commands', { p_farm: farm.id, p_limit: limit }, { quiet: true }));
 export const send = (farm, action, args, changes) => fn(FN, { farm: farm.id, action, args, changes });

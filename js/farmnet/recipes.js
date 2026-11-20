@@ -4,7 +4,7 @@
 // clear recipes with visual as well"). The function `farmnet` (formula_set) reads the recipe again, changes only
 // those values within FarmNet's own limits, sends the rest back as it was, and logs the command.
 import { el, drawer, field, toast, busy, confirmDrawer, loading } from '../ui.js';
-import { ask, bad, num, send } from './shell.js';
+import { askNow, bad, num, send } from './shell.js';
 
 // the scales the cards draw on; the band is where a hydroponic solution usually sits
 export const EC_SCALE = { lo: 0, hi: 4, band: [1, 2.6], unit: 'mS' };
@@ -86,7 +86,7 @@ export async function openRecipe(ctx, c, r, usedBy) {
   });
   d.body.append(loading('Reading the recipe…'));
   let full;
-  try { full = await ask(ctx.farm, 'formula_param', { id: c.id, proId: r.ID }); }
+  try { full = await askNow(ctx.farm, 'formula_param', { id: c.id, proId: r.ID }); }   // FarmNet now, not the kept copy
   catch (e) { d.body.textContent = ''; d.body.append(bad(e.message)); return; }
   d.body.textContent = '';
   if (!full || typeof full !== 'object') { d.body.append(bad('FarmNet sent no recipe.')); return; }

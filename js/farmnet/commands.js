@@ -1,11 +1,13 @@
 // FarmNet commands: run, start irrigation / mixing, pause, resume, stop, setpoints
 import { el, drawer, field, selectBox, toast, busy, confirmDrawer, loading, emptyState } from '../ui.js';
-import { ask, bad, num, secs, send, show } from './shell.js';
+import { ask, bad, num, secs, show } from './shell.js';
+import { runCommand, tagCmd } from '../registry.js';
 
 // ═══ Commands to FarmNet ════════════════════════════════════════════════════
+// each one a command of the registry (registry.js, console 0.18.00): checked, run, and heard by the operation log (P4)
 async function run(ctx, action, args, changes, okText) {
   try {
-    const r = await send(ctx.farm, action, args, changes);
+    const r = await runCommand(action, changes == null ? args : { ...args, changes }, { actor: 'human', ctx });
     toast(`${okText} — FarmNet: ${r?.msg || 'OK'}`, 'ok');
   } catch (e) {
     toast(e.message, 'bad');
@@ -29,7 +31,7 @@ export async function startIrrigation(ctx, c) {
   const paint = () => { info.textContent = what(list.find(p => String(p.ID) === sel.value) || {}); };
   sel.onchange = paint; paint();
   d.body.append(field('Program', sel), info);
-  const go = el('button', 'btn btn-primary', 'Start…');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Start…'), 'irrigation_program_start');
   go.onclick = async () => {
     if (go.disabled) return; go.disabled = true;
     const p = list.find(x => String(x.ID) === sel.value);
@@ -51,7 +53,7 @@ export async function startMixing(ctx, c, f) {
   const sel = selectBox(list.map(p => [String(p.ID), `${p.NM} — recipe ${p.FNM || 'none'} → ${p.TNM || '—'}`]), String(list[0].ID));
   const mins = el('input', 'input'); mins.type = 'number'; mins.min = '1'; mins.max = '1440'; mins.step = '1'; mins.value = '10';
   d.body.append(field('Program', sel), field('Run time (minutes)', mins, 'Sent to FarmNet in seconds.'));
-  const go = el('button', 'btn btn-primary', 'Start…');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Start…'), 'fert_program_start');
   go.onclick = async () => {
     if (go.disabled) return;
     const p = list.find(x => String(x.ID) === sel.value), m = Math.round(Number(mins.value));
@@ -70,7 +72,7 @@ export function pause(ctx, c, f) {
   const d = drawer('Pause ' + (f ? 'mixing' : 'irrigation'), what);
   const mins = el('input', 'input'); mins.type = 'number'; mins.min = '1'; mins.max = '1440'; mins.step = '1'; mins.value = '30';
   d.body.append(field('For how long (minutes)', mins, 'It resumes by itself after this, or with Resume.'));
-  const go = el('button', 'btn btn-primary', 'Pause…');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Pause…'), f ? 'fert_pause' : 'irrigation_pause');
   go.onclick = async () => {
     if (go.disabled) return;
     const m = Math.round(Number(mins.value));
@@ -93,8 +95,8 @@ export async function resume(ctx, c, f) {
   try {
     const what = f ? `mixing on ${f.name}` : `irrigation on ${c.name}`;
     if (!(await confirmDrawer('Resume now?', `Resume ${what}.`, 'Resume'))) return;
-    await (f ? run(ctx, 'fert_pause', { id: c.id, devId: f.id, pTime: 0 }, null, 'Resumed')
-             : run(ctx, 'irrigation_pause', { id: c.id, pTime: 0 }, null, 'Resumed'));
+    await (f ? run(ctx, 'fert_resume', { id: c.id, devId: f.id }, null, 'Resumed')     // FarmNet's pause for 0 s
+             : run(ctx, 'irrigation_resume', { id: c.id }, null, 'Resumed'));
   } finally { confirming = false; }
 }
 
@@ -161,7 +163,7 @@ export async function setpoints(ctx, z, st) {
   sel.onchange = load;
   await load();
   if (!ctx.may) return;
-  const save = el('button', 'btn btn-primary', 'Save…');
+  const save = tagCmd(el('button', 'btn btn-primary', 'Save…'), 'climate_set');
   save.onclick = async () => {
     if (save.disabled) return;
     if (typeId === null) { toast('The parameters are still being read'); return; }

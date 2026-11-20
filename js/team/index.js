@@ -3,6 +3,7 @@ import { openFast } from '../api.js';
 import { renderHours } from '../hours.js';
 import { editPerson } from '../people.js';
 import { aiLine } from '../team-ai.js';
+import { aiPermissionsCard } from '../team-ai-permissions.js';
 import { loading, el, setPhotos, pageHead, pref, addDays, parseYmd, isoDow } from '../ui.js';
 import { openJobs } from './jobs.js';
 import { planCard } from './plan.js';
@@ -112,6 +113,8 @@ export function paint() {
   if (may) S.mount.append(planCard());
   // AI access (0242): set in each person's Edit window; here only who has it, what was asked, Stop all (0.7.265)
   if (may && S.AI) S.mount.append(aiLine(S.AI, reload));
+  // AI permissions (0285, AI build mode P3): what the console's AI may propose and build; read-only but for the admin and manager
+  S.mount.append(aiPermissionsCard(S.farm));
 
   // the old Hours page, as it was
   const fold = el('details', 'card card-pad team-hours');

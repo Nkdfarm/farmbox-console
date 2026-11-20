@@ -11,7 +11,8 @@
 // FarmNet holds times as seconds after midnight; they are shown and typed as hh:mm. The program is read fresh
 // (askNow), never from the copy kept on this computer: a change is built on what FarmNet holds now.
 import { el, drawer, toast, busy, confirmDrawer, loading } from '../ui.js';
-import { askNow, bad, num, send } from './shell.js';
+import { askNow, bad, num } from './shell.js';
+import { runCommand, tagCmd } from '../registry.js';
 import { copyThing, historyOf } from './irrigation-actions.js';
 
 const DAY = 86400, MAX_RUN_MIN = 240;
@@ -45,14 +46,14 @@ export async function newProgram(ctx, c, recipes, existing, redraw) {
   const name = el('input', 'input'); name.maxLength = 40; name.placeholder = 'e.g. Lettuce bay 3';
   const w = el('div', 'field'); w.append(el('label', null, 'Name'), name);
   d.body.append(w, el('div', 'hint', 'It is made with FarmNet\'s own defaults and stays off until you give it valves and times and switch it on.'));
-  const go = el('button', 'btn btn-primary', 'Make it');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Make it'), 'program_add');
   go.onclick = async () => {
     const n = name.value.trim();
     if (!n) { toast('Give it a name', 'bad'); name.focus(); return; }
     if ((existing || []).some(p => String(p.NM).trim().toLowerCase() === n.toLowerCase())) { toast(`A program "${n}" exists already`, 'bad'); return; }
     busy(go, true, 'Making it…');
     let res;
-    try { res = await send(ctx.farm, 'program_add', { id: c.id }, { name: n }); }
+    try { res = await runCommand('program_add', { id: c.id, changes: { name: n } }, { ctx }); }
     catch (e) {
       // FarmNet may have made it all the same (the answer lost, or the naming refused): no second one from here
       d.body.append(el('div', 'note bad', `${e.message}. FarmNet may have made the program all the same: look for it on the page (or on FarmNet) and check it is switched off before making another.`));
@@ -379,7 +380,7 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
     if (!ok) { save.disabled = false; return; }
     busy(save, true, 'Sending…');
     try {
-      const res = await send(ctx.farm, 'program_set', { id: c.id, proId: p.ID }, body);
+      const res = await runCommand('program_set', { id: c.id, proId: p.ID, changes: body }, { ctx });
       toast(`"${st.name || p.NM}" changed — FarmNet: ${res?.msg || 'OK'}`, 'ok');
     } catch (e) { toast(e.message, 'bad'); busy(save, false, 'Save…'); return; }
     dirty = () => false;
@@ -388,7 +389,7 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
   };
 
   // delete: only a program FarmNet holds switched off (switched off on screen is not enough: it must be saved)
-  const del = el('button', 'btn btn-danger ir-del', 'Delete…'); del.type = 'button';
+  const del = tagCmd(el('button', 'btn btn-danger ir-del', 'Delete…'), 'program_remove', p.ID); del.type = 'button';
   del.title = was.on ? 'Switch it off and save before deleting it' : 'Delete this program on FarmNet';
   del.onclick = async () => {
     if (del.disabled) return;
@@ -404,14 +405,14 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
     if (!ok) { del.disabled = false; return; }
     busy(del, true, 'Deleting…');
     try {
-      await send(ctx.farm, 'program_remove', { id: c.id, proId: p.ID });
+      await runCommand('program_remove', { id: c.id, proId: p.ID }, { ctx });
       toast(`"${was.name || p.NM}" deleted on FarmNet`, 'ok');
     } catch (e) { toast(e.message, 'bad'); busy(del, false, 'Delete…'); return; }
     dirty = () => false;
     d.close();
     if (!after) setTimeout(ctx.redraw, 800);
   };
-  const copy = el('button', 'btn', 'Copy…'); copy.type = 'button';
+  const copy = tagCmd(el('button', 'btn', 'Copy…'), 'program_copy', p.ID); copy.type = 'button';
   copy.onclick = () => {
     if (dirty()) { toast('Save or undo your changes first: the copy is made from what FarmNet holds', 'bad'); return; }
     dirty = () => false; d.close();

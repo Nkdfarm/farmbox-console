@@ -20,6 +20,7 @@ import { centreButtons } from './overview.js';
 import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
 import { openProgram, newProgram } from './programs.js';
 import { quickDelete, assignRecipe, deletedList } from './irrigation-actions.js';
+import { tagCmd } from '../registry.js';
 import { DAY_SPANS, ask, bad, card, centres, colour, nowLocal, num, page, range, short, show, soft, spanPicker, table } from './shell.js';
 
 // FarmNet's device types (status/detail "type")
@@ -90,7 +91,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       th.append(el('h4', 'fc-sub', 'Today'), el('div', 'spacer'),
         el('span', 'hint', ctx.may ? 'Press a program to see it in full and change it.' : 'Press a program to see it in full.'));
       if (ctx.may && !programs.e) {
-        const nb = el('button', 'btn btn-sm', '＋ New program'); nb.type = 'button';
+        const nb = tagCmd(el('button', 'btn btn-sm', '＋ New program'), 'program_add'); nb.type = 'button';
         nb.onclick = () => newProgram(ctx, c, recipes, programs.v || [], ctx.redraw);
         th.append(nb);
       }
@@ -104,7 +105,8 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
           if (!p) return;
           const par = parOf(p.ID);
           // the ✕: the same blocks as Delete… (switched on, running), said before anything is sent
-          const x = el('button', 'ir-x', '✕'); x.type = 'button'; x.title = `Delete "${p.NM}"`; x.setAttribute('aria-label', `Delete ${p.NM}`);
+          tagCmd(row, 'program_set', p.ID);   // the row opens the program (Save… there), and takes a dropped recipe
+          const x = tagCmd(el('button', 'ir-x', '✕'), 'program_remove', p.ID); x.type = 'button'; x.title = `Delete "${p.NM}"`; x.setAttribute('aria-label', `Delete ${p.NM}`);
           x.onclick = e => { e.stopPropagation(); quickDelete(ctx, c, 'program', p, { on: par ? Number(par.EN?.V) !== 0 : true, running: running.has(String(p.NM).trim()) }); };
           x.onkeydown = e => e.stopPropagation();
           row.querySelector('.ir-label')?.append(x);
@@ -127,7 +129,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       rh.append(el('h4', 'fc-sub', `Recipes · ${recipes.length}`), el('div', 'spacer'),
         el('span', 'hint', ctx.may ? 'Press a recipe to see it in full and change it.' : 'Press a recipe to see it in full.'));
       if (ctx.may && !formulas.e) {
-        const nb = el('button', 'btn btn-sm', '＋ New recipe'); nb.type = 'button';
+        const nb = tagCmd(el('button', 'btn btn-sm', '＋ New recipe'), 'formula_add'); nb.type = 'button';
         nb.onclick = () => newRecipe(ctx, c, recipes, ctx.redraw);
         rh.append(nb);
       }
@@ -143,11 +145,12 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
           const cardEl = recipeCard(r, colourOf(r.NM), [...used, ...mix], now, () => openRecipe(ctx, c, r, users));
           wrap.append(cardEl);
           if (ctx.may) {
+            tagCmd(cardEl, 'formula_set', r.ID);
             cardEl.draggable = true;
             cardEl.title = `Drag onto a program on the clock to make it mix "${r.NM}"`;
             cardEl.ondragstart = e => { e.dataTransfer.setData('text/x-fn-recipe', String(r.ID)); e.dataTransfer.effectAllowed = 'link'; wrap.classList.add('is-dragging'); };
             cardEl.ondragend = () => wrap.classList.remove('is-dragging');
-            const x = el('button', 'ir-x', '✕'); x.type = 'button'; x.title = `Delete "${r.NM}"`; x.setAttribute('aria-label', `Delete ${r.NM}`);
+            const x = tagCmd(el('button', 'ir-x', '✕'), 'formula_remove', r.ID); x.type = 'button'; x.title = `Delete "${r.NM}"`; x.setAttribute('aria-label', `Delete ${r.NM}`);
             x.onclick = e => {
               e.stopPropagation();
               if (mixUnknown && !users.length) { toast('FarmNet did not list the mixing programs just now: open the recipe and use Delete… (FarmNet is checked again)', 'bad'); return; }

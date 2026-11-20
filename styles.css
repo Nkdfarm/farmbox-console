@@ -2699,6 +2699,15 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 /* 0.7.264–0.7.265: Team — AI access (0242), in the person's and the job's Edit windows */
 .team-ai-line { margin-top: var(--space-4); }
 .team-ai-line .row { gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.team-ai-perms { margin-top: var(--space-4); }
+.team-ai-perms-body { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.team-ai-perms-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: var(--space-4); }
+.team-ai-perms-row { display: contents; }
+.team-ai-perms-row > * { padding: 6px 0; border-top: 1px solid var(--border); display: flex; align-items: center; }
+.team-ai-perms-row.is-head > * { border-top: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.team-ai-perms-name { flex-direction: column; align-items: flex-start !important; gap: 2px; min-width: 0; }
+.team-ai-perms-row.is-off .team-ai-perms-name > span:first-child { color: var(--text-muted); }
+.team-ai-perms .switch:disabled { opacity: .45; cursor: not-allowed; }
 .team-ai-tick { font-size: var(--text-sm); margin: var(--space-2) 0; }
 .team-ai-more { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
 .team-ai-say { margin-top: var(--space-1); }

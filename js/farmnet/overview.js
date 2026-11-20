@@ -3,6 +3,7 @@ import { lineChart } from '../connect.js';
 import { site3d } from '../farmnet3d.js';
 import { el, drawer, icon, loading, farmLocal, pref } from '../ui.js';
 import { pause, resume, startIrrigation, startMixing, stop } from './commands.js';
+import { tagCmd } from '../registry.js';
 import { logCard } from './sensors.js';
 import { GROUPS, NO_SENSOR, ask, bad, btn, card, centres, colour, commandLog, isReplay, fnTime, link, nextOf, nowLocal, num, page, pinsOf, range, short, show, soft, sourcesOf, unit } from './shell.js';
 
@@ -353,11 +354,12 @@ function centreLive(ctx, c) {
   k.append(grid);
   return k;
 }
+// each button carries its registry command (data-cmd: where the replay of an AI build finds it, P5)
 export const centreButtons = (ctx, c) => [
-  btn('Start a program…', () => startIrrigation(ctx, c)),
-  btn('Pause…', () => pause(ctx, c, null)),
-  btn('Resume', () => resume(ctx, c, null)),
-  btn('Stop the run', () => stop(ctx, c, null), 'btn btn-sm btn-danger')];
+  tagCmd(btn('Start a program…', () => startIrrigation(ctx, c)), 'irrigation_program_start'),
+  tagCmd(btn('Pause…', () => pause(ctx, c, null)), 'irrigation_pause'),
+  tagCmd(btn('Resume', () => resume(ctx, c, null)), 'irrigation_resume'),
+  tagCmd(btn('Stop the run', () => stop(ctx, c, null), 'btn btn-sm btn-danger'), 'irrigation_stop')];
 export const mixerButtons = (ctx, c, f) => [
-  btn('Start mixing…', () => startMixing(ctx, c, f)), btn('Pause…', () => pause(ctx, c, f)),
-  btn('Resume', () => resume(ctx, c, f)), btn('Stop', () => stop(ctx, c, f), 'btn btn-sm btn-danger')];
+  tagCmd(btn('Start mixing…', () => startMixing(ctx, c, f)), 'fert_program_start'), tagCmd(btn('Pause…', () => pause(ctx, c, f)), 'fert_pause'),
+  tagCmd(btn('Resume', () => resume(ctx, c, f)), 'fert_resume'), tagCmd(btn('Stop', () => stop(ctx, c, f), 'btn btn-sm btn-danger'), 'fert_stop')];

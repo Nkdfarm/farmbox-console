@@ -13,7 +13,8 @@
 // The function decides: every block here is said first in the console, and checked again on FarmNet.
 import { rpc } from '../api.js';
 import { el, drawer, toast, busy, confirmDrawer, farmLocal } from '../ui.js';
-import { bad, num, send } from './shell.js';
+import { bad, num } from './shell.js';
+import { runCommand, tagCmd } from '../registry.js';
 import { openProgram } from './programs.js';
 import { openRecipe } from './recipes.js';
 
@@ -36,14 +37,14 @@ export function copyThing(ctx, c, kind, obj, existingNames, recipes, after) {
   d.body.append(f, el('div', 'hint', kind === 'program'
     ? 'Its times, days, water sources, valves and recipe are copied. It stays off until you switch it on.'
     : 'Its EC and pH targets, channels and mixing settings are copied. No program uses it until you choose it.'));
-  const go = el('button', 'btn btn-primary', 'Copy it');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Copy it'), kind === 'program' ? 'program_copy' : 'formula_copy', obj.ID);
   go.onclick = async () => {
     const n = name.value.trim();
     if (!nameOk(n)) { toast('A name of 1 to 40 characters, without < or >', 'bad'); name.focus(); return; }
     if ((existingNames || []).some(x => String(x).trim().toLowerCase() === n.toLowerCase())) { toast(`A ${what} "${n}" exists already`, 'bad'); return; }
     busy(go, true, 'Copying…');
     let res;
-    try { res = await send(ctx.farm, kind === 'program' ? 'program_copy' : 'formula_copy', { id: c.id, proId: obj.ID }, { name: n }); }
+    try { res = await runCommand(kind === 'program' ? 'program_copy' : 'formula_copy', { id: c.id, proId: obj.ID, changes: { name: n } }, { ctx }); }
     catch (e) {
       // FarmNet may have made it all the same: no second one from here
       d.body.append(el('div', 'note bad', `${e.message}. FarmNet may have made the ${what} all the same: look for it on the page before copying again.`));
@@ -79,7 +80,7 @@ export async function quickDelete(ctx, c, kind, obj, info) {
     'Delete it', true);
   if (!ok) return;
   try {
-    await send(ctx.farm, kind === 'program' ? 'program_remove' : 'formula_remove', { id: c.id, proId: obj.ID });
+    await runCommand(kind === 'program' ? 'program_remove' : 'formula_remove', { id: c.id, proId: obj.ID }, { ctx });
     toast(`"${obj.NM}" deleted on FarmNet`, 'ok');
   } catch (e) { toast(e.message, 'bad'); return; }
   ctx.redraw();
@@ -114,7 +115,7 @@ export async function assignRecipe(ctx, c, p, par, r, recipes) {
     'Change it');
   if (!ok) return;
   try {
-    await send(ctx.farm, 'program_set', { id: c.id, proId: p.ID }, { recipes: [{ sid: Number(src.SID), fid: Number(r.ID) }] });
+    await runCommand('program_set', { id: c.id, proId: p.ID, changes: { recipes: [{ sid: Number(src.SID), fid: Number(r.ID) }] } }, { ctx });
     toast(`"${p.NM}" now mixes "${r.NM}"`, 'ok');
   } catch (e) { toast(e.message, 'bad'); return; }
   ctx.redraw();
@@ -133,7 +134,7 @@ async function restore(ctx, c, kind, s, inPlace, after) {
     inPlace ? 'Put it back' : 'Make it again');
   if (!ok) return false;
   try {
-    const res = await send(ctx.farm, kind === 'program' ? 'program_restore' : 'formula_restore', { id: c.id, snapshot: s.id });
+    const res = await runCommand(kind === 'program' ? 'program_restore' : 'formula_restore', { id: c.id, snapshot: s.id }, { ctx });
     toast(res?.restored !== undefined ? `"${s.name}" put back` : `"${s.name}" made again (number ${res?.created ?? '?'})${kind === 'program' ? ', switched off' : ''}`, 'ok');
     if (res?.warning) toast(res.warning, 'bad');
   } catch (e) { toast(e.message, 'bad'); return false; }
@@ -164,7 +165,7 @@ export function historyOf(ctx, c, kind, obj, close) {
       const removedAfter = rows.some(x => /_remove$/.test(x.action) && String(x.at) >= String(s.at));
       if (ctx.may && s.made_again != null) r.append(el('span', 'hint', `made again as ${s.made_again}`));
       else if (ctx.may) {
-        const b = el('button', 'btn btn-sm', removedAfter ? 'Make again…' : 'Restore…'); b.type = 'button';
+        const b = tagCmd(el('button', 'btn btn-sm', removedAfter ? 'Make again…' : 'Restore…'), kind === 'program' ? 'program_restore' : 'formula_restore', s.id); b.type = 'button';
         b.onclick = async () => { b.disabled = true; if (await restore(ctx, c, kind, s, !removedAfter, () => { close(); ctx.redraw(); })) return; b.disabled = false; };
         r.append(b);
       } else r.append(el('span'));
@@ -199,7 +200,7 @@ export function deletedList(ctx, c, presentPrograms, presentRecipes) {
       const r = el('div', 'fc-param');
       r.append(el('span', null, `${s.kind === 'program' ? 'Program' : 'Recipe'} "${s.name}"`), el('span', 'hint', `deleted ${when(s.at)} by ${s.by}`));
       if (ctx.may) {
-        const b = el('button', 'btn btn-sm', 'Make again…'); b.type = 'button';
+        const b = tagCmd(el('button', 'btn btn-sm', 'Make again…'), s.kind === 'program' ? 'program_restore' : 'formula_restore', s.id); b.type = 'button';
         b.onclick = async () => { b.disabled = true; if (!(await restore(ctx, c, s.kind, s, false))) b.disabled = false; };
         r.append(b);
       } else r.append(el('span'));

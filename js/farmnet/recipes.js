@@ -8,7 +8,8 @@
 // — refused while a program uses the recipe; the function checks every irrigation and mixing program and the mixers
 // on FarmNet again before deleting.
 import { el, drawer, field, toast, busy, confirmDrawer, loading } from '../ui.js';
-import { askNow, bad, num, send } from './shell.js';
+import { askNow, bad, num } from './shell.js';
+import { runCommand, tagCmd } from '../registry.js';
 import { copyThing, historyOf } from './irrigation-actions.js';
 
 // the scales the cards draw on; the band is where a hydroponic solution usually sits
@@ -90,7 +91,7 @@ export function newRecipe(ctx, c, recipes, redraw) {
   const ph = el('input', 'input'); ph.type = 'number'; ph.step = '0.01'; ph.min = '3'; ph.max = '9'; ph.placeholder = 'FarmNet\'s default';
   d.body.append(field('Name', name), field('EC target (mS)', ec), field('pH target', ph),
     el('div', 'hint', 'No program uses it until you choose it for a program\'s water source.'));
-  const go = el('button', 'btn btn-primary', 'Make it');
+  const go = tagCmd(el('button', 'btn btn-primary', 'Make it'), 'formula_add');
   go.onclick = async () => {
     const n = name.value.trim();
     if (!n) { toast('Give it a name', 'bad'); name.focus(); return; }
@@ -100,7 +101,7 @@ export function newRecipe(ctx, c, recipes, redraw) {
     if (ph.value.trim() !== '') { const v = Number(ph.value); if (!Number.isFinite(v) || v < 3 || v > 9) { toast('pH target: between 3 and 9', 'bad'); return; } body.ph = v; }
     busy(go, true, 'Making it…');
     let res;
-    try { res = await send(ctx.farm, 'formula_add', { id: c.id }, body); }
+    try { res = await runCommand('formula_add', { id: c.id, changes: body }, { ctx }); }
     catch (e) {
       // FarmNet may have made it all the same: no second one from here
       d.body.append(el('div', 'note bad', `${e.message}. FarmNet may have made the recipe all the same: look for it on the page before making another.`));
@@ -258,7 +259,7 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
     ch.forEach(x => { if (x.kind === 'ec') body.ec = x.read(); else if (x.kind === 'ph') body.ph = x.read(); else (body.ratios ||= []).push({ FC: x.fc, FR: x.read() }); });
     busy(save, true, 'Sending…');
     try {
-      const res = await send(ctx.farm, 'formula_set', { id: c.id, proId: r.ID }, body);
+      const res = await runCommand('formula_set', { id: c.id, proId: r.ID, changes: body }, { ctx });
       toast(`"${r.NM}" changed — FarmNet: ${res?.msg || 'OK'}`, 'ok');
     } catch (e) { toast(e.message, 'bad'); busy(save, false, 'Save…'); return; }
     dirty = () => false;
@@ -267,7 +268,7 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
   };
 
   // delete: refused while a program uses it (the page's list here; FarmNet's own, read again, in the function)
-  const del = el('button', 'btn btn-danger ir-del', 'Delete…'); del.type = 'button';
+  const del = tagCmd(el('button', 'btn btn-danger ir-del', 'Delete…'), 'formula_remove', r.ID); del.type = 'button';
   del.title = usedBy.length ? `Used by ${usedBy.join(', ')}: choose another recipe for ${usedBy.length === 1 ? 'it' : 'them'} first` : 'Delete this recipe on FarmNet';
   del.onclick = async () => {
     if (del.disabled) return;
@@ -279,14 +280,14 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
     if (!ok) { del.disabled = false; return; }
     busy(del, true, 'Deleting…');
     try {
-      await send(ctx.farm, 'formula_remove', { id: c.id, proId: r.ID });
+      await runCommand('formula_remove', { id: c.id, proId: r.ID }, { ctx });
       toast(`"${full.NM || r.NM}" deleted on FarmNet`, 'ok');
     } catch (e) { toast(e.message, 'bad'); busy(del, false, 'Delete…'); return; }
     dirty = () => false;
     d.close();
     if (!after) setTimeout(ctx.redraw, 800);
   };
-  const copy = el('button', 'btn', 'Copy…'); copy.type = 'button';
+  const copy = tagCmd(el('button', 'btn', 'Copy…'), 'formula_copy', r.ID); copy.type = 'button';
   copy.onclick = () => {
     if (dirty()) { toast('Save or undo your changes first: the copy is made from what FarmNet holds', 'bad'); return; }
     dirty = () => false; d.close();

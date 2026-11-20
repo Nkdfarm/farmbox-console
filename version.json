@@ -1,5 +1,5 @@
 {
-  "version": "0.11.05",
-  "released": "2026-11-19",
-  "note": "Answers use the full width"
+  "version": "0.11.06",
+  "released": "2026-11-20",
+  "note": "The assistant reads the unit you are looking at"
 }

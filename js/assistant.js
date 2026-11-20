@@ -348,7 +348,9 @@ async function sendNow(text, opts) {
   busyRow.hidden = false; sendBtn.disabled = true; checkBtn.disabled = true; sending = true;
   let out = null;
   try {
-    const r = await fn('assistant', { farm_id: f.id, route: !opts.check && ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
+    // the units it may read: those on screen (the unit chip left out = the whole site); none for a FarmBox that is alone
+    const units = (opts.check || !ctxOff.units ? w.unitIds : w.allUnitIds) || undefined;
+    const r = await fn('assistant', { farm_id: f.id, units, route: !opts.check && ctxOff.page ? '' : location.hash, messages, attachments: sent, chat_id: c.chatId || undefined, text: text || '(a file)', files: sent.map(x => x.name) }, { quiet: true });   // it only asks: what it proposes is done by a card
     if (!r?.ok) throw new Error(r?.error || 'The assistant did not answer');
     c.messages = r.messages;
     c.chatId = r.chat_id || null;

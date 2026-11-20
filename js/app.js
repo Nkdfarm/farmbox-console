@@ -708,13 +708,16 @@ window.addEventListener('hashchange', route);
 function aiWhere() {
   const { sec, tab } = currentRoute();
   const page = tab[1] === SECTIONS[sec].title ? tab[1] : `${SECTIONS[sec].title} › ${tab[1]}`;
-  let units = null;
+  let units = null, unitIds = null, allUnitIds = null;
   if (farm?.site) {
     const kind = PAGE_KIND[`${sec}/${tab[0]}`], st = unitState(farm, sec);
     const on = kind === 'work' ? [st.focus] : kind ? st.sel : farm.units.map(u => u.id);
-    units = farm.units.filter(u => on.includes(u.id)).map(u => u.name);
+    const shown = farm.units.filter(u => on.includes(u.id));
+    units = shown.map(u => u.name);
+    unitIds = shown.map(u => u.id);   // what the assistant READS: the units on screen (it used to read only the site's first unit, FarmLab)
+    allUnitIds = farm.units.map(u => u.id);
   }
-  return { page, units };
+  return { page, units, unitIds, allUnitIds };
 }
 
 // Say so when a newer console is deployed: an installed tab can sit on an old

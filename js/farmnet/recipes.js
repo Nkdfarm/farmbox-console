@@ -2,7 +2,9 @@
 // drawer that shows the recipe in full and lets the farm's Admin and Farm manager change its EC target, its pH
 // target and its channel ratios (owner, 20 Nov 2026: "possibility to edit recipes for farm managers and admin,
 // clear recipes with visual as well"). The function `farmnet` (formula_set) reads the recipe again, changes only
-// those values within FarmNet's own limits, sends the rest back as it was, and logs the command.
+// those values within FarmNet's own limits, sends the rest back as it was, and logs the command. Since 0.14.00 also
+// its name, and a new recipe (newRecipe: formula_add — FarmNet makes it from its defaults, named, and it opens here
+// for its channels; owner, 20 Nov 2026: "the possibility to create a new program and recipe").
 import { el, drawer, field, toast, busy, confirmDrawer, loading } from '../ui.js';
 import { askNow, bad, num, send } from './shell.js';
 
@@ -77,12 +79,48 @@ function chanName(full, info, fc, i) {
 const chanNo = fc => `channel ${Number(fc) + 1}`;
 const tankName = (list, id) => (list || []).find(t => Number(t.ID) === Number(id))?.N || (Number(id) === -1 ? 'none' : id === undefined ? '—' : `#${id}`);
 
-// the drawer: the recipe in full; for the farm's Admin and Farm manager, its EC, pH and channel ratios to change
-export async function openRecipe(ctx, c, r, usedBy) {
+// a new recipe: its name and, if known, its EC and pH; FarmNet makes it from its defaults and it opens in full
+export function newRecipe(ctx, c, recipes, redraw) {
+  const d = drawer('New recipe', `${c.name} · FarmNet makes it from its defaults; its channels are set next`);
+  const name = el('input', 'input'); name.maxLength = 40; name.placeholder = 'e.g. Lettuce winter';
+  const ec = el('input', 'input'); ec.type = 'number'; ec.step = '0.01'; ec.min = '0'; ec.max = '10'; ec.placeholder = 'FarmNet\'s default';
+  const ph = el('input', 'input'); ph.type = 'number'; ph.step = '0.01'; ph.min = '3'; ph.max = '9'; ph.placeholder = 'FarmNet\'s default';
+  d.body.append(field('Name', name), field('EC target (mS)', ec), field('pH target', ph),
+    el('div', 'hint', 'No program uses it until you choose it for a program\'s water source.'));
+  const go = el('button', 'btn btn-primary', 'Make it');
+  go.onclick = async () => {
+    const n = name.value.trim();
+    if (!n) { toast('Give it a name', 'bad'); name.focus(); return; }
+    if ((recipes || []).some(r => String(r.NM).trim().toLowerCase() === n.toLowerCase())) { toast(`A recipe "${n}" exists already`, 'bad'); return; }
+    const body = { name: n };
+    if (ec.value.trim() !== '') { const v = Number(ec.value); if (!Number.isFinite(v) || v < 0 || v > 10) { toast('EC target: between 0 and 10 mS', 'bad'); return; } body.ec = v; }
+    if (ph.value.trim() !== '') { const v = Number(ph.value); if (!Number.isFinite(v) || v < 3 || v > 9) { toast('pH target: between 3 and 9', 'bad'); return; } body.ph = v; }
+    busy(go, true, 'Making it…');
+    let res;
+    try { res = await send(ctx.farm, 'formula_add', { id: c.id }, body); }
+    catch (e) {
+      // FarmNet may have made it all the same: no second one from here
+      d.body.append(el('div', 'note bad', `${e.message}. FarmNet may have made the recipe all the same: look for it on the page before making another.`));
+      busy(go, false, 'Make it'); go.disabled = true; redraw(); return;
+    }
+    d.close();
+    toast(`Recipe "${n}" made on FarmNet`, 'ok');
+    const id = Number(res?.created ?? res?.data?.ID);
+    if (Number.isInteger(id)) openRecipe(ctx, c, { ID: id, NM: n }, [], redraw);
+    else redraw();
+  };
+  d.footer.append(go);
+  setTimeout(() => name.focus(), 50);
+}
+
+// the drawer: the recipe in full; for the farm's Admin and Farm manager, its name, EC, pH and channel ratios to change
+// (after: called when the drawer closes — a new recipe redraws the page even when nothing more was saved)
+export async function openRecipe(ctx, c, r, usedBy, after) {
   const info = readInf(r.INF);
   let dirty = () => false;
   const d = drawer(r.NM || `Recipe ${r.ID}`, `${c.name} · as FarmNet holds it`, {
     guard: () => (dirty() ? confirmDrawer('Leave without saving?', 'The values you changed are not sent to FarmNet.', 'Leave') : true),
+    onClose: () => { if (after) after(); },
   });
   d.body.append(loading('Reading the recipe…'));
   let full;
@@ -93,6 +131,14 @@ export async function openRecipe(ctx, c, r, usedBy) {
 
   const inputs = [];   // { label, read, from, unit, kind, fc? }
   const may = p => ctx.may && p && p.EEN !== false;
+  // its name
+  let nameNow = () => (full.NM || r.NM || '').trim();
+  if (ctx.may) {
+    const nm = el('input', 'input'); nm.maxLength = 40; nm.value = full.NM || r.NM || '';
+    nameNow = () => nm.value.trim();
+    d.body.append(field('Name', nm));
+  }
+  const nameChanged = () => nameNow() !== (full.NM || r.NM || '').trim();
   const numInput = (value, lo, hi, dec) => {
     const i = el('input', 'input'); i.type = 'number'; i.value = value === null ? '' : Number(value).toFixed(dec);
     if (lo !== null) i.min = String(lo); if (hi !== null) i.max = String(hi);
@@ -186,21 +232,23 @@ export async function openRecipe(ctx, c, r, usedBy) {
   if (!ctx.may) { d.body.append(el('div', 'hint', 'Only the farm admin and farm manager change a recipe.')); return; }
 
   const changes = () => inputs.filter(x => Number.isFinite(x.read()) && x.read() !== x.from);
-  dirty = () => changes().length > 0;
+  dirty = () => changes().length > 0 || nameChanged();
   const save = el('button', 'btn btn-primary', 'Save…');
   save.onclick = async () => {
     if (save.disabled) return;
     const nan = inputs.find(x => !Number.isFinite(x.read()));
     if (nan) { toast(`${nan.label}: not a number`, 'bad'); return; }
     const ch = changes();
-    if (!ch.length) { toast('Nothing changed'); return; }
+    if (!ch.length && !nameChanged()) { toast('Nothing changed'); return; }
+    if (nameChanged() && !nameNow()) { toast('The name is empty', 'bad'); return; }
     const out = ch.find(x => (x.lo !== null && x.read() < x.lo) || (x.hi !== null && x.read() > x.hi));
     if (out) { toast(`${out.label} must be between ${out.lo ?? '…'} and ${out.hi ?? '…'}`, 'bad'); return; }
-    const said = ch.map(x => `${x.label}: ${x.from} → ${x.read()}${x.unit ? ' ' + x.unit : ''}`).join(' · ');
+    const said = [...(nameChanged() ? [`Name: ${full.NM || r.NM} → ${nameNow()}`] : []),
+      ...ch.map(x => `${x.label}: ${x.from} → ${x.read()}${x.unit ? ' ' + x.unit : ''}`)].join(' · ');
     save.disabled = true;
     const who = usedBy.length ? ` ${usedBy.join(', ')} mix${usedBy.length === 1 ? 'es' : ''} with the new values from the next run.` : '';
     if (!(await confirmDrawer(`Change "${r.NM}" on FarmNet?`, `${said}.${who}`, 'Change it'))) { save.disabled = false; return; }
-    const body = {};
+    const body = nameChanged() ? { name: nameNow() } : {};
     ch.forEach(x => { if (x.kind === 'ec') body.ec = x.read(); else if (x.kind === 'ph') body.ph = x.read(); else (body.ratios ||= []).push({ FC: x.fc, FR: x.read() }); });
     busy(save, true, 'Sending…');
     try {
@@ -209,7 +257,7 @@ export async function openRecipe(ctx, c, r, usedBy) {
     } catch (e) { toast(e.message, 'bad'); busy(save, false, 'Save…'); return; }
     dirty = () => false;
     d.close();
-    setTimeout(ctx.redraw, 1200);
+    if (!after) setTimeout(ctx.redraw, 1200);
   };
   d.footer.append(save);
 }

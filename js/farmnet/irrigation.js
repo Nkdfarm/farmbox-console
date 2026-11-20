@@ -12,8 +12,8 @@
 // The commands (start a program, pause, resume, stop) stay in the card's head, as before.
 import { el, drawer, field, pref, toast } from '../ui.js';
 import { centreButtons } from './overview.js';
-import { openRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
-import { openProgram } from './programs.js';
+import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
+import { openProgram, newProgram } from './programs.js';
 import { DAY_SPANS, ask, bad, card, centres, colour, nowLocal, num, page, range, short, show, soft, spanPicker, table } from './shell.js';
 
 // FarmNet's device types (status/detail "type")
@@ -65,7 +65,12 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
 
       const th = el('div', 'fc-head fc-subhead');
       th.append(el('h4', 'fc-sub', 'Today'), el('div', 'spacer'),
-        el('span', 'hint', ctx.may ? 'Press a program to see it in full and change its times.' : 'Press a program to see it in full.'));
+        el('span', 'hint', ctx.may ? 'Press a program to see it in full and change it.' : 'Press a program to see it in full.'));
+      if (ctx.may && !programs.e) {
+        const nb = el('button', 'btn btn-sm', '＋ New program'); nb.type = 'button';
+        nb.onclick = () => newProgram(ctx, c, recipes, programs.v || [], ctx.redraw);
+        th.append(nb);
+      }
       k.append(th);
       if (programs.e) k.append(bad(programs.e));
       else k.append(clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
@@ -74,6 +79,11 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       const rh = el('div', 'fc-head fc-subhead');
       rh.append(el('h4', 'fc-sub', `Recipes · ${recipes.length}`), el('div', 'spacer'),
         el('span', 'hint', ctx.may ? 'Press a recipe to see it in full and change it.' : 'Press a recipe to see it in full.'));
+      if (ctx.may && !formulas.e) {
+        const nb = el('button', 'btn btn-sm', '＋ New recipe'); nb.type = 'button';
+        nb.onclick = () => newRecipe(ctx, c, recipes, ctx.redraw);
+        rh.append(nb);
+      }
       k.append(rh);
       if (formulas.e) k.append(bad(formulas.e));
       else {

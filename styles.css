@@ -1744,6 +1744,21 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-prog-slot-l, .ir-prog-slot-r, .ir-prog-times { display: inline-flex; align-items: center; gap: 6px; }
 .fc-param .ir-prog-times .input { width: 110px; }
 .fc-param .ir-prog-pct { width: 70px; }
+.ir-prog-head .field { margin-bottom: 4px; }
+.fc-param select.ir-prog-mode { width: auto; max-width: 100%; }
+.ir-prog-daysrow { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--divider); }
+.ir-prog-days { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ir-prog-days select.input { width: auto; }
+.ir-prog-inline { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ir-prog-days .ir-prog-inline .input { width: auto; }
+.ir-prog-days .ir-prog-inline .ir-prog-pct { width: 70px; }
+.ir-prog-week { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
+.ir-prog-week label { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-sm); }
+.ir-prog-week[hidden], .ir-prog-inline[hidden] { display: none; }
+.ir-prog-src { margin-top: 8px; }
+.ir-prog-src b { min-width: 0; overflow-wrap: anywhere; }
+.ir-prog-valve > .ir-prog-inline:first-child { padding-left: 14px; }
+.ir-prog-add { width: 100%; margin: 6px 0 2px; }
 /* the recipe drawer */
 .ir-targets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .ir-target { padding: 10px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--divider); }

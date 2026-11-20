@@ -1,48 +1,10 @@
 // FarmNet Irrigation, Mixing and Climate pages
 import { el } from '../ui.js';
 import { setpoints } from './commands.js';
-import { centreButtons, mixerButtons } from './overview.js';
-import { DAY_SPANS, ask, bad, btn, card, centres, nextOf, num, page, range, soft, spanPicker, table, unit } from './shell.js';
+import { mixerButtons } from './overview.js';
+import { DAY_SPANS, ask, bad, btn, card, centres, link, nextOf, num, page, range, soft, spanPicker, table, unit } from './shell.js';
 
-// ═══ Irrigation ═════════════════════════════════════════════════════════════
-export async function renderFnIrrigation(mount, farm, _app, quiet) {
-  const go = () => renderFnIrrigation(mount, farm, null, true);
-  await page(mount, farm, 'Irrigation: each centre\'s valve, tanks and disinfection, its programs and its runs.', async (ctx, body) => {
-    const { at, seg } = spanPicker('fbc_fn_irr_span', DAY_SPANS, go);
-    const cl = await centres(farm);
-    const per = await Promise.all(cl.map(c => Promise.all([
-      soft(ask(farm, 'irrigation_programs', { id: c.id })),
-      soft(ask(farm, 'irrigation_records', { id: c.id, type: 0, ...range(at) })),
-    ])));
-    if (!cl.length) body.append(el('div', 'note', 'FarmNet lists no fertigation centre.'));
-    cl.forEach((c, i) => {
-      const [programs, records] = per[i];
-      const k = card(`${c.name} — irrigation`, ...(ctx.may ? centreButtons(ctx, c) : []));
-      if (c.status.e) k.append(bad(c.status.e));
-      const s = c.status.v || {};
-      const grid = el('div', 'fc-units');
-      if (s.valve) grid.append(unit(s.valve.name || 'Irrigation', !!s.valve.run, [], null, nextOf(s.valve)));
-      (s.tankList || []).filter(t => (t.dataList || []).length).forEach(t => grid.append(unit(t.name, undefined, t.dataList)));
-      (s.disiList || []).forEach(d => grid.append(unit(d.name, !!d.run, d.dataList)));
-      k.append(grid);
-
-      k.append(el('h4', 'fc-sub', 'Programs'));
-      if (programs.e) k.append(bad(programs.e));
-      else k.append(table(['Program', 'Mode', 'Days', 'Run time', 'Next start'],
-        (programs.v || []).map(p => [p.NM, p.MD, p.DT, p.TM, p.NX])));
-
-      const recs = records.v?.record || [];
-      const vol = recs.reduce((a, r) => a + (num(r.VLM) || 0), 0);
-      const sub = el('div', 'fc-head fc-subhead');
-      sub.append(el('h4', 'fc-sub', `Runs · ${recs.length} · ${vol.toFixed(2)} m³`), el('div', 'spacer'), seg);
-      k.append(sub);
-      if (records.e) k.append(bad(records.e));
-      else k.append(table(['Program', 'Mode', 'Start', 'End', 'Volume m³', 'How it ended'],
-        recs.slice().sort((a, b) => String(b.ST).localeCompare(String(a.ST))).slice(0, 200).map(r => [r.NM, r.MD, r.ST, r.ET, r.VLM, r.SC]), [4]));
-      body.append(k);
-    });
-  }, { commands: true, quiet });
-}
+// Irrigation is a page of its own since 20 Nov 2026: irrigation.js (the water's way, today's clock, the recipes)
 
 // ═══ Mixing ═════════════════════════════════════════════════════════════════
 export async function renderFnMixing(mount, farm, _app, quiet) {
@@ -78,10 +40,10 @@ export async function renderFnMixing(mount, farm, _app, quiet) {
       body.append(k);
     });
     cl.forEach((c, i) => {
-      const k = card(`Recipes — ${c.name}`);
+      const k = card(`Recipes — ${c.name}`, link('#/farmnet/irrigation', 'Open the recipes…'));
       if (recipes[i].e) k.append(bad(recipes[i].e));
       else k.append(table(['Recipe', 'What it holds'], (recipes[i].v || []).map(r => [r.NM, String(r.INF || '').replace(/\s+/g, ' ').trim()])));
-      k.append(el('div', 'hint', 'Recipes are changed on FarmNet itself.'));
+      k.append(el('div', 'hint', 'Each recipe is drawn, and changed by the farm admin and farm manager, on the Irrigation tab.'));
       body.append(k);
     });
   }, { commands: true, quiet });

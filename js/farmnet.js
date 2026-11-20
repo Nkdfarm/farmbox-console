@@ -10,8 +10,9 @@
 //   Overview    alarms, irrigation, the mixer, the day tank, today's runs, the
 //               chosen sensors live and over 24 h, the climate zones, the last
 //               commands — read again every minute while it is on screen
-//   Irrigation  each centre's valve, tanks and disinfection; its programs; runs
-//   Mixing      each mixer live; its programs, its runs, the recipes
+//   Irrigation  the water's way (tanks drawn to their level), today's programs on a clock, the recipes
+//               drawn and, for the Admin and Farm manager, changed (20 Nov 2026); runs
+//   Mixing      each mixer live; its programs, its runs, the recipes in a list
 //   Climate     each zone's devices and their state; its setpoints
 //   Sensors     every signal source FarmNet has: choose up to 8 for the
 //               Overview, live values and history
@@ -24,6 +25,7 @@
 // Connections › FarmNet & sensors keeps what comes in through `ingest`.
 // ═══════════════════════════════════════════════════════════════════════════
 export { renderFnOverview } from './farmnet/overview.js';
-export { renderFnIrrigation, renderFnMixing, renderFnClimate } from './farmnet/control.js';
+export { renderFnMixing, renderFnClimate } from './farmnet/control.js';
+export { renderFnIrrigation } from './farmnet/irrigation.js';
 export { renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet/sensors.js';
 export { forgetFarmnet } from './farmnet/shell.js';   // the answers kept for opening a page at once (shell.js): gone at sign-out

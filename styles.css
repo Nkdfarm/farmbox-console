@@ -1638,6 +1638,109 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .bp-zone > b { margin-right: 4px; }
 .bp-chip { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
 .bp-chip.on { border-color: var(--success); color: var(--success); background: var(--success-bg); font-weight: 600; }
+/* FarmNet › Irrigation (farmnet/irrigation.js, recipes.js; 20 Nov 2026): the water's way, today's clock, the recipes */
+.ir-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px 22px; margin: 4px 0 6px; }
+.ir-stage { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ir-stage + .ir-stage::before { content: ""; position: absolute; left: -17px; top: 50%; width: 10px; height: 10px;
+  border-top: 2px solid var(--text-faint); border-right: 2px solid var(--text-faint); transform: translateY(-50%) rotate(45deg); opacity: .6; }
+.ir-stage-items { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; flex: 1; }
+.ir-tank { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 112px; padding: 8px 6px; border-radius: var(--radius-md);
+  border: 1px solid var(--divider); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+.ir-tank:hover { border-color: var(--border-strong); }
+.ir-tank.is-unknown { cursor: default; opacity: .75; }
+.ir-tank-svg { width: 58px; height: 76px; overflow: visible; }
+.ir-vessel { fill: var(--track-soft); stroke: var(--border-strong); stroke-width: 1.5; }
+.ir-tank.is-unknown .ir-vessel { stroke-dasharray: 4 3; }
+.ir-water { fill: var(--accent); opacity: .55; }
+.ir-tank.is-low .ir-water { fill: var(--warning); }
+.ir-tick { stroke: var(--text); stroke-width: 1; opacity: .3; }
+.ir-drop { fill: var(--accent); animation: irDrop 1.4s ease-in infinite; }
+@keyframes irDrop { 0% { transform: translateY(-4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(14px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ir-drop { animation: none; } }
+.ir-tank-txt { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: var(--text-xs); line-height: 1.3; }
+.ir-tank-txt b { font-size: var(--text-xs); overflow-wrap: anywhere; }
+.ir-tank-vol { font-size: var(--text-lg); font-weight: 750; }
+.ir-machine { display: flex; flex-direction: column; gap: 6px; min-width: 200px; max-width: 280px; padding: 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--divider); background: var(--surface-2); font-size: var(--text-sm); }
+.ir-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.ir-meas { display: flex; align-items: baseline; gap: 8px; }
+.ir-meas b { font-size: var(--text-lg); }
+.ir-meas .ir-off { color: var(--warning); }
+.ir-now-recipe { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--text-xs); }
+.ir-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rc, var(--text-faint)); flex: none; }
+.ir-gauge-wrap { margin: 2px 0 4px; }
+.ir-gauge { position: relative; height: 8px; border-radius: 999px; background: var(--track); }
+.ir-gauge-band { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: var(--success-bg); box-shadow: inset 0 0 0 1px var(--success); opacity: .8; }
+.ir-gauge-target { position: absolute; top: -4px; width: 3px; height: 16px; margin-left: -1.5px; border-radius: 2px; background: var(--rc, var(--text)); }
+.ir-gauge-now { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--surface);
+  border: 3px solid var(--accent); }
+.ir-gauge-ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-faint); }
+/* the clock */
+.ir-clock { display: grid; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
+.ir-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(420px, 1fr); gap: 10px; align-items: center; }
+.ir-row.is-off { opacity: .45; }
+.ir-label { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.ir-label b { font-size: var(--text-sm); border-left: 3px solid var(--rc, var(--text-faint)); padding-left: 6px; }
+.ir-label .hint { font-size: 11px; padding-left: 9px; }
+.ir-track { position: relative; height: 26px; border-radius: 6px; background: var(--track-soft);
+  background-image: repeating-linear-gradient(90deg, var(--divider) 0 1px, transparent 1px 12.5%); }
+.ir-axis .ir-track { height: 16px; background: none; }
+.ir-hour { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; color: var(--text-faint); }
+.ir-hour.is-end { transform: translateX(-100%); }
+.ir-keep-case { text-transform: none; }
+.ir-plan, .ir-window, .ir-done { position: absolute; border-radius: 4px; }
+.ir-plan { top: 4px; bottom: 4px; background: var(--rc, var(--text-faint)); opacity: .45; }
+.ir-plan-next { opacity: .9; }
+.ir-window { top: 7px; bottom: 7px; background: repeating-linear-gradient(90deg, var(--rc, var(--text-faint)) 0 3px, transparent 3px 7px); opacity: .55; }
+.ir-done { top: 9px; bottom: 9px; background: var(--rc, var(--text)); box-shadow: 0 0 0 1px var(--surface); }
+.ir-now { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--error); }
+.ir-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; --rc: var(--text-muted); }
+.ir-key span { display: inline-flex; align-items: center; gap: 6px; }
+.ir-key i { position: relative; display: inline-block; width: 18px; height: 10px; top: auto; bottom: auto; margin: 0; }
+.ir-key i.ir-now { width: 2px; height: 12px; }
+/* the recipes */
+.ir-recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-3); }
+.ir-recipe { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--radius-md); text-align: left; font: inherit; color: var(--text);
+  border: 1px solid var(--divider); border-top: 3px solid var(--rc, var(--text-faint)); background: var(--surface-2); cursor: pointer; }
+.ir-recipe:hover { border-color: var(--border-strong); border-top-color: var(--rc, var(--text-faint)); }
+.ir-recipe.is-live { box-shadow: 0 0 0 1px var(--success); }
+.ir-recipe-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ir-recipe-head b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ir-recipe-nums { display: flex; gap: 18px; }
+.ir-big { display: grid; grid-template-columns: auto auto; column-gap: 4px; align-items: baseline; justify-content: start; }
+.ir-big-v { font-size: var(--text-xl); font-weight: 750; line-height: 1.1; }
+.ir-big-u { font-size: 11px; color: var(--text-muted); }
+.ir-big-l { grid-column: 1 / -1; font-size: 11px; color: var(--text-muted); }
+.ir-chans { display: flex; flex-wrap: wrap; gap: 4px; }
+.ir-ch { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 18px;
+  background: var(--chip); color: var(--text); }
+.ir-ch-acid { background: var(--warning-bg); color: var(--warning); }
+.ir-ch-a { background: var(--success-bg); color: var(--success); }
+.ir-ch-b { background: var(--info-bg); color: var(--info); }
+.ir-ch-c { background: var(--coral-soft); color: var(--coral); }
+.ir-ch-d { background: var(--fam-of-bg); color: var(--fam-of-fg); }
+.ir-recipe-foot { margin-top: auto; font-size: 11px; }
+.ir-runs { margin-top: var(--space-2); }
+.ir-runs > summary { cursor: pointer; list-style: none; }
+.ir-runs > summary::-webkit-details-marker { display: none; }
+.ir-runs > summary .fc-sub::before { content: "▸ "; }
+.ir-runs[open] > summary .fc-sub::before { content: "▾ "; }
+/* the recipe drawer */
+.ir-targets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.ir-target { padding: 10px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--divider); }
+.ir-target-edit { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.ir-target-edit .input { width: 100px; font-size: var(--text-lg); font-weight: 700; }
+.ir-section { margin-top: var(--space-4); }
+.ir-section > summary { cursor: pointer; }
+.ir-mix { display: flex; height: 26px; border-radius: 8px; overflow: hidden; margin: 6px 0 8px; background: var(--track); }
+.ir-mix-part.ir-ch { display: flex; align-items: center; justify-content: center; border-radius: 0; padding: 0; min-width: 0; overflow: hidden;
+  flex-basis: 0; white-space: nowrap; }
+.ir-chan-list .fc-param .ir-ch { margin-right: 4px; }
+@media (max-width: 640px) {
+  .ir-stage + .ir-stage::before { display: none; }
+  .ir-machine { max-width: none; flex: 1; }
+  .ir-targets { grid-template-columns: 1fr; }
+}
 .bp-bay { --h: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 84px; min-height: 250px;
   padding: 8px 4px 10px; border-radius: 12px; cursor: pointer; text-align: center; font: inherit; color: var(--text);
   border: 1px solid var(--border); background: var(--surface); transition: transform var(--transition), border-color var(--transition); }

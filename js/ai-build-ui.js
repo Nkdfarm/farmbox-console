@@ -31,22 +31,22 @@ let bandEl = null, trayEl = null, styleEl = null;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 export const building = () => !!current && !!current.build.state().locked;
 
-// ── the replay ──────────────────────────────────────────────────────────────────────────────────────────────────────
-async function navigate(page) {
+// ── the replay (also the history strip's Play, op-strip.js: navigate, locate and highlight, never a click) ───────────
+export async function navigate(page) {
   if ((location.hash || '').split('?')[0] === page) { await wait(120); return; }
   location.hash = page;
   await wait(350);           // app.js draws the page on hashchange
 }
-async function locate(name, args) {
+export async function locate(name, args, findMs = FIND_MS) {
   const t0 = Date.now();
   for (;;) {
     const a = findAnchor(name, args, document.getElementById('shell') || document);
     if (a && a.getClientRects().length) return a;
-    if (Date.now() - t0 > FIND_MS) return null;
+    if (Date.now() - t0 > findMs) return null;
     await wait(120);
   }
 }
-async function highlight(node) {
+export async function highlight(node) {
   try { node.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { node.scrollIntoView?.(); }
   node.classList.add('ai-replay');
   await wait(HIGHLIGHT_MS);

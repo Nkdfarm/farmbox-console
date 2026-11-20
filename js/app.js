@@ -38,6 +38,7 @@ import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevic
 import { drop3d } from './farmnet3d.js';
 import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands, forgetFarmnet } from './farmnet.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant, assistantReady, assistantRouteChanged } from './assistant.js';
+import { initStrip, stripRouteChanged, forgetStrip } from './op-strip.js';
 import { liveOpen } from './live.js';
 import { loadCatalog } from './catalog.js';
 import { loadFamilies } from './families.js';
@@ -370,6 +371,7 @@ function forgetConversations() {
   try { Object.keys(localStorage).filter(k => (k.startsWith('fbc_ai_') || k.startsWith('fbc_aic_')) && k !== 'fbc_ai_open' && k !== 'fbc_ai_read_all').forEach(k => localStorage.removeItem(k)); }
   catch { /* storage off: nothing kept either */ }
   forgetAssistant();
+  try { forgetStrip(); } catch (e) { console.warn('history strip', e); }
 }
 // the next person on this tab starts from nothing (review 3 Oct 2026): with `booted` still true from
 // the last person, a start that failed on the network was never retried and a reconnect drew the
@@ -673,7 +675,7 @@ async function route() {
   paintTabs(sec, tab);
   paintUnitPick(farm?.site ? PAGE_KIND[`${sec}/${tab[0]}`] : null, sec);
   const aiKey = `${sec}/${tab[0]}|${farm?.id || ''}|${farm?.site ? JSON.stringify(unitState(farm, sec)) : ''}`;
-  if (booted && aiKey !== lastAiKey) { lastAiKey = aiKey; assistantRouteChanged(); }
+  if (booted && aiKey !== lastAiKey) { lastAiKey = aiKey; assistantRouteChanged(); try { stripRouteChanged(); } catch (e) { console.warn('history strip', e); } }   // the history strip under it (0.22.00): it never costs the page
 
   newPage();
   const page = $('page');
@@ -731,6 +733,8 @@ watchForUpdates();
 // the assistant (0.7.122): a band on top since 19 Nov 2026 (a side panel before), one conversation per FarmBox; a change it proposes
 // runs only when the person presses Do it, and then the page on screen is drawn again
 initAssistant({ farm: () => farm, refresh: () => route(), user: () => myUserId, where: aiWhere });
+// the history strip just under the assistant (0.22.00, owner 21 Nov 2026): the operation log as a CAD feature timeline
+try { initStrip({ farm: () => farm, user: () => myUserId, where: aiWhere }); } catch (e) { console.warn('history strip', e); }
 
 // ── boot ───────────────────────────────────────────────────────────────────
 let booted = false;

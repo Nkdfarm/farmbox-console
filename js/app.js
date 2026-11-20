@@ -16,6 +16,7 @@ import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
 import { renderIssues } from './issues.js';
+import { renderOperations } from './operations.js';
 import { renderFeedback } from './feedback.js';
 import { renderScouting } from './scouting.js';
 import { renderIpmPrograms, renderIpmProducts } from './treatments.js';
@@ -96,7 +97,8 @@ const lib = key => (c, f, ctx) => renderProcedures(c, f, LIB[key]);
 
 const SECTIONS = {
   dashboard: { title: 'Dashboard', tabs: [
-    ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['feedback', 'Feedback', renderFeedback], ['reports', 'Reports', renderReports]] },   // Feedback (0.7.186, migration 0189): drawn once for a site, its rows say the unit
+    ['overview', 'Overview', renderDashboard], ['yield', 'Yield', renderYield], ['issues', 'Issues', renderIssues], ['feedback', 'Feedback', renderFeedback], ['reports', 'Reports', renderReports],
+    ['timeline', 'Timeline', renderOperations]] },   // the operation log (0286, console 0.19.00; operations.js — timeline.js is the crop planner's)   // Feedback (0.7.186, migration 0189): drawn once for a site, its rows say the unit
   week: { title: 'Tasks', tabs: [['board', 'Tasks', renderWeek], ['team', 'Team', renderTeam]] },
   grow: { title: 'Grow', tabs: [
     ['planner', 'Crop planner', renderCrops], ['library', 'Crop library', renderCropDb], ['procedures', 'Procedures', lib('grow')],
@@ -146,7 +148,7 @@ const PAGE_KIND = {
   'grow/forecast': 'overview', 'grow/harvest': 'overview', 'grow/validation': 'overview',
   'ipm/scouting': 'overview', 'office/money': 'overview', 'office/orders': 'overview',
   'connect/farmnet': 'overview', 'connect/heatmap': 'overview', 'connect/growth': 'overview', 'connect/counting': 'overview',
-  'grow/planner': 'work', 'maintenance/equipment': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
+  'grow/planner': 'work', 'maintenance/equipment': 'work', 'dashboard/timeline': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
   // FarmNet: one controller per unit (the farm's code names its secrets), so one unit at a time
   'farmnet/overview': 'work', 'farmnet/irrigation': 'work', 'farmnet/mixing': 'work', 'farmnet/climate': 'work',
   'farmnet/sensors': 'work', 'farmnet/alarms': 'work', 'farmnet/commands': 'work',

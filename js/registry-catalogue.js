@@ -16,7 +16,7 @@
 const fnSend = (action, fixed) => async (a, ctx) => {
   const { send } = await import('./farmnet/shell.js');
   const { changes, ...args } = a || {};
-  return send(ctx.farm, action, { ...args, ...(fixed || {}) }, changes);
+  return send(ctx.farm, action, { ...args, ...(fixed || {}) }, changes, ctx.op);   // op: its row of the operation log (0286)
 };
 // the button of one program or recipe first (data-cmd-key = its number), else any button of the command on screen
 const keyed = (name, keyOf) => (a, root) => {
@@ -100,8 +100,19 @@ const FARMNET = [
 ].map(d => ({ kind: 'farmnet', ...d, sends: d.sends || d.name, run: fnSend(d.sends || d.name, d.fixed) }));
 
 // ── the assistant's changes (ACTIONS in supabase/functions/assistant/index.ts, ALLOWED in assistant.js, ai_card_action):
-// a database function run as the person. Revert A: P4 runs them through the capture act (0271), which puts the rows back.
-const rpcRun = name => async a => { const { rpc } = await import('./api.js'); return rpc(name, a); };
+// a database function run as the person through the server door public.run_command (0286): the door opens a capture act
+// (0271), so every row it touches is kept before and after and Revert on the Timeline puts them back (class A), and it
+// writes the operation row. The door answers { ok, op_id, act_id, changes, result } or { ok: false, error, code }; run
+// gives the function's own result back, as the direct call did.
+const farmIdOf = ctx => { const f = typeof ctx?.farm === 'function' ? ctx.farm() : ctx?.farm; return f?.id || null; };
+const rpcRun = name => async (a, ctx) => {
+  const { rpc } = await import('./api.js');
+  const op = ctx?.op || {};
+  const r = await rpc('run_command', { p_command: name, p_args: a || {}, p_group: op.group || null, p_actor: op.actor || 'human',
+    p_source: op.source || 'console', p_page: op.page || null, p_summary: op.summary || null, p_farm: farmIdOf(ctx) });
+  if (!r || r.ok !== true) { const e = new Error(r?.error || 'The change was refused'); e.code = r?.code || null; throw e; }
+  return r.result;
+};
 const uuid = (label, required = true) => ({ type: 'uuid', required, label });
 const date = (label, required = true) => ({ type: 'date', required, label });
 const PLANNER = ['#/grow/planner'];

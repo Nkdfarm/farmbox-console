@@ -2699,6 +2699,31 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
 /* 0.7.264–0.7.265: Team — AI access (0242), in the person's and the job's Edit windows */
 .team-ai-line { margin-top: var(--space-4); }
 .team-ai-line .row { gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+/* Timeline: the operation log (0286, console 0.19.00) */
+.op-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: 0 0 var(--space-4); }
+.op-filters select, .op-filters input { max-width: 100%; }
+.op-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.op-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr) auto; gap: var(--space-3); align-items: start;
+  padding: var(--space-3) var(--space-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.op-row.is-reverted .op-title { text-decoration: line-through; color: var(--text-muted); }
+.op-row.is-failed { border-color: rgba(244,63,94,0.22); }
+.op-meta { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-xs); color: var(--text-muted); }
+.op-meta .pill { align-self: flex-start; }
+.op-who { color: var(--text); font-weight: 600; }
+.op-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.op-title { font-weight: 600; overflow-wrap: anywhere; }
+.op-error { font-size: var(--text-xs); color: var(--error); overflow-wrap: anywhere; }
+.op-acts { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
+.op-group { border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.op-group-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); }
+.op-steps { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-3) var(--space-3); }
+.op-older { margin-top: var(--space-4); }
+.op-conflicts { margin: var(--space-2) 0; padding-left: 1.2em; }
+@media (max-width: 720px) {
+  .op-row { grid-template-columns: minmax(0, 1fr); }
+  .op-meta { flex-direction: row; flex-wrap: wrap; gap: var(--space-2); }
+  .op-acts { justify-content: flex-start; }
+}
 .team-ai-perms { margin-top: var(--space-4); }
 .team-ai-perms-body { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
 .team-ai-perms-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: var(--space-4); }

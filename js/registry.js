@@ -2,9 +2,11 @@
 // The command registry (AI build mode P3, owner 20 Nov 2026, docs/ai-build-mode.md: "the AI clicks" = commands from a
 // registry, which the screen replays on their own buttons; no DOM clicking).
 //
-// Every change a page makes through the registry runs through runCommand(name, args, { actor, group, ctx }): the
-// arguments are checked against the command's schema, the command runs, and onOperation(record) hears what happened
-// (a no-op until P4 plugs the operation log in). The pages keep their own drawers and confirms: the registry is the
+// Every change a page makes through the registry runs through runCommand(name, args, { actor, group, source, revertOf,
+// summary, ctx }): the arguments are checked against the command's schema, the command runs, and onOperation(record) hears what
+// happened. The operation log itself is written by the server (P4, migration 0286): run receives ctx.op = { command,
+// actor, group, page, source, summary, revert_of } and hands it on — a database command to public.run_command, a
+// FarmNet one to the farmnet function (body.op) — so the hook stays light (the Timeline only hears that it is stale). The pages keep their own drawers and confirms: the registry is the
 // door, not the dialog. A person's button and the AI's built step are the same command, so P5 can stage it, replay it
 // on its button (anchor) and apply it after validation.
 //
@@ -16,7 +18,9 @@ import { DEFINITIONS } from './registry-catalogue.js';
 
 const COMMANDS = new Map();
 export const REVERT = { A: 'put back', B: 'a compensating action', C: 'final' };
-export const ACTORS = ['human', 'ai'];          // P4 adds mcp, phone and system with the log
+export const ACTORS = ['human', 'ai'];          // who may run a command from the console
+// every actor of the operation log (0286): an MCP connection writes through mcp.act, the phone and the platform their own way
+export const ACTORS_LOGGED = { human: 'Person', ai: 'AI build', mcp: 'AI connection (MCP)', phone: 'Phone', system: 'Platform' };
 const TYPES = new Set(['int', 'number', 'string', 'boolean', 'object', 'array', 'date', 'uuid', 'any']);
 const SPEC_KEYS = new Set(['type', 'required', 'min', 'max', 'enum', 'label']);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -125,10 +129,10 @@ function checkValue(s, v) {
 let onOperation = () => {};
 export function setOperationHook(fn) { onOperation = typeof fn === 'function' ? fn : () => {}; }
 
-export async function runCommand(name, args, { actor = 'human', group = null, ctx = {} } = {}) {
+export async function runCommand(name, args, { actor = 'human', group = null, source = 'console', revertOf = null, summary: given = null, ctx = {} } = {}) {
   const c = COMMANDS.get(name);
   const t0 = Date.now();
-  const page = typeof location !== 'undefined' ? location.hash || null : null;
+  const page = typeof location !== 'undefined' ? (location.hash || '').split('?')[0] || null : null;
   const base = { name, family: c?.family ?? null, label: c?.label ?? null, revert: c?.revert ?? null, actor, group, page, args: args ?? {}, at: new Date(t0).toISOString() };
   const tell = rec => { try { onOperation(Object.freeze(rec)); } catch (e) { console.warn('registry: the operation hook failed', e); } };
   const refuse = msg => { tell({ ...base, summary: null, status: 'refused', error: msg, result: null, ms: 0 }); throw new Error(msg); };
@@ -138,10 +142,12 @@ export async function runCommand(name, args, { actor = 'human', group = null, ct
   if (actor === 'ai' && !c.stageable) refuse(`${c.label}: the AI may propose this, never carry it out`);
   const v = validateArgs(name, args);
   if (!v.ok) refuse(v.error);
-  let summary = null;
-  try { summary = c.preview(v.args, ctx); } catch { summary = c.label; }
+  let summary = typeof given === 'string' && given.trim() ? given.trim().slice(0, 300) : null;   // a card's own words
+  if (!summary) { try { summary = c.preview(v.args, ctx); } catch { summary = c.label; } }
+  // what the server writes into the operation log beside the command (0286)
+  const op = Object.freeze({ command: name, actor, group, page, source, summary, revert_of: revertOf });
   try {
-    const result = await c.run(v.args, ctx);
+    const result = await c.run(v.args, { ...ctx, op });
     tell({ ...base, summary, status: 'done', error: null, result: result ?? null, ms: Date.now() - t0 });
     return result;
   } catch (e) {

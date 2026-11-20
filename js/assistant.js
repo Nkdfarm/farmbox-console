@@ -28,6 +28,7 @@ import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
 import { createMic, readAllOn } from './assistant-local.js';
 import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine } from './assistant-shape.js';
+import { runCommand } from './registry.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -210,7 +211,7 @@ async function paintWaiting(my) {
     go.onclick = async () => {
       if (!ALLOWED.has(k.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
       go.disabled = true;
-      try { await rpc(k.rpc, k.rpc === 'apply_batch_adjustment' ? { ...k.args, p_card: k.card_id } : k.args); toast('Applied: ' + (k.summary || k.rpc), 'ok'); ctx.refresh(); }
+      try { await doCard(k.rpc, k.rpc === 'apply_batch_adjustment' ? { ...k.args, p_card: k.card_id } : k.args, k.summary); toast('Applied: ' + (k.summary || k.rpc), 'ok'); ctx.refresh(); }
       catch (e) { toast(e.message, 'bad'); }
       paint();
     };
@@ -364,12 +365,17 @@ const short = r => {
   return keys.filter(k => r[k] != null).map(k => `${k} ${r[k]}`).join(' · ').slice(0, 120);
 };
 
+// A card's change, pressed by the person: a command of the registry (console 0.19.00, 0286), so it runs through the
+// server door public.run_command — every row it touches is kept and Revert on the Timeline puts it back. The person
+// pressed it: actor human, source assistant. ALLOWED stays the gate in front (the 0274 check reads it).
+const doCard = (name, args, summary) => runCommand(name, args, { actor: 'human', source: 'assistant', summary, ctx: { farm: ctx.farm() } });
+
 async function doIt(v, btn) {
   if (!ALLOWED.has(v.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
   const c = convo(), key = ckey();   // the page it was pressed on: a slow change must not write into the page shown by then
   btn.disabled = true; btn.textContent = 'Doing…';
   try {
-    const r = await rpc(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args);
+    const r = await doCard(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args, v.summary);
     if (r && r.needs_manager && !v.card_id) {   // the card was not kept, so nobody could be asked: say so, and leave it as it is
       toast(r.message || 'This is above the limit: ask a manager', 'bad');
       btn.disabled = false; btn.textContent = 'Do it'; return;

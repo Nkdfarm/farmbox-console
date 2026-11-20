@@ -74,7 +74,8 @@ export const askNow = (farm, action, args = {}) => {
 };
 export const commandLog = (farm, limit) =>
   cached(`${KEEP}${farm.id}|log|${limit}`, () => rpc('farmnet_commands', { p_farm: farm.id, p_limit: limit }, { quiet: true }));
-export const send = (farm, action, args, changes) => fn(FN, { farm: farm.id, action, args, changes });
+// op: the registry's side of the command (who, actor, group, page, summary, revert_of), for the operation log (0286)
+export const send = (farm, action, args, changes, op) => fn(FN, { farm: farm.id, action, args, changes, ...(op ? { op } : {}) });
 export const soft = p => Promise.resolve(p).then(v => ({ v }), e => ({ e: e?.message || String(e) }));   // one section failing does not blank the page
 
 export const num = v => { const n = Number(v); return v !== null && v !== '' && Number.isFinite(n) ? n : null; };

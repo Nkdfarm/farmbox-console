@@ -1,5 +1,5 @@
 {
-  "version": "0.19.00",
+  "version": "0.20.00",
   "released": "2026-11-20",
-  "note": "Timeline: every change, by people and AI, with undo"
+  "note": "AI build mode: plan, watch it build, validate"
 }

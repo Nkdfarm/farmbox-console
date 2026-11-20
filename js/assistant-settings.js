@@ -40,7 +40,39 @@ export function cardSettings(farmId) {
       };
       form.append(save);
     } else form.append(el('div', 'ai-card-state', 'Only a manager of this FarmBox changes these.'));
-    list.append(form);
+    list.append(form, capCard(f.id));
   })();
   return list;
+}
+
+// The AI's daily cost cap (AI build mode P5, 0287): what the farm's AI may cost in a day (every function, the farm's own
+// day), 20 USD when nothing is set. Over it the assistant plans no build and Build it stages nothing. Read by the members;
+// set by the farm admin and the farm manager only (never from an AI connection).
+function capCard(farmId) {
+  const box = el('div', 'ai-card open ai-cap');
+  box.append(el('div', 'ai-impact-head', 'AI cost cap per day'));
+  (async () => {
+    let b;
+    try { b = await rpc('ai_build_budget', { p_farm: farmId }, { quiet: true }); }
+    catch (e) { box.append(el('div', 'ai-card-state', /ai_build_budget|PGRST202|function/i.test(e.message) ? 'Not set up on this database yet (0287).' : e.message)); return; }
+    const usd = x => '$' + Number(x || 0).toFixed(2);
+    const state = el('div', 'ai-card-state');
+    const show = x => { state.textContent = `Today (${x.day}): ${usd(x.spent_usd)} of ${usd(x.cap_usd)}` + (x.over ? ' — the cap is reached: the AI builds nothing more today.' : ` — ${usd(x.left_usd)} left.`); };
+    show(b);
+    box.append(state);
+    if (b.may_edit) {
+      const l = el('label', 'ai-set'); const i = el('input', 'input'); i.type = 'number'; i.min = 0; i.max = 1000; i.step = '0.5'; i.value = b.cap_usd;
+      l.append('Daily cap, USD (0: the AI builds nothing): ', i); box.append(l);
+      const save = el('button', 'btn btn-sm btn-primary', 'Save the cap');
+      save.onclick = async () => {
+        save.disabled = true;
+        try { const r = await rpc('save_ai_build_cap', { p_farm: farmId, p_cap: i.value === '' ? null : Number(i.value) }); i.value = r.cap_usd; show(r); toast('Saved', 'ok'); }
+        catch (e) { toast(e.message, 'bad'); }
+        save.disabled = false;
+      };
+      box.append(save);
+    } else box.append(el('div', 'ai-card-state', 'Only the farm admin or the farm manager changes the cap.'));
+    box.append(el('div', 'ai-card-state', 'Every AI call of this FarmBox counts (questions, photos, plans). Before a build the assistant says what it will cost and how long it takes.'));
+  })();
+  return box;
 }

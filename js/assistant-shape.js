@@ -7,12 +7,12 @@
 // function's own (supabase/functions/assistant/talk.ts).
 // ═══════════════════════════════════════════════════════════════════════════
 
-// the chips of the question box: none ticked = auto. Build is added in P5 (creation mode): until then it stays hidden
+// the chips of the question box: none ticked = auto. Build (P5, creation mode) asks for a plan of commands with Build it
 export const SHAPE_CHIPS = [
   { shape: 'answer', label: 'Answer', title: 'A short answer: a few lines' },
   { shape: 'brief', label: 'Brief', title: 'An overview in coloured blocks, with the figures' },
   { shape: 'plan', label: 'Plan', title: 'A plan, step by step: what is new, changed, removed or checked' },
-  { shape: 'build', label: 'Build', title: 'Build it: a plan of commands, staged for you to validate', hidden: true },
+  { shape: 'build', label: 'Build', title: 'Build it: a plan of commands, staged for you to validate' },
 ];
 
 const TAG_RE = /<<\s*shape\s*:\s*(answer|brief|plan|build)\s*>>[ \t]*(?:\r?\n)?/gi;
@@ -80,3 +80,31 @@ export function cardsLine(cards) {
   const pages = [...by.entries()].sort((a, b) => b[1] - a[1]);
   return `${n} card${n === 1 ? '' : 's'} on ${pages.length} page${pages.length === 1 ? '' : 's'}: ` + pages.map(([p, k]) => `${p} ×${k}`).join(', ');
 }
+
+// ── a build's plan (P5): the pages of the registry by name, its cards by page, its cost and time ─────────────────────
+export const PAGE_TITLE = {
+  '#/farmnet/irrigation': 'FarmNet › Irrigation', '#/farmnet/overview': 'FarmNet', '#/farmnet/mixing': 'FarmNet › Mixing',
+  '#/farmnet/climate': 'FarmNet › Climate', '#/grow/planner': 'Crop planner', '#/grow/library': 'Crop library',
+  '#/grow/forecast': 'Forecast review', '#/grow/procedures': 'Procedures', '#/ipm/programs': 'IPM programs',
+  '#/office/management': 'Farm management', '#/maintenance/preventive': 'Preventive maintenance', '#/dashboard/issues': 'Issues',
+  '#/farm/zones': 'Farm setup', '#/office/orders': 'Orders', '#/office/market': 'Market', '#/maintenance/equipment': 'Equipment',
+};
+export const pageTitle = route => PAGE_TITLE[route] || String(route || '').replace(/^#\//, '').replace(/\//g, ' › ') || 'Other';
+
+// "3 cards on 2 pages: FarmNet › Irrigation ×2, Crop planner ×1" from the plan's pages ([{ page, n }])
+export function planPagesLine(pages) {
+  const list = (pages || []).filter(p => p && p.n > 0);
+  const n = list.reduce((t, p) => t + p.n, 0);
+  if (!n) return 'No cards.';
+  return `${n} card${n === 1 ? '' : 's'} on ${list.length} page${list.length === 1 ? '' : 's'}: ` + list.map(p => `${pageTitle(p.page)} ×${p.n}`).join(', ');
+}
+const money = x => '$' + (Number(x) || 0).toFixed(Number(x) >= 10 ? 0 : 2);
+const secs = s => (s = Math.max(1, Math.round(Number(s) || 0))) < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60 ? (s % 60) + ' s' : ''}`.trim();
+// "About $0.40 (planning $0.30, up to 1 fix $0.10) · about 12 s" — and today's spend against the farm's daily cap
+export function estimateLine(e, budget) {
+  if (!e) return '';
+  const fix = e.fix_calls ? `, up to ${e.fix_calls} fix${e.fix_calls === 1 ? '' : 'es'} ${money(e.fix_usd)}` : '';
+  const cap = budget && Number.isFinite(Number(budget.cap_usd)) ? ` · today ${money(budget.spent_usd)} of the ${money(budget.cap_usd)} daily cap` : '';
+  return `About ${money(e.cost_usd)} (planning ${money(e.planning_usd)}${fix}) · about ${secs(e.seconds)}${cap}`;
+}
+export const STEP_MARK = { '+': 'new', '~': 'changed', '-': 'removed' };

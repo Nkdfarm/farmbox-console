@@ -126,6 +126,7 @@ function opRow(o) {
   if (o.source === 'mcp') notes.push('through the person’s AI connection');
   if (o.source === 'ai-access') notes.push('undone on Team › AI access');
   if (o.source === 'farmnet') notes.push('sent to FarmNet');
+  if (o.source === 'ai-build' || (o.source === 'farmnet' && o.actor === 'ai')) notes.push('built by the AI, validated by the person');   // a build's FarmNet steps keep source farmnet (P5)
   if (o.revert_of) notes.push('puts back an earlier change');
   if (o.changes) notes.push(`${o.changes} row${o.changes === 1 ? '' : 's'}`);
   if (notes.length) main.append(el('div', 'hint', notes.join(' · ')));

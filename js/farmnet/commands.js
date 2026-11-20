@@ -69,7 +69,7 @@ export async function startMixing(ctx, c, f) {
 
 export function pause(ctx, c, f) {
   const what = f ? `mixing on ${f.name}` : `irrigation on ${c.name}`;
-  const d = drawer('Pause ' + (f ? 'mixing' : 'irrigation'), what);
+  const d = drawer('Pause ' + (f ? 'mixing' : 'irrigation'), what, { emergency: true });   // never locked by an AI build (P5)
   const mins = el('input', 'input'); mins.type = 'number'; mins.min = '1'; mins.max = '1440'; mins.step = '1'; mins.value = '30';
   d.body.append(field('For how long (minutes)', mins, 'It resumes by itself after this, or with Resume.'));
   const go = tagCmd(el('button', 'btn btn-primary', 'Pause…'), f ? 'fert_pause' : 'irrigation_pause');
@@ -78,7 +78,7 @@ export function pause(ctx, c, f) {
     const m = Math.round(Number(mins.value));
     if (!(m >= 1 && m <= 1440)) { toast('1 to 1440 minutes', 'bad'); return; }
     go.disabled = true;
-    if (!(await confirmDrawer('Pause now?', `Pause ${what} for ${m} min.`, 'Pause'))) { go.disabled = false; return; }
+    if (!(await confirmDrawer('Pause now?', `Pause ${what} for ${m} min.`, 'Pause', false, { emergency: true }))) { go.disabled = false; return; }
     busy(go, true, 'Sending…');
     const ok = await (f ? run(ctx, 'fert_pause', { id: c.id, devId: f.id, pTime: m * 60 }, null, 'Paused')
                         : run(ctx, 'irrigation_pause', { id: c.id, pTime: m * 60 }, null, 'Paused'));
@@ -94,7 +94,7 @@ export async function resume(ctx, c, f) {
   confirming = true;
   try {
     const what = f ? `mixing on ${f.name}` : `irrigation on ${c.name}`;
-    if (!(await confirmDrawer('Resume now?', `Resume ${what}.`, 'Resume'))) return;
+    if (!(await confirmDrawer('Resume now?', `Resume ${what}.`, 'Resume', false, { emergency: true }))) return;
     await (f ? run(ctx, 'fert_resume', { id: c.id, devId: f.id }, null, 'Resumed')     // FarmNet's pause for 0 s
              : run(ctx, 'irrigation_resume', { id: c.id }, null, 'Resumed'));
   } finally { confirming = false; }
@@ -105,7 +105,7 @@ export async function stop(ctx, c, f) {
   confirming = true;
   try {
     const what = f ? `the mixing that runs on ${f.name}` : `the irrigation that runs on ${c.name}`;
-    if (!(await confirmDrawer('Stop the current run?', `Stop ${what} now. The programs stay as they are and start again at their next time.`, 'Stop it', true))) return;
+    if (!(await confirmDrawer('Stop the current run?', `Stop ${what} now. The programs stay as they are and start again at their next time.`, 'Stop it', true, { emergency: true }))) return;
     await (f ? run(ctx, 'fert_stop', { id: c.id, devId: f.id, type: 0 }, null, 'Stopped')
              : run(ctx, 'irrigation_stop', { id: c.id, type: 0 }, null, 'Stopped'));
   } finally { confirming = false; }

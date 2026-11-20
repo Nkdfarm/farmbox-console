@@ -20,15 +20,21 @@
 // per screen (fbc_band_…). Closed it is one line — the question box stays — and a question slides it open to a fifth.
 //
 // Answer shapes (AI build mode P1, 20 Nov 2026, docs/ai-build-mode.md): chips Answer · Brief · Plan above the question
-// (none ticked = auto; Build waits for P5), sent as `shape`; the reply starts with <<shape:…>>, stripped here and drawn
+// (none ticked = auto; Build since P5), sent as `shape`; the reply starts with <<shape:…>>, stripped here and drawn
 // by assistant-shape.js's rules: answer = a compact box of short bullets (the default for a plain question), brief = the
 // coloured blocks, plan = coloured step lines and the count of its cards by page. No tag: drawn as before.
+//
+// Creation mode (AI build mode P5, 0287): a build's answer comes with `plan` (registry commands, checked by the function,
+// with its estimated cost and time). It is drawn as the plan shape from its commands, and "Build it" appears in the
+// question box: the executor (ai-build.js, its screen ai-build-ui.js) stages every step as a draft on its page, without
+// the model, for the person to review and validate.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
 import { createMic, readAllOn } from './assistant-local.js';
-import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine } from './assistant-shape.js';
+import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine, planPagesLine, estimateLine, STEP_MARK } from './assistant-shape.js';
 import { runCommand } from './registry.js';
+import { startBuild, abandonBuild, building } from './ai-build-ui.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
@@ -41,7 +47,7 @@ const CHECK_ASK = 'Check the page on screen and tell me what needs checking: lat
 const KEEP_DAYS = 30;   // a page's conversation not opened for this long is dropped from this browser
 
 let ctx = null;              // { farm(), refresh() } from app.js
-let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, mic;
+let band, grip, list, input, sendBtn, checkBtn, fileIn, busyRow, peek, ctxRow, titleEl, ageEl, mic, buildRow;
 let ctxOff = { page: false, units: false };   // the chips the person dropped for the next question
 let shapePick = null, shapeRow;   // the shape ticked for the next question (null = auto); it goes back to auto once sent
 const convos = new Map();    // person | farm id → { messages (as the function returned them), view, notes, chatId, at, fresh, stamp }
@@ -162,6 +168,24 @@ function answerBox(text) {
 // plan: a lead line, one coloured line per step ([+] new blue, [~] changed amber, [-] removed red, [=] checked green), the
 // cards it comes with counted by page
 const STEP_SIGN = { new: '+', changed: '~', removed: '−', same: '=' };
+const stepLine = (mark, text) => {
+  const d = el('div', 'ai-step ' + mark);
+  d.append(el('b', 'ai-step-sign', STEP_SIGN[mark]));
+  const t = el('span'); t.innerHTML = inline(text); d.append(t);
+  return d;
+};
+// a build's plan (P5): the lead and the questions from the text, the steps from its commands (what Build it stages), the
+// cards by page, the estimated cost and time
+function buildPlanBox(text, plan) {
+  const box = el('div', 'ai-md ai-plan');
+  const lines = planLines(text);
+  const lead = lines.find(l => l.kind === 'lead');
+  if (lead) { const p = el('p', 'ai-lead'); p.innerHTML = inline(lead.text); box.append(p); }
+  (plan.steps || []).forEach(s => box.append(stepLine(STEP_MARK[s.mark] || 'changed', `**${s.summary}**` + (s.switches_on ? ' — switches the program ON' : ''))));
+  lines.filter(l => l.kind === 'ask').forEach(l => { const d = el('div', 'ai-blk ask'); d.innerHTML = inline(l.text); box.append(d); });
+  box.append(el('div', 'ai-plan-cards', planPagesLine(plan.pages)), el('div', 'ai-plan-cost', estimateLine(plan.estimate, plan.budget)));
+  return box;
+}
 function planBox(text, cards) {
   const box = el('div', 'ai-md ai-plan');
   planLines(text).forEach(l => {
@@ -179,8 +203,9 @@ function planBox(text, cards) {
   return box;
 }
 // the answer drawn by its shape; no tag (an older answer, or the model forgot it) = drawn as before
-function drawAnswer(text, cards) {
+function drawAnswer(text, cards, plan) {
   const s = splitShape(text);
+  if (plan?.steps?.length) return buildPlanBox(s.text, plan);
   if (s.shape === 'answer') return answerBox(s.text);
   if (s.shape === 'plan') return planBox(s.text, cards);
   return md(s.text);
@@ -233,7 +258,31 @@ function paint() {
   }
   c.view.forEach((v, i) => list.append(item(v, i, c.view)));
   list.scrollTop = list.scrollHeight;
-  paintTitle(); paintPeek(); paintContext();
+  paintTitle(); paintPeek(); paintContext(); paintBuild();
+}
+
+// "Build it" in the question box (P5): the newest plan of the conversation that has not been built or dropped
+function paintBuild() {
+  if (!buildRow) return;
+  buildRow.textContent = '';
+  const v = mode === 'chat' ? [...convo().view].reverse().find(x => x.role === 'assistant' && x.plan?.steps?.length) : null;
+  if (!v || v.plan.built || v.plan.dropped) { buildRow.hidden = true; return; }
+  buildRow.hidden = false;
+  const n = v.plan.steps.length;
+  buildRow.append(el('span', 'ai-build-what', `Plan ready · ${n} step${n === 1 ? '' : 's'} · ${estimateLine(v.plan.estimate, null)}`));
+  const go = el('button', 'btn btn-sm btn-primary ai-build-go', 'Build it'); go.type = 'button';
+  go.title = 'Stage every step as a draft on its page, for you to review and validate — nothing is applied before';
+  const no = el('button', 'btn btn-sm btn-ghost', '✕'); no.type = 'button'; no.title = 'Not now: drop this plan'; no.setAttribute('aria-label', 'Drop this plan');
+  const key = ckey();
+  no.onclick = () => { v.plan.dropped = true; save(key); paintBuild(); };
+  go.onclick = () => {
+    if (building()) { toast('A build is already waiting for your review', 'bad'); return; }
+    v.plan.built = true; save(key); paintBuild();
+    const w = ctx.where?.() || {};
+    startBuild(v.plan, { farm: ctx.farm(), units: w.unitIds || undefined, refresh: () => ctx.refresh() })
+      .catch(e => { toast('The build could not start: ' + (e?.message || e), 'bad'); abandonBuild(); });
+  };
+  buildRow.append(el('div', 'spacer'), no, go);
 }
 
 function item(v, i, view = []) {
@@ -254,7 +303,7 @@ function item(v, i, view = []) {
   if (v.role === 'error') return el('div', 'ai-msg error', v.text);
   // no face beside the assistant's words since the compact band (19 Nov 2026, owner)
   if (v.role === 'assistant') {
-    const b = el('div', 'ai-msg bot'); b.append(drawAnswer(v.text, cardsAfter(view, i)));
+    const b = el('div', 'ai-msg bot'); b.append(drawAnswer(v.text, cardsAfter(view, i), v.plan));
     const r = el('button', 'ai-read'); r.type = 'button'; r.innerHTML = SPEAKER;   // read this answer aloud, all of it
     r.title = 'Read aloud (click again to stop)'; r.setAttribute('aria-label', 'Read this answer aloud');
     r.onclick = () => mic?.read(words(v.text), 0, true);
@@ -450,7 +499,7 @@ async function sendNow(text, opts) {
     c.messages = r.messages;
     c.chatId = r.chat_id || null;
     c.notes = []; c.at = Date.now();
-    if (r.reply) c.view.push({ role: 'assistant', text: r.reply });
+    if (r.reply || r.plan) c.view.push({ role: 'assistant', text: r.reply || '', plan: r.plan || null });
     out = { reply: words(r.reply || ''), cards: (r.actions || []).length };
     (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null }));
   } catch (e) {
@@ -596,8 +645,7 @@ function paintContext() {
   if (w.units?.length) chip('units', w.units.join(' + '), 'The units on screen go with the question');
 }
 
-// the shape chips above the question (P1): Answer · Brief · Plan, at most one ticked, none = auto. Build (P5) is hidden
-// until creation mode exists: SHAPE_CHIPS marks it so, and nothing else needs to change to show it
+// the shape chips above the question (P1): Answer · Brief · Plan · Build (P5), at most one ticked, none = auto
 function paintShapes() {
   if (!shapeRow) return;
   shapeRow.querySelectorAll('.ai-shape:not(.ai-follow)').forEach(b => {
@@ -688,7 +736,8 @@ export function initAssistant(context) {
   checkBtn.onclick = () => send(CHECK, { check: true });
   const row = el('div', 'row ai-send'); row.append(attach, mic.button, mic.note, ctxRow, el('div', 'ai-attached'), el('div', 'spacer'), fresh, checkBtn, sendBtn);
   shapeRow = shapeChips();
-  inn.append(shapeRow, input, row, fileIn);
+  buildRow = el('div', 'row ai-build-row'); buildRow.hidden = true;
+  inn.append(shapeRow, buildRow, input, row, fileIn);
   paintShapes();
   band.replaceChildren(out, inn);
 
@@ -732,5 +781,5 @@ export function assistantRouteChanged() {
 // sign-out: nothing of the last person's conversations stays in this tab (0.7.162)
 // the dashboard's "To decide" tile for cards that wait for a manager opens them here
 export function showAssistantWaiting() { mode = 'waiting'; setOpen(true); }
-export function forgetAssistant() { mic?.destroy(); mode = 'chat'; convos.clear(); synced.clear(); followPage = true; if (band) { setFrac(0, false); paint(); } }
-export function assistantFarmChanged() { mic?.cancel(); mode = 'chat'; if (band) paint(); }
+export function forgetAssistant() { abandonBuild(); mic?.destroy(); mode = 'chat'; convos.clear(); synced.clear(); followPage = true; if (band) { setFrac(0, false); paint(); } }
+export function assistantFarmChanged() { abandonBuild(); mic?.cancel(); mode = 'chat'; if (band) paint(); }

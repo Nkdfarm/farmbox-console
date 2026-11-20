@@ -2992,3 +2992,74 @@ img.pd-wait { background: linear-gradient(100deg, var(--surface-2) 30%, var(--su
   .ai-band.closed { grid-template-columns: minmax(0, 1fr) minmax(200px, 1.2fr); grid-template-rows: auto; }
   .ai-band:not(.closed) .ai-shapes { flex-basis: 100%; }
 }
+
+/* ── Creation mode (AI build mode P5, 0287): the violet frame, the build line, the lock, the replay, the AI changes tray ── */
+:root { --ai-violet: #8b5cf6; --ai-violet-soft: rgba(139, 92, 246, 0.16); }
+body.ai-building::after { content: ''; position: fixed; inset: 0; border: 3px solid var(--ai-violet); border-radius: 6px;
+  pointer-events: none; z-index: 1000; box-shadow: inset 0 0 24px var(--ai-violet-soft); }
+.ai-build-band { display: flex; align-items: center; gap: 10px; padding: 5px 12px; background: var(--ai-violet); color: #fff;
+  font-size: var(--text-sm); pointer-events: auto; }
+.ai-build-band b { flex: 1; font-weight: 600; }
+.ai-build-band .btn { background: #fff; color: #4c1d95; border-color: transparent; }
+/* the page's children are inert, not the page itself: it still scrolls, so an emergency control can be reached */
+body.ai-locked .rail, body.ai-locked #page > *, body.ai-locked #head > :not(#aiBuildBand) { pointer-events: none; user-select: none; }
+body.ai-locked .rail, body.ai-locked #page, body.ai-locked #head > :not(#aiBuildBand) { filter: saturate(0.4) opacity(0.6); }
+.ai-replay { outline: 3px solid var(--ai-violet) !important; outline-offset: 3px; box-shadow: 0 0 0 8px var(--ai-violet-soft) !important;
+  transition: outline-color .2s, box-shadow .2s; }
+.ai-build-row { align-items: center; gap: 8px; padding: 4px 8px; margin: 0 0 4px; border-radius: var(--radius-sm);
+  background: var(--ai-violet-soft); font-size: var(--text-xs); }
+.ai-build-row[hidden] { display: none; }
+.ai-build-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-build-row .spacer { flex: 1; }
+.ai-build-go { background: var(--ai-violet); border-color: var(--ai-violet); }
+.ai-plan-cost { margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); }
+.ai-tray { position: fixed; top: 64px; right: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px)); z-index: 1001; display: flex;
+  flex-direction: column; background: var(--surface); color: var(--text); border: 2px solid var(--ai-violet); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); font-size: var(--text-sm); }
+.ai-tray-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 12px 6px; }
+.ai-tray-head b { color: var(--ai-violet); font-size: var(--text-base, 15px); }
+.ai-tray-count { color: var(--text-muted); font-size: var(--text-xs); }
+.ai-tray-notice { margin: 0 12px 6px; padding: 6px 8px; border-radius: 8px; background: var(--ai-violet-soft); font-size: var(--text-xs); }
+.ai-tray-notice.bad { background: var(--error-bg); color: var(--error); }
+.ai-tray-body { flex: 1; overflow: auto; padding: 0 12px; }
+.ai-tray-page { margin: 6px 0 10px; }
+.ai-tray-pagehead { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 2px 0; cursor: pointer;
+  font: inherit; font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.ai-tray-pagehead:hover { color: var(--ai-violet); }
+.ai-tray-note { color: var(--text-muted); font-size: var(--text-xs); padding: 4px 0; }
+.ai-tray-foot { padding: 8px 12px 10px; border-top: 1px solid var(--border); gap: 8px; }
+.ai-tray-foot .spacer { flex: 1; }
+.ai-tray .ai-draft-warn { margin: 4px 12px; }
+.ai-draft { margin: 4px 0; padding: 6px 8px; border: 1px dashed color-mix(in srgb, var(--ai-violet) 55%, var(--border)); border-radius: 8px;
+  color: var(--text-muted); cursor: pointer;
+  background: repeating-linear-gradient(135deg, var(--surface-2) 0 8px, color-mix(in srgb, var(--ai-violet) 7%, var(--surface-2)) 8px 16px); }
+.ai-draft:hover, .ai-draft:focus-visible { color: var(--text); border-style: solid; outline: none; }
+.ai-draft.applied { border-style: solid; border-color: #30a46c; color: var(--text); background: color-mix(in srgb, #30a46c 10%, var(--surface-2)); cursor: default; }
+.ai-draft.failed { border-style: solid; border-color: var(--error); cursor: default; }
+.ai-draft.not-applied { opacity: .6; cursor: default; }
+.ai-draft-head { display: flex; align-items: baseline; gap: 6px; }
+.ai-draft-head .ai-step-sign { --blk: #f5a524; }
+.ai-draft-head .ai-mark-new { --blk: var(--accent); } .ai-draft-head .ai-mark-removed { --blk: #e5484d; }
+.ai-draft-sum { flex: 1; min-width: 0; }
+.ai-draft-x { padding: 0 6px; min-height: 0; }
+.ai-draft-meta { font-size: var(--text-xs); color: var(--text-faint); margin-left: calc(1.1ch + 6px); }
+.ai-draft-note { font-size: var(--text-xs); color: var(--text-faint); margin-top: 2px; }
+.ai-draft-warn { font-size: var(--text-xs); color: var(--warning); background: var(--warning-bg); padding: 3px 6px; border-radius: 6px; margin-top: 3px; }
+.ai-draft-ok { font-size: var(--text-xs); color: #30a46c; margin-top: 2px; }
+.ai-draft-form { margin-top: 6px; display: grid; gap: 6px; cursor: default; color: var(--text); }
+.ai-draft-field { display: grid; gap: 2px; font-size: var(--text-xs); }
+.ai-draft-field textarea { font-family: var(--font-mono, monospace); font-size: var(--text-xs); }
+.ai-draft-msg { color: var(--error); font-size: var(--text-xs); min-height: 1em; }
+@media (max-width: 640px) { .ai-tray { top: auto; left: 8px; right: 8px; width: auto; height: 55vh; } }
+/* the lock and the drawers (P5 fix): an emergency drawer (data-emergency, ui.js) is above the tray and usable; a drawer
+   opened before the build is locked like the page */
+body.ai-locked .scrim[data-emergency] { z-index: 1002; }
+body.ai-locked .drawer[data-emergency] { z-index: 1003; }
+body.ai-locked .drawer:not([data-emergency]), body.ai-locked .scrim:not([data-emergency]) { pointer-events: none; filter: saturate(0.4) opacity(0.6); }
+body.ai-building .toast { z-index: 1004; }
+/* the tray folds to its head (P5 fix): nothing on the page stays under it; at phone width the page gets room to scroll
+   any control above the open tray */
+.ai-tray-min { margin-left: auto; padding: 0 8px; min-height: 0; }
+.ai-tray.min { bottom: auto; }
+.ai-tray.min > :not(.ai-tray-head) { display: none; }
+@media (max-width: 640px) { body.ai-locked #page { padding-bottom: 60vh; } .ai-tray.min { top: auto; bottom: 8px; height: auto; } }

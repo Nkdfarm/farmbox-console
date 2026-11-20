@@ -41,6 +41,7 @@ export function register(def) {
   if (typeof d.run !== 'function') fail(`${d.name}: no run`);
   if (!Array.isArray(d.pages) || !d.pages.length || d.pages.some(p => !ROUTE.test(p))) fail(`${d.name}: pages are routes like #/farmnet/irrigation`);
   if (d.preview !== undefined && typeof d.preview !== 'function') fail(`${d.name}: preview is a function`);
+  if (d.seconds !== undefined && !(Number.isFinite(d.seconds) && d.seconds > 0)) fail(`${d.name}: seconds is a number above 0`);
   if (d.anchor !== undefined && typeof d.anchor !== 'string' && typeof d.anchor !== 'function') fail(`${d.name}: anchor is a selector or a function`);
   // what the AI may only propose is never built: run control, and anything that cannot be put back
   if (d.stageable && d.revert !== 'A') fail(`${d.name}: only a command of class A may be staged`);
@@ -56,6 +57,8 @@ export function register(def) {
     name: d.name, family: d.family, label: d.label, kind: d.kind || 'other', sends: d.sends || null,
     pages: Object.freeze([...d.pages]), args: Object.freeze(Object.fromEntries(Object.entries(args).map(([k, s]) => [k, Object.freeze({ ...s })]))),
     revert: d.revert, stageable: !!d.stageable, emergency: !!d.emergency,
+    // how long it takes to carry out, for a build's estimate (P5): FarmNet ~3 s (the controller answers), the database ~0.5 s
+    seconds: Number.isFinite(d.seconds) && d.seconds > 0 ? d.seconds : (d.kind === 'farmnet' ? 3 : 0.5),
     preview: d.preview || (a => `${d.label}${summaryOf(a)}`), run: d.run,
     anchor: d.anchor || `[data-cmd="${d.name}"]`,
   });
@@ -177,7 +180,7 @@ export function catalogue() {
   return [...COMMANDS.values()].map(c => ({
     name: c.name, family: c.family, label: c.label, kind: c.kind, ...(c.sends && c.sends !== c.name ? { sends: c.sends } : {}),
     pages: [...c.pages], args: Object.fromEntries(Object.entries(c.args).map(([k, s]) => [k, { ...s }])),
-    revert: c.revert, stageable: c.stageable, emergency: c.emergency,
+    revert: c.revert, stageable: c.stageable, emergency: c.emergency, seconds: c.seconds,
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 

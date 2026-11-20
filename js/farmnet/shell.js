@@ -7,9 +7,17 @@ const FN = 'farmnet';
 // FarmNet is slow to answer (the function asks the controller on the farm), and a page that waits for it is white.
 // So every answer is also kept in localStorage; opening a page first draws it from what was kept (dimmed, with the time
 // of the reading, nothing to press), then asks FarmNet and draws it again. A page that needs an answer never kept
-// shows "Asking FarmNet…" as before. Kept answers go on sign-out (forgetFarmnet) and after 24 h.
-const KEEP = 'fbc_fnc_', KEEP_MAX = 24 * 3600000, KEEP_ONE = 300000;   // characters of one answer
-let replaying = false, missed = false, oldest = Infinity;
+// shows "Asking FarmNet…" as before. Kept answers go on sign-out (forgetFarmnet) and after 7 days.
+// When FarmNet does not answer (its server in China goes quiet for a minute or two at times: every call a 504 after
+// ~10 s, 20 Nov 2026), or this computer is offline, a read falls back on its kept answer and the page is drawn from it
+// with a small "not connected · last update" badge instead of an error (owner, 20 Nov 2026).
+const KEEP = 'fbc_fnc_', KEEP_MAX = 7 * 24 * 3600000, KEEP_ONE = 300000;   // characters of one answer
+let replaying = false, missed = false, oldest = Infinity, fellBack = Infinity;
+// FarmNet or the network did not answer (an answer that refuses is not this: it is shown as it is)
+const unreached = e => {
+  const st = Number(e?.status);
+  return st === 0 || st === 503 || st === 504 || st === 546 || /could not be reached|did not answer in time/i.test(e?.message || '');
+};
 export const isReplay = () => replaying;                 // a memo must not keep an answer drawn from the copy
 const stable = a => JSON.stringify(a, Object.keys(a || {}).sort());
 // a history asks "the last 24 h" with the clock in its arguments: kept by its length, not by the minute it was asked
@@ -32,6 +40,13 @@ function keepPut(k, v) {
   try { localStorage.setItem(k, raw); }
   catch { forgetFarmnet(); try { localStorage.setItem(k, raw); } catch { /* full, or a private window */ } }
 }
+// answers older than KEEP_MAX are dropped once, when the console loads (keepGet only ignores them)
+try {
+  Object.keys(localStorage).filter(k => k.startsWith(KEEP)).forEach(k => {
+    let at = 0; try { at = JSON.parse(localStorage.getItem(k))?.at || 0; } catch { /* unreadable: dropped */ }
+    if (Date.now() - at >= KEEP_MAX) localStorage.removeItem(k);
+  });
+} catch { /* no storage */ }
 export function forgetFarmnet() {
   try { Object.keys(localStorage).filter(k => k.startsWith(KEEP)).forEach(k => localStorage.removeItem(k)); } catch { /* nothing kept */ }
 }
@@ -43,7 +58,12 @@ export function cached(k, load) {
     oldest = Math.min(oldest, c.at);
     return Promise.resolve(c.v);
   }
-  return load().then(v => { keepPut(k, v); return v; });
+  return load().then(v => { keepPut(k, v); return v; }, e => {
+    const c = unreached(e) ? keepGet(k) : null;
+    if (!c) throw e;
+    fellBack = Math.min(fellBack, c.at);
+    return c.v;
+  });
 }
 export const ask = (farm, action, args = {}) =>
   cached(`${KEEP}${farm.id}|${action}|${stable(keyArgs(args))}`, () => fn(FN, { farm: farm.id, action, args }, { quiet: true }).then(r => r?.data));
@@ -80,7 +100,14 @@ async function kept(farm, key, ms, load) {
   return p;
 }
 const helloKey = farm => `${KEEP}${farm.id}|hello`;
-const helloOf = farm => kept(farm, 'hello', 5 * 60000, () => fn(FN, { farm: farm.id, action: 'hello' }, { quiet: true }).then(h => { keepPut(helloKey(farm), h); return h; }));
+// hello is the platform's own answer (not FarmNet's): offline, the kept one stands in, and is not remembered as fresh
+const helloOf = farm => kept(farm, 'hello', 5 * 60000, () => fn(FN, { farm: farm.id, action: 'hello' }, { quiet: true })
+  .then(h => { keepPut(helloKey(farm), h); return h; }, e => {
+    const c = unreached(e) ? keepGet(helloKey(farm)) : null;
+    if (!c) throw e;
+    memo.delete(farm.id + '|hello');
+    return c.v;
+  }));
 
 // every signal source FarmNet has, flat: { id, label, unit, dec, group, path }
 export const GROUPS = { general: 'General', climate: 'Climate', irrigate: 'Irrigation', energy: 'Energy' };
@@ -123,6 +150,17 @@ const refreshButton = (onclick, tip) => {
   b.append(icon('refresh')); b.setAttribute('aria-label', 'Refresh'); b.title = tip; b.onclick = onclick;
   return b;
 };
+// "Not connected to FarmNet · last update 20 Nov 12:11", over a page drawn from what was kept (null: nothing kept)
+const RETRY = 60000;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const when = at => { const s = farmLocal(new Date(at).toISOString()); return `${Number(s.slice(8, 10))} ${MON[Number(s.slice(5, 7)) - 1]} ${s.slice(11, 16)}`; };
+function offlineBadge(at) {
+  const b = el('div', 'fn-offline'); b.setAttribute('role', 'status');
+  const x = el('span', 'fn-offline-x', '✕'); x.setAttribute('aria-hidden', 'true');
+  b.append(x, el('span', null, at ? `Not connected to FarmNet · last update ${when(at)}` : 'Not connected to FarmNet · nothing kept on this computer yet'));
+  b.title = 'FarmNet did not answer. It is asked again every minute.';
+  return b;
+}
 // a head with nothing to say is not drawn (its buttons are in the tool bar)
 const headOf = (note, refresh) => {
   const h = pageHead(null, note, refresh);
@@ -152,6 +190,7 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
       const at = Number.isFinite(oldest) ? oldest : kh.at;
       staleBtn = refreshBtn(`Refresh · last reading ${farmLocal(new Date(at).toISOString()).slice(5, 16).replace('T', ' ')} · updating…`);
       mount.replaceChildren(headOf(null, staleBtn), body0);
+      mount.dataset.fnAt = String(at);
       shownStale = true;
     }
   }
@@ -160,17 +199,43 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
 
   // 2. FarmNet itself
   const onScreen = shownStale || (opts.quiet && mount.querySelector('.fn-page'));
+  // read again later, while the page is on screen (not while the window is hidden, not while a drawer is open)
+  const later = ms => {
+    const tick = () => {
+      if (!mount.isConnected || my !== token) return;
+      if (document.visibilityState !== 'visible' || document.querySelector('aside.drawer')) { setTimeout(tick, 15000); return; }
+      again(true);
+    };
+    setTimeout(tick, ms);
+  };
   const failedAsk = e => {
-    // a failed re-read keeps what is on screen (the copy, dimmed, says so) and tries again at the next minute
+    // a failed re-read keeps what is on screen; FarmNet not answering is said by the badge, anything else by a toast
+    if (unreached(e)) {
+      const at = Number(mount.dataset.fnAt) || Date.now();
+      mount.querySelectorAll('.fn-page.fn-stale').forEach(p => p.classList.remove('fn-stale'));
+      const pg = mount.querySelector('.fn-page');
+      if (pg && !pg.querySelector(':scope > .fn-offline')) pg.prepend(offlineBadge(at));
+      if (staleBtn) staleBtn.title = `Refresh · FarmNet did not answer: last update ${when(at)}`;
+      later(opts.every || RETRY);
+      return;
+    }
     toast(`FarmNet: ${e.message}`, 'bad');
     if (shownStale && staleBtn) staleBtn.title = 'Refresh · FarmNet did not answer: this is the last reading';
-    if (opts.quiet && opts.every) setTimeout(() => { if (mount.isConnected && my === token) again(true); }, opts.every);
+    if (opts.quiet && opts.every) later(opts.every);
+  };
+  // nothing on screen and nothing kept: say so, and when FarmNet is only out of reach, try again by itself
+  const nothing = e => {
+    mount.textContent = '';
+    if (!unreached(e)) { mount.append(el('div', 'note bad', e.message)); return; }
+    const n = offlineBadge(null); n.classList.add('fn-offline-alone');
+    mount.append(n);
+    later(RETRY);
   };
   let h;
   try { h = await hello; } catch (e) {
     if (my !== token) return;
     if (onScreen) { failedAsk(e); return; }
-    mount.textContent = ''; mount.append(el('div', 'note bad', e.message)); return;
+    nothing(e); return;
   }
   if (my !== token) return;
   if (!h?.connected) {
@@ -187,23 +252,25 @@ export async function page(mount, farm, blurb, draw, opts = {}) {
   };
   const body = el('div', 'fn-page');
   let failed = null;
+  fellBack = Infinity;                        // the reads below that FarmNet did not answer, drawn from what was kept
   try { await draw(ctx, body); } catch (e) { failed = e; }
+  // an older page that ended meanwhile returns first: it must not take or wipe what the newer one's reads recorded
   if (!ctx.live()) return;
+  const fb = fellBack; fellBack = Infinity;
   if (failed) {
-    if (shownStale) { failedAsk(failed); return; }   // the copy on screen is better than an error
+    if (onScreen) { failedAsk(failed); return; }   // what is on screen is better than an error
+    if (unreached(failed)) { nothing(failed); return; }
     body.replaceChildren(el('div', 'note bad', failed.message));
   }
-  const refresh = refreshButton(() => again(false), `Refresh · read ${farmLocal(new Date().toISOString()).slice(11)}${opts.every ? ' · again every minute' : ''}`);
+  const offline = Number.isFinite(fb);
+  if (offline) body.prepend(offlineBadge(fb));
+  mount.dataset.fnAt = String(offline ? fb : Date.now());
+  const refresh = refreshButton(() => again(false), offline
+    ? `Refresh · FarmNet did not answer: last update ${when(fb)} · asked again by itself`
+    : `Refresh · read ${farmLocal(new Date().toISOString()).slice(11)}${opts.every ? ' · again every minute' : ''}`);
   mount.replaceChildren(headOf(opts.commands && !ctx.may ? READ_ONLY : null, refresh), body);
-  // the Overview reads again by itself while it is on screen (not while the window is hidden, not while a drawer is open)
-  if (opts.every) {
-    const tick = () => {
-      if (!ctx.live()) return;
-      if (document.visibilityState !== 'visible' || document.querySelector('aside.drawer')) { setTimeout(tick, 15000); return; }
-      again(true);
-    };
-    setTimeout(tick, opts.every);
-  }
+  // the Overview reads again by itself while it is on screen; any page does while FarmNet is out of reach
+  if (opts.every || offline) later(opts.every || RETRY);
 }
 
 // ── small pieces ────────────────────────────────────────────────────────────

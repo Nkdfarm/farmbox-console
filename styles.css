@@ -1617,6 +1617,12 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .fn-tiles a.tile { cursor: pointer; }
 /* the kept copy, drawn while FarmNet is asked: dimmed, nothing to press until the live reading replaces it */
 .fn-page.fn-stale { opacity: .55; pointer-events: none; transition: opacity .2s; }
+/* FarmNet out of reach: the page is drawn from what was kept, with this small badge (shell.js offlineBadge, 20 Nov 2026) */
+.fn-offline { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 var(--space-2); padding: 2px 10px 2px 3px;
+  border-radius: 999px; background: var(--error-bg, var(--surface-2)); color: var(--text); font-size: var(--text-xs); line-height: 18px; }
+.fn-offline-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--error); color: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
+.fn-offline-alone { margin: var(--space-3) 0; }
 .fn-tiles .tile-value { font-size: var(--text-xl, 1.25rem); overflow-wrap: anywhere; }
 .fn-zones { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
 .fn-zones .fc-unit > b { display: block; margin-bottom: 4px; }

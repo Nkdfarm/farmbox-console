@@ -14,7 +14,8 @@
 //
 // Whisper base.en and Kokoro 82M (both Apache-2.0, quantised) run in a worker (assistant-local-worker.js), so the page
 // stays alive; about 450 MB are downloaded the first time and kept by the browser (WebGPU: the graphics chip does the work;
-// without it, a smaller 200 MB set on wasm, which is slow). Recording does not wait for them:
+// without it, a smaller 200 MB set on wasm, which is slow). The two load apart (0.11.07): reading an answer aloud loads only
+// Kokoro; a spoken question loads Whisper first and Kokoro after it. Recording does not wait for them:
 // they load while the person talks. Nothing leaves the computer. Chrome or Edge (a 16 kHz microphone context).
 // ═══════════════════════════════════════════════════════════════════════════
 import { el, toast, pref } from './ui.js';
@@ -58,7 +59,7 @@ registerProcessor('tap', Tap);`;
 
 const MIC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 const TITLES = {
-  idle: 'Talk to it: click to record, click again to send (2 minutes at most). The middle mouse button does the same. Nothing leaves this computer; the first use downloads about 450 MB',
+  idle: 'Talk to it: click to record, click again to send (2 minutes at most). The middle mouse button does the same. Nothing leaves this computer; the first use downloads the voice (about 330 MB to read aloud, 450 MB with talking)',
   loading: 'Opening the microphone…',
   recording: 'Recording: click to stop and send',
   transcribing: 'Writing down what you said: click to cancel',
@@ -79,7 +80,9 @@ const clock = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStar
 // ask(text) → Promise<{ reply, cards } | null>, the assistant's answer to what was said
 export function createMic({ ask }) {
   let state = 'idle', run = null;            // run: the message in hand; a new one, or a cancel, makes the old one stand down
-  let worker = null, ready = null, failReady = null, loadNote = '';
+  // the two models load apart (0.11.07): ready[k] is the promise of k's load, res[k] its resolvers, isReady[k] true once it is in memory
+  let worker = null, loadNote = '';
+  const ready = { asr: null, tts: null }, res = { asr: null, tts: null }, isReady = { asr: false, tts: false };
   let seq = 0, rec = null, speech = null, out = null;
   const waits = new Map();
 
@@ -94,33 +97,51 @@ export function createMic({ ask }) {
   };
 
   // ── the worker ──────────────────────────────────────────────────────────────────────────────────────────────────
-  function boot() {
-    if (ready) return ready;
-    let ok, bad;
-    ready = new Promise((a, b) => { ok = a; bad = b; failReady = b; });
-    ready.catch(() => { /* reported where it is awaited */ });
-    const w = (worker = new Worker(new URL('./assistant-local-worker.js', import.meta.url), { type: 'module' }));
-    w.onmessage = ({ data: m }) => {
-      if (w !== worker) return;
-      if (m.type === 'progress') { loadNote = 'Loading the voice ' + m.pct + '%'; if (state !== 'recording' && state !== 'speaking' && state !== 'thinking') paintNote(loadNote); }
-      else if (m.type === 'ready') { loadNote = ''; if (m.mode === 'wasm') toast('This browser has no graphics acceleration for the voice: it will be slow', ''); if (state === 'idle') paintNote(''); try { localStorage.setItem(READY_KEY, '1'); } catch { /* none */ } ok(); }
-      else if (m.type === 'text') { waits.get(m.id)?.(m.text); }
-      else if (m.type === 'audio') playChunk(m);
-      else if (m.type === 'done') { if (speech?.id === m.id) { speech.complete = true; finishSpeech(); } }
-      else if (m.type === 'error') {
-        if (m.of === 'load') { bad(new Error(m.message)); drop(); }
-        else if (m.of === 'transcribe') waits.get(m.id)?.(null);
-        else if (m.of === 'speak' && speech?.id === m.id) { toast('The voice could not read that: ' + m.message, 'bad'); speech.complete = true; finishSpeech(); }
-      }
-    };
-    w.onerror = e => { if (w === worker) { bad(new Error(e.message || 'The voice worker failed')); drop(); } };
-    w.postMessage({ type: 'load', urls: URLS, asr: ASR_MODEL, tts: TTS_MODEL });
-    return ready;
+  // which: 'asr' (Whisper, hearing) or 'tts' (Kokoro, speaking) — each is loaded when it is first wanted, and not before
+  function boot(which) {
+    if (ready[which]) return ready[which];
+    ready[which] = new Promise((ok, bad) => { res[which] = { ok, bad }; });
+    ready[which].catch(() => { /* reported where it is awaited */ });
+    if (!worker) {
+      const w = (worker = new Worker(new URL('./assistant-local-worker.js', import.meta.url), { type: 'module' }));
+      w.onmessage = ({ data: m }) => {
+        if (w !== worker) return;
+        if (m.type === 'progress') {
+          // two models may be loading: the figure shown is the one the person is waiting for
+          const need = state === 'preparing' ? 'tts' : isReady.asr ? 'tts' : 'asr';
+          if (m.which !== need) return;
+          loadNote = 'Loading the voice ' + m.pct + '%';
+          if (state !== 'recording' && state !== 'speaking' && state !== 'thinking') paintNote(loadNote);
+        }
+        else if (m.type === 'ready') {
+          isReady[m.which] = true; loadNote = '';
+          if (m.mode === 'wasm') toast('This browser has no graphics acceleration for the voice: it will be slow', '');
+          if (state === 'idle') paintNote('');
+          try { localStorage.setItem(READY_KEY + '_' + m.which, '1'); } catch { /* none */ }
+          res[m.which]?.ok();
+        }
+        else if (m.type === 'text') { waits.get(m.id)?.(m.text); }
+        else if (m.type === 'audio') playChunk(m);
+        else if (m.type === 'done') { if (speech?.id === m.id) { speech.complete = true; finishSpeech(); } }
+        else if (m.type === 'error') {
+          if (m.of === 'load') {   // only that model is forgotten: the other, and what it is doing, go on (the worker retries a failed import under a new address)
+            const r = res[m.which]; ready[m.which] = null; res[m.which] = null; isReady[m.which] = false; loadNote = '';
+            r?.bad(new Error(m.message));
+          }
+          else if (m.of === 'transcribe') waits.get(m.id)?.(null);
+          else if (m.of === 'speak' && speech?.id === m.id) { toast('The voice could not read that: ' + m.message, 'bad'); speech.complete = true; finishSpeech(); }
+        }
+      };
+      w.onerror = e => { if (w === worker) { const err = new Error(e.message || 'The voice worker failed'); res.asr?.bad(err); res.tts?.bad(err); drop(); } };
+    }
+    worker.postMessage({ type: 'load', which, urls: URLS, asr: ASR_MODEL, tts: TTS_MODEL });
+    return ready[which];
   }
-  function drop() {   // the worker is gone: the next press starts a new one (a failed import is only forgotten that way)
+  function drop() {   // the worker is gone: the next press starts a new one
+    stopSpeech();   // a reading in progress ends here: nothing is left to finish it
     try { worker?.terminate(); } catch { /* none */ }
-    worker = null; ready = null; loadNote = '';
-    failReady?.(new Error('stopped')); failReady = null;
+    worker = null; loadNote = '';
+    for (const k of ['asr', 'tts']) { res[k]?.bad(new Error('stopped')); ready[k] = null; res[k] = null; isReady[k] = false; }
     if (state === 'idle') paintNote('');
     waits.forEach(r => r(null)); waits.clear();
   }
@@ -129,7 +150,8 @@ export function createMic({ ask }) {
   async function startRecording() {
     set('loading');
     const mine = run = Symbol();
-    boot().catch(e => { if (e.message !== 'stopped') toast('The voice could not load: ' + e.message, 'bad'); });   // the models load while the person talks
+    // the models load while the person talks: hearing first (it is needed first), speaking after it
+    boot('asr').then(() => boot('tts')).catch(e => { if (e.message !== 'stopped' && (state === 'loading' || state === 'recording')) toast('The voice could not load: ' + e.message, 'bad'); });
     let stream, mic;
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.AudioWorkletNode) throw new Error('This browser cannot record here: use Chrome or Edge');
@@ -182,11 +204,11 @@ export function createMic({ ask }) {
   async function handle(mine, audio) {
     if (audio.length < MIN_SAMPLES) { run = null; set('idle'); toast('Too short: click, talk, click again', ''); return; }
     set('transcribing', loadNote || 'Writing down what you said…');
-    try { await boot(); } catch (e) { if (run === mine) { run = null; set('idle'); toast('The voice could not load: ' + e.message, 'bad'); } return; }
+    try { await boot('asr'); } catch (e) { if (run === mine) { run = null; set('idle'); toast('The voice could not load: ' + e.message, 'bad'); } return; }
     if (run !== mine) return;
     set('transcribing', 'Writing down what you said…');
     const id = ++seq;
-    const text = await new Promise(res => { waits.set(id, res); worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer]); });
+    const text = await new Promise(res => { if (!worker) { res(null); return; } waits.set(id, res); worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer]); });
     waits.delete(id);
     if (run !== mine) return;
     if (text === null) { run = null; set('idle'); toast('The voice could not write that down', 'bad'); return; }
@@ -195,7 +217,13 @@ export function createMic({ ask }) {
     let r = null;
     try { r = await ask(text); } catch { /* the panel already says what went wrong */ }
     if (run !== mine) return;
-    if (r?.reply || r?.cards) await speak(spokenText(r.reply, r.cards), mine);
+    if (r?.reply || r?.cards) {
+      // the speaking model has been loading since the recording began; if it is not in yet, say so and wait for it
+      if (!isReady.tts) set('preparing', loadNote || 'Preparing the voice…');
+      try { await boot('tts'); } catch (e) { if (run === mine) { run = null; set('idle'); if (e.message !== 'stopped') toast('The voice could not load: ' + e.message, 'bad'); } return; }
+      if (run !== mine) return;
+      await speak(spokenText(r.reply, r.cards), mine);
+    }
     if (run === mine) { run = null; set('idle'); }
   }
 
@@ -253,8 +281,9 @@ export function createMic({ ask }) {
     if (!t) return;
     try { out ||= new AudioContext(); out.resume().catch(() => { /* none */ }); } catch { return; }
     const mine = run = Symbol();
-    set('preparing', loadNote || 'Preparing the voice…');
-    boot().then(async () => {
+    loadNote = '';
+    set('preparing', 'Preparing the voice…');
+    boot('tts').then(async () => {   // reading aloud needs only the speaking model
       if (run !== mine) return;
       await speak(t, mine);
       if (run === mine) { run = null; set('idle'); }
@@ -263,7 +292,12 @@ export function createMic({ ask }) {
 
   return {
     button, note, toggle, cancel, read,
-    warm() { let was = false; try { was = !!localStorage.getItem(READY_KEY); } catch { /* none */ } if (!worker && was) boot().catch(() => { /* heard again at the first press */ }); },
+    // what this device has loaded before is loaded again as the band opens, one model after the other: the one it uses more first
+    warm() {
+      const had = k => { try { return !!(localStorage.getItem(READY_KEY) || localStorage.getItem(READY_KEY + '_' + k)); } catch { return false; } };   // READY_KEY: both, before 0.11.07
+      (readAllOn() ? ['tts', 'asr'] : ['asr', 'tts']).reduce((p, k) => p.then(() => had(k) ? boot(k) : null), Promise.resolve())
+        .catch(() => { /* heard again at the first press */ });
+    },
     hush() { if (state === 'speaking' || state === 'preparing') { stopSpeech(); run = null; set('idle'); } },   // a typed question: the old answer stops being read
     destroy() { cancel(); drop(); try { out?.close().catch(() => {}); } catch { /* none */ } out = null; },
   };

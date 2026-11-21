@@ -1,5 +1,5 @@
 {
-  "version": "0.24.00",
+  "version": "0.24.01",
   "released": "2026-11-21",
-  "note": "Irrigation windows"
+  "note": "Irrigation windows follow the sun in FarmNet"
 }

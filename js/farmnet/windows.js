@@ -315,12 +315,13 @@ function previewOf(plan, sun, diy) {
 // ── Save → FarmNet (the brief's order) ───────────────────────────────────────────────────────────────────────────────
 // First FarmNet is read fresh (the program and the four DIYs) and EVERY step's body is built and checked
 // (windows-plan.js prepareSave, the function's rules): any problem refuses the Save before the first write (verifier,
-// 21 Nov 2026). Then: 1 program_set · 2 the window's start and end as DIY · 3 the interval (CST) as DIY · 4 on/off (EN)
+// 21 Nov 2026). Then: 1 program_set (the window a plain 00:00–23:59) · 2 start 1 to one period holding 00:00 where it is
+// DIY already · 3 the interval (CST) as DIY · 4 on/off (EN)
 // as DIY, only when a period is OFF (or EN is DIY already), the program's on/off as it is now unless "Switch the program
 // on" is ticked · 5 diy_get of each, shown. The function reads fresh again, keeps a copy and logs each step; the steps
 // are one group on the Timeline. A refusal by FarmNet stops it and the list says what was done.
-const STEPS = ['The program: cycle, start 1, valve runs, days, gaps, pumps, irrigate at the start',
-  'The window starts at the first cycle (start 1, DIY)', 'The window ends 30 min before it (start 1 end, a plain time with the program)',
+const STEPS = ['The program: cycle, the window 00:00–23:59 (start 1), valve runs, days, gaps, pumps, irrigate at the start',
+  'Start 1, where it is DIY: one period holding 00:00', 'The window ends 23:59 (a plain time, with the program)',
   'The interval per period (CST, DIY)', 'On / off per period (EN, DIY)', 'Read back from FarmNet'];
 const STEP_OF = { st: 1, et: 2, cst: 3, en: 4 };
 
@@ -351,8 +352,8 @@ export async function saveWindows(ctx, c, prog, getPlan, sun, out, go, signals) 
   const ok = await confirmDrawer(`Send the windows of "${prog.NM}" to FarmNet?`,
     `${onLine} First cycle: ${W.anchorWords(plan, sun)}. ${offs} · ≈ ${d.runs} irrigations today. `
     + `Stops: ${W.endWords(plan, sun)}. `
-    + 'FarmNet gets, in order: the program (cycle, start 1, valve runs, days, gaps, pumps, irrigate at the start, the window end), the start of the window, '
-    + 'the interval per period, and on/off per period when needed. Each is kept before it changes and can be put back on the Timeline.', 'Send to FarmNet');
+    + 'FarmNet gets, in order: the program (cycle, the window 00:00–23:59, valve runs, days, gaps, pumps, irrigate at the start), '
+    + 'start 1 back to a plain 00:00 if it is DIY, the interval per period, and on/off per period (with the first cycle\'s switch-on). Each is kept before it changes and can be put back on the Timeline.', 'Send to FarmNet');
   if (!ok) return;
   busy(go, true, 'Sending…');
   const group = globalThis.crypto?.randomUUID?.() ?? null;
@@ -364,6 +365,7 @@ export async function saveWindows(ctx, c, prog, getPlan, sun, out, go, signals) 
     `${mark[s.st]} ${s.label}${s.note ? ' — ' + s.note : s.st === 'todo' ? ' — not done' : ''}`)));
   out.replaceChildren(el('div', 'cx-kind-label', 'Save → FarmNet'), list, back);
   if (!prep.steps.some(s => s.role === 'en')) { state[4].st = 'skip'; state[4].note = 'not needed: kept as FarmNet holds it'; }
+  if (!prep.steps.some(s => s.role === 'st')) { state[1].st = 'skip'; state[1].note = prep.stLinked ? 'already 00:00' : 'not DIY: set with the program'; }
   draw();
   const cmd = (name, args, what) => runCommand(name, { id: c.id, ...args }, { ctx, group, summary: `Windows · ${prog.NM}: ${what}` });
   let stopped = false;
@@ -373,7 +375,7 @@ export async function saveWindows(ctx, c, prog, getPlan, sun, out, go, signals) 
       if (s.kind === 'program') {
         try { await cmd('program_set', { proId: prog.ID, changes: s.changes }, 'the program'); state[i].st = 'done'; }
         catch (e) { if (!/nothing changes/i.test(e?.message || '')) throw e; state[i].st = 'same'; state[i].note = 'already so'; }
-        // the window's end goes with the program (never DIY: windows-plan.js END_MARGIN)
+        // the window's end goes with the program (a plain 23:59: windows-plan.js WINDOW)
         state[STEP_OF.et].st = state[i].st;
         state[STEP_OF.et].note = s.changes.starts?.find(x => x.i === 0)?.et !== undefined ? 'with the program' : 'kept as FarmNet holds it';
       } else {

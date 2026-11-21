@@ -4,7 +4,7 @@
 //
 // A card's plan (what the person sets; every value ends in a FarmNet program field):
 //   kind     'vines' | 'nft' | 'ebb'                 (fills the preset)
-//   anchor   min after (+) or before (−) sunset       TM[0].ST as DIY, one period tp 2 (TM[0].ET a plain time END_MARGIN before)
+//   anchor   min after (+) or before (−) sunset       EN as DIY: off gapOf(plan) before it, on at it (the window is a plain full day)
 //   p1, p3   min after/before sunrise and sunset      CST as DIY, periods tp 1 / 0 (12:00 fixed) / 2
 //   periods  [{ off: min | null (OFF), ramp: min, auto: { signal, target, range }, weather: { signal, setpoint, range } }] × 3
 //   valves   [{ sid, id, name, stm }]                 each valve's run time (STM, s)
@@ -22,11 +22,23 @@ export const RUN_MAX = 4 * 3600;                  // Naked Heart's cap on a valv
 // fnlink.ts DIY_OFFSET_MAX). After a Save the page shows what diy_get reads back, to confirm this on the trial copy;
 // if FarmNet stores it otherwise, only stOf / offsetOf change.
 export const OFFSET_MAX = 6 * 3600;
-// The window's end (TM[0].ET) is never made DIY: on the trial copy (21 Nov 2026) FarmNet stopped answering for about a minute,
-// twice, at the diy/add of SR 20. Where irrigation stops each day follows the sun through on/off per period instead (P3
-// OFF from sunset ± min, EN DIY, which worked); the end itself is a plain time END_MARGIN before the first cycle, so the
-// start moving with the sun (1–2 min a day) never shrinks the window to nothing. Each Save sets it again (owner, 21 Nov 2026)
-export const END_MARGIN = 30 * 60;
+// What FarmNet's DIY does (trial copy, owner's screens, 21 Nov 2026): a period's START follows the sun (tp 1 / 2 ± st), but
+// the value it holds is fixed — a start time made DIY "at sunset − 30" holds 19:00:00 every day, only the moment the
+// period begins moves. So a window's start or end can never follow the sun; on/off (EN) and the interval (CST) per period
+// can, and FarmNet moves their switch-overs itself every day. Owner, same day: everything runs in FarmNet's own control
+// loops, nothing to re-Save. So: TM[0] is one plain full day (WINDOW), never DIY (its end's diy/add also hangs FarmNet);
+// where irrigation runs or stops is on/off per period; the first cycle is FarmNet switching the program on at the anchor
+// (off gapOf(plan) before, on at it — whether FarmNet starts a cycle at that moment, with "irrigate at the start", is to be
+// seen on the trial copy).
+export const WINDOW = [0, 86340];                 // 00:00 → 23:59
+export const ANCHOR_GAP = 5 * 60;
+// the off before the switch-on is never shorter than one whole run (its valves together: the longest; one after another:
+// all of them) and a minute, so a run started before it ends before it (verifier, 21 Nov 2026), in whole minutes
+export function gapOf(plan) {
+  const runs = (plan.valves || []).map(v => num(v.stm) ?? 0);
+  const run = runs.length ? (plan.cmd === 1 ? Math.max(...runs) : runs.reduce((a, b) => a + b, 0)) : 0;
+  return Math.max(ANCHOR_GAP, Math.ceil((run + 60) / 60) * 60);
+}
 export const stOf = (tp, seconds) => (tp === 0 ? ((Math.round(seconds) % DAY) + DAY) % DAY : Math.round(seconds));
 export const offsetOf = (tp, st) => Number(st) || 0;            // tp 1/2: the signed offset in seconds; tp 0: the clock
 // The period's transition time (itm) is taken as seconds, like st (0 on FB1: not yet seen otherwise)
@@ -113,14 +125,21 @@ export function planFromFarmnet(prog, par, diy = {}) {
     });
   }
   // a period FarmNet switches off (EN as DIY, bv 0 in it)
-  if (linked(diy.en) && Array.isArray(diy.en.time)) diy.en.time.forEach(t => {
+  if (linked(diy.en) && Array.isArray(diy.en.time)) diy.en.time.slice(0, 3).forEach(t => {
     const k = PERIOD_OF_TP[Number(t?.tp)];
     if (k !== undefined && num(t.bv) === 0) plan.periods[k].off = null;
   });
   // the first cycle: sunset (NFT, ebb & flow) or the P1 start (vines, owner 21 Nov 2026) — as FarmNet's start DIY says
   // when it is sun-relative, else by the kind of system
   plan.anchorAt = plan.kind === 'vines' ? 'p1' : 'sunset';
-  if (linked(diy.st) && Array.isArray(diy.st.time)) {
+  // Save's switch-on: the gap (a 4th EN period holding 0) ends at the anchor
+  const gapP = linked(diy.en) && Array.isArray(diy.en.time) ? diy.en.time.slice(3).find(x => num(x?.bv) === 0) : null;
+  // the anchor: the next switch-on after the gap, of the same type (Save's own 100, or a P-period starting there)
+  const nextOn = gapP ? diy.en.time.filter(x => Number(x?.tp) === Number(gapP.tp) && num(x?.bv) === 100 && num(x?.st) > num(gapP.st))
+    .map(x => num(x.st)).sort((a, b) => a - b)[0] : undefined;
+  if (gapP && Number(gapP.tp) === 2 && nextOn !== undefined) { plan.anchorAt = 'sunset'; plan.anchor = Math.round(offsetOf(2, nextOn) / 60); }
+  else if (gapP && Number(gapP.tp) === 1) plan.anchorAt = 'p1';
+  else if (linked(diy.st) && Array.isArray(diy.st.time)) {
     const t2 = diy.st.time.find(x => Number(x?.tp) === 2), t1 = diy.st.time.find(x => Number(x?.tp) === 1);
     if (t2) { plan.anchorAt = 'sunset'; plan.anchor = Math.round(offsetOf(2, t2.st) / 60); }
     else if (t1) plan.anchorAt = 'p1';
@@ -139,11 +158,12 @@ export function planFromFarmnet(prog, par, diy = {}) {
 // otherwise the period of the same type (1 / 0 / 2), and a period with no match counts as off (never on by a guess)
 export function enNowOf(par, en) {
   if (!linked(en) || !Array.isArray(en.time) || !en.time.length) { const v = num(diyV(par?.EN)); return [0, 1, 2].map(() => v !== null && v !== 0); }
-  const vals = en.time.map(t => num(t?.bv));
+  const three = en.time.slice(0, 3);   // P1, P2, P3 (Save's switch-on pair follows them)
+  const vals = three.map(t => num(t?.bv));
   if (vals.every(v => v !== null && v !== 0)) return [true, true, true];
   if (vals.every(v => v === 0 || v === null)) return [false, false, false];
   const out = [false, false, false];
-  en.time.forEach(t => { const k = PERIOD_OF_TP[Number(t?.tp)]; if (k !== undefined) out[k] = num(t.bv) !== 0 && num(t.bv) !== null; });
+  three.forEach(t => { const k = PERIOD_OF_TP[Number(t?.tp)]; if (k !== undefined) out[k] = num(t.bv) !== 0 && num(t.bv) !== null; });
   return out;
 }
 export const isOnNow = plan => (plan.enNow || []).some(Boolean);
@@ -206,8 +226,10 @@ export function warningsOf(plan, sun) {
 export function problemsOf(plan, sun) {
   const out = [];
   const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
-  if (plan.anchorAt !== 'p1' && !int(plan.anchor, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`the anchor: sunset ± ${OFFSET_MAX / 60} min at most`);
-  if (!int(plan.p1, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P1: sunrise ± ${OFFSET_MAX / 60} min at most`);
+  // (the switch-on's gap starts gapOf(plan) before the anchor: the anchor keeps it inside the ± 6 h bound)
+  const lo = -OFFSET_MAX / 60 + gapOf(plan) / 60;
+  if (plan.anchorAt !== 'p1' && !int(plan.anchor, lo, OFFSET_MAX / 60)) out.push(`the first cycle: sunset − ${-lo} to + ${OFFSET_MAX / 60} min`);
+  if (!int(plan.p1, plan.anchorAt === 'p1' ? lo : -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P1: sunrise ± ${OFFSET_MAX / 60} min at most`);
   if (!int(plan.p3, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P3: sunset ± ${OFFSET_MAX / 60} min at most`);
   plan.periods.forEach((p, i) => {
     if (p.off !== null && !int(p.off, 0, OFF_MAX_MIN)) out.push(`P${i + 1}: off 0–${OFF_MAX_MIN} min, or OFF`);
@@ -243,14 +265,14 @@ export function programChanges(plan, par, sun) {
     days: plan.days.mode === 1 ? { mode: 1, every: plan.days.every } : plan.days.mode === 2 ? { mode: 2, weekdays: plan.days.weekdays } : { mode: plan.days.mode } };
   const tm = Array.isArray(par?.TM) ? par.TM : [];
   ch.starts = tm.map((x, i) => ({ i, use: i === 0 })).filter((s, i) => (tm[i]?.USE === true) !== s.use);
-  // the window's static start where it is not DIY yet (the DIY one is set in step 2): today's anchor; its end, never DIY
-  // (END_MARGIN): a plain time 30 min before the anchor
+  // the window: a plain full day (WINDOW). A start already DIY is set to one period holding 00:00 (step 2); an end already
+  // DIY refuses the Save (prepareSave)
   const t0 = tm[0];
   const d = dayOf(plan, sun);
   if (t0 && d) {
     const s0 = ch.starts.find(s => s.i === 0) || { i: 0 };
-    if (!(t0.ST?.DEN === true)) s0.st = d.anchor;
-    if (!(t0.ET?.DEN === true)) s0.et = (d.anchor - END_MARGIN + DAY) % DAY;
+    if (!(t0.ST?.DEN === true) && num(diyV(t0.ST)) !== WINDOW[0]) s0.st = WINDOW[0];
+    if (!(t0.ET?.DEN === true) && num(diyV(t0.ET)) !== WINDOW[1]) s0.et = WINDOW[1];
     if (s0.st !== undefined || s0.et !== undefined || s0.use !== undefined) ch.starts = [s0, ...ch.starts.filter(s => s.i !== 0)];
   }
   // a timer turned cycling needs its interval before CST becomes DIY (the function refuses a cycle with none)
@@ -266,36 +288,37 @@ export function programChanges(plan, par, sun) {
 }
 const cstSeconds = (offMin, on) => Math.round(offMin * 60 + (CST_START_TO_START ? on : 0));
 
-// 2. the anchor: TM[0].ST one period from sunset ± anchor (TM[0].ET is never DIY: END_MARGIN). bv is today's clock time of
-// the anchor (what FarmNet would hold if it takes the value and not the period's start — not yet known), so the window
-// is right today whichever it does; diy_get read back after Save shows which.
-// The period itself is sun-relative (tp 2 sunset ± anchor; tp 1 sunrise ± P1 when the first cycle is the P1 start), so
-// whichever FarmNet reads, st or bv, points at the sun event today.
-export function anchorDiys(plan, sun) {
-  const d = dayOf(plan, sun);
-  const [tp, off] = anchorRel(plan);
-  return {
-    st: { time: [period(tp, off, d.anchor)] },
-  };
-}
+// 2. a start 1 already DIY (made on FarmNet's screen, or by an earlier Save): one period holding 00:00, the window's start
+export const startDiy = () => ({ time: [period(0, 0, WINDOW[0])] });
+const isStartDiy = d => linked(d) && Array.isArray(d.time) && d.time.length === 1 && Number(d.time[0]?.tp) === 0
+  && Number(d.time[0]?.st) === 0 && num(d.time[0]?.bv) === WINDOW[0];
 // the anchor as FarmNet's period: [tp, offset seconds]
 export const anchorRel = plan => (plan.anchorAt === 'p1' ? [1, plan.p1 * 60] : [2, plan.anchor * 60]);
-// what the card says is written for the first cycle (verifier, 21 Nov 2026: plainly, a fixed time today)
+// what the card says for the first cycle
 export function anchorWords(plan, sun) {
   const d = dayOf(plan, sun); if (!d) return '—';
-  const what = plan.anchorAt === 'p1' ? `today's sunrise ${signed(plan.p1)} min (the P1 start)` : `today's sunset ${signed(plan.anchor)} min`;
-  return `start at ${clock(d.anchor)} — ${what}; whether FarmNet moves it with the sun each day is checked on the trial copy`;
+  const what = plan.anchorAt === 'p1' ? `sunrise ${signed(plan.p1)} min (the P1 start)` : `sunset ${signed(plan.anchor)} min`;
+  const k = periodAt(d, d.anchor);
+  if (k >= 0 && plan.periods[k].off === null) return `none at ${clock(d.anchor)} (${what}): that period is OFF`;
+  const how = anchorGap(plan, sun) ? `FarmNet switches the program off ${gapOf(plan) / 60} min before (one whole run) and on at it` : 'FarmNet switches the program on there';
+  return `${clock(d.anchor)} today, ${what}, moving with the sun: ${how} (a cycle at the switch-on is to be confirmed on the trial copy)`;
+}
+const periodAt = (d, a) => d.periods.findIndex(p => (p.start <= p.end ? a >= p.start && a < p.end : a >= p.start || a < p.end));
+// the switch-on needs a gap only where the program is on just before the anchor (vines after an OFF P3: none)
+export function anchorGap(plan, sun) {
+  const d = dayOf(plan, sun); if (!d) return false;
+  const k = periodAt(d, d.anchor), b = periodAt(d, (d.anchor - gapOf(plan) + DAY) % DAY);
+  return k >= 0 && b >= 0 && plan.periods[k].off !== null && plan.periods[b].off !== null;
 }
 
-// where irrigation stops each day, in words: the periods OFF (they follow the sun), and the window's own end
+// where irrigation stops each day, in words: the periods OFF (P1 and P3 follow the sun), in a window of the whole day
 export function endWords(plan, sun) {
   const d = dayOf(plan, sun); if (!d) return '—';
   const from = ['sunrise', '12:00', 'sunset'], rel = [plan.p1, null, plan.p3];
   const off = plan.periods.map((p, i) => (p.off === null ? `P${i + 1} OFF from ${clock(d.periods[i].start)} (${rel[i] === null ? from[i] : `${from[i]} ${signed(rel[i])} min`})` : null)).filter(Boolean);
-  const end = `the window itself ends at ${clock((d.anchor - END_MARGIN + DAY) % DAY)}, ${END_MARGIN / 60} min before the first cycle`;
   const sunny = plan.periods.some((p, i) => p.off === null && i !== 1);
-  const head = off.length ? `${off.join(', ')}${sunny ? ': follows the sun' : ''}` : 'no period OFF: cycles all day and night';
-  return `${head} · ${end}, a fixed time: Save again within two weeks (the start moves with the sun, 1–2 min a day)`;
+  const head = off.length ? `${off.join(', ')}${sunny ? ', moving with the sun every day' : ''}` : 'no period OFF: cycles all day and night';
+  return `${head} · the window is the whole day (${clock(WINDOW[0])}–${clock(WINDOW[1])}), nothing to Save again`;
 }
 
 // 3. CST's three periods, and one influence per signal used. managed(pId): a signal the card offers (its influences are
@@ -355,13 +378,23 @@ export function keptInfluences(readCst, managed = () => false, drop = []) {
 // switched off stays off (bv 0 everywhere); 100 only where it is on now, or everywhere when the person ticked "Switch the
 // program on". Written only when a period is OFF or EN is DIY already; nothing when it would only say "off" to a program
 // whose own value is off.
-export function enDiy(plan, enLinked) {
+export function enDiy(plan, enLinked, sun = null) {
   const anyOff = plan.periods.some(p => p.off === null);
-  if (!anyOff && !enLinked) return null;
   const now = plan.enNow || [false, false, false];
   const bv = plan.periods.map((p, i) => (p.off === null ? 0 : plan.switchOn || now[i] ? 100 : 0));
+  // the first cycle: off gapOf(plan) before the anchor, on at it, in the anchor's own period (only where it is on)
+  const d = sun ? dayOf(plan, sun) : null;
+  const k = d ? periodAt(d, d.anchor) : -1;
+  const gap = sun && anchorGap(plan, sun) && k >= 0 && bv[k] === 100;
+  if (!anyOff && !enLinked && !gap) return null;
   if (!enLinked && bv.every(v => v === 0)) return null;
-  return { time: [period(1, plan.p1 * 60, bv[0]), period(0, NOON, bv[1]), period(2, plan.p3 * 60, bv[2])], influe: [] };
+  const time = [period(1, plan.p1 * 60, bv[0]), period(0, NOON, bv[1]), period(2, plan.p3 * 60, bv[2])];
+  if (gap) {
+    const [tp, off] = anchorRel(plan);
+    time.push(period(tp, off - gapOf(plan), 0));
+    if (!time.slice(0, 3).some(x => x.tp === tp && x.st === stOf(tp, off))) time.push(period(tp, off, 100));
+  }
+  return { time, influe: [] };
 }
 
 // ── the whole Save, built and checked before the first write ─────────────────────────────────────────────────────────
@@ -406,30 +439,32 @@ export function checkDiy(role, read, body, sourceIds, { switchOn = false, offNow
   return out;
 }
 
-// every step's body, from FarmNet read fresh just before (fresh: { par, st, et, cst, en } as program_param and diy_get
+// every step's body, from FarmNet read fresh just before (fresh: { par, st, cst, en } as program_param and diy_get
 // answer), checked all together: { steps, problems }. Nothing is sent when problems is not empty.
 export function prepareSave(plan, sun, fresh, sourceIds, managed = () => false) {
   const problems = [...problemsOf(plan, sun)];
   if (problems.length) return { steps: [], problems };
   const par = fresh.par;
   const srs = srsOf(par);
+  if ((Array.isArray(par?.TM) ? par.TM : [])[0]?.ST?.DEN === true && !linked(fresh.st))
+    problems.push('start 1 is DIY on FarmNet but could not be read as DIY: click Remove DIY on it in FarmNet first');
   if ((Array.isArray(par?.TM) ? par.TM : [])[0]?.ET?.DEN === true)
-    problems.push('the window end (start 1 end) follows DIY periods on FarmNet: Naked Heart never changes it (FarmNet stops answering at its DIY) — make it a plain time on FarmNet first');
+    problems.push('the window end (start 1 end) follows DIY periods on FarmNet: Naked Heart cannot read or change it (FarmNet hangs at its DIY) — click Remove DIY on it in FarmNet first');
   const steps = [{ kind: 'program', changes: programChanges({ ...plan, enLinked: linked(fresh.en) }, par, sun) }];
-  const a = anchorDiys(plan, sun);
   const offNow = !enNowOf(par, fresh.en).some(Boolean);
   const diy = (role, sr, read, body, what) => {
     if (!body) return;
     checkDiy(role, read, body, sourceIds, { switchOn: plan.switchOn, offNow }).forEach(p => problems.push(`${what}: ${p}`));
     steps.push({ kind: 'diy', role, sr, add: !linked(read), body, what });
   };
-  diy('st', srs.st, fresh.st, { time: a.st.time, influe: fresh.st?.influe || [] }, 'start 1');
+  // start 1 already DIY: set to one period holding 00:00 (never made DIY by Save)
+  if (linked(fresh.st) && !isStartDiy(fresh.st)) diy('st', srs.st, fresh.st, { ...startDiy(), influe: fresh.st?.influe || [] }, 'start 1');
   keptInfluences(fresh.cst, managed, plan.drop).filter(k => k.why && !k.dropped)
     .forEach(k => problems.push(`the interval: the influence on ${k.name} — ${k.why}: drop it on the card first`));
   diy('cst', srs.cst, fresh.cst, cstDiy(plan, sun, fresh.cst?.influe || [], managed), 'the interval');
-  const e = enDiy({ ...plan, enNow: enNowOf(par, fresh.en) }, linked(fresh.en));
+  const e = enDiy({ ...plan, enNow: enNowOf(par, fresh.en) }, linked(fresh.en), sun);
   diy('en', srs.en, fresh.en, e ? { ...e, influe: fresh.en?.influe || [] } : null, 'on/off');
-  return { steps, problems };
+  return { steps, problems, stLinked: linked(fresh.st) };
 }
 
 // the periods of a DIY in words, for what FarmNet holds now and what it reads back after Save

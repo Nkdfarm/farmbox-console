@@ -34,8 +34,10 @@ export const WINDOW = [0, 86340];                 // 00:00 → 23:59
 export const ANCHOR_GAP = 5 * 60;
 // the off before the switch-on is never shorter than one whole run (its valves together: the longest; one after another:
 // all of them) and a minute, so a run started before it ends before it (verifier, 21 Nov 2026), in whole minutes
+// the lowest sunset shift: the off before the first irrigation starts gapOf before it and must stay within ± 6 h
+export const sunsetMin = plan => -OFFSET_MAX / 60 + gapOf(plan) / 60;
 export function gapOf(plan) {
-  const runs = (plan.valves || []).map(v => num(v.stm) ?? 0);
+  const runs = (plan.valves || []).map(v => num(plan.on) ?? num(v.stm) ?? 0);
   const run = runs.length ? (plan.cmd === 1 ? Math.max(...runs) : runs.reduce((a, b) => a + b, 0)) : 0;
   return Math.max(ANCHOR_GAP, Math.ceil((run + 60) / 60) * 60);
 }
@@ -129,22 +131,13 @@ export function planFromFarmnet(prog, par, diy = {}) {
     const k = PERIOD_OF_TP[Number(t?.tp)];
     if (k !== undefined && num(t.bv) === 0) plan.periods[k].off = null;
   });
-  // the first cycle: sunset (NFT, ebb & flow) or the P1 start (vines, owner 21 Nov 2026) — as FarmNet's start DIY says
-  // when it is sun-relative, else by the kind of system
-  plan.anchorAt = plan.kind === 'vines' ? 'p1' : 'sunset';
-  // Save's switch-on: the gap (a 4th EN period holding 0) ends at the anchor
-  const gapP = linked(diy.en) && Array.isArray(diy.en.time) ? diy.en.time.slice(3).find(x => num(x?.bv) === 0) : null;
-  // the anchor: the next switch-on after the gap, of the same type (Save's own 100, or a P-period starting there)
-  const nextOn = gapP ? diy.en.time.filter(x => Number(x?.tp) === Number(gapP.tp) && num(x?.bv) === 100 && num(x?.st) > num(gapP.st))
-    .map(x => num(x.st)).sort((a, b) => a - b)[0] : undefined;
-  if (gapP && Number(gapP.tp) === 2 && nextOn !== undefined) { plan.anchorAt = 'sunset'; plan.anchor = Math.round(offsetOf(2, nextOn) / 60); }
-  else if (gapP && Number(gapP.tp) === 1) plan.anchorAt = 'p1';
-  else if (linked(diy.st) && Array.isArray(diy.st.time)) {
-    const t2 = diy.st.time.find(x => Number(x?.tp) === 2), t1 = diy.st.time.find(x => Number(x?.tp) === 1);
-    if (t2) { plan.anchorAt = 'sunset'; plan.anchor = Math.round(offsetOf(2, t2.st) / 60); }
-    else if (t1) plan.anchorAt = 'p1';
-  }
   plan.periods.forEach(p => { if (p.off !== null && p.off > OFF_MAX_MIN) p.off = null; });
+  // the owner's cycle (21 Nov 2026): the cycle restarts every day at sunset — the first irrigation at the night period's
+  // start (sunset ± its shift), for every system; one on time for all periods (every valve the same)
+  plan.anchorAt = 'sunset'; plan.anchor = plan.p3;
+  plan.on = valves.length ? Math.max(...valves.map(v => v.stm)) : null;
+  plan.onDiffers = new Set(valves.map(v => v.stm)).size > 1;
+  plan.name = String(prog?.NM ?? par?.NM ?? '');
   // the program's on/off as FarmNet holds it, per period: Save keeps it (verifier, 21 Nov 2026: Save never switches a
   // program on); only the card's own "Switch the program on" (off by default) may
   plan.enNow = enNowOf(par, diy.en);
@@ -175,7 +168,7 @@ export const isAllOnNow = plan => (plan.enNow || []).length === 3 && plan.enNow.
 export const PRESETS = {
   // owner, 21 Nov 2026: for vines the day starts at P1 — the first cycle (TM[0].ST) at the P1 start, not at sunset; NFT
   // and ebb & flow run all night and keep the sunset anchor
-  vines: { label: 'Vines (drip)', offs: [45, 25, null], p1: 60, p3: -150, anchorAt: 'p1' },
+  vines: { label: 'Vines (drip)', offs: [45, 25, null], p1: 60, p3: -150, anchorAt: 'sunset' },
   nft: { label: 'NFT', offs: [30, 30, 30], p1: 0, p3: 0, anchorAt: 'sunset' },
   ebb: { label: 'Ebb & flow', offs: [60, 60, 60], p1: 0, p3: 0, anchorAt: 'sunset' },
 };
@@ -183,7 +176,7 @@ export function applyPreset(plan, kind) {
   const p = PRESETS[kind]; if (!p) return plan;
   const out = structuredClone(plan);
   out.kind = kind; out.p1 = p.p1; out.p3 = p.p3; out.anchorAt = p.anchorAt;
-  if (p.anchorAt === 'sunset') out.anchor = 0;
+  out.anchor = p.p3;   // the first irrigation at the night period's start (sunset ± its shift)
   out.periods.forEach((x, i) => { x.off = p.offs[i]; });
   return out;
 }
@@ -193,7 +186,7 @@ export function applyPreset(plan, kind) {
 export function dayOf(plan, sun) {
   if (!sun) return null;
   const starts = [sun.rise + plan.p1 * 60, NOON, sun.set + plan.p3 * 60];
-  const on = Math.max(0, ...plan.valves.map(v => num(v.stm) ?? 0));
+  const on = num(plan.on) ?? Math.max(0, ...plan.valves.map(v => num(v.stm) ?? 0));
   const periods = starts.map((s, i) => {
     const next = i === 2 ? starts[0] + DAY : starts[i + 1];
     const len = next - s;
@@ -227,8 +220,8 @@ export function problemsOf(plan, sun) {
   const out = [];
   const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
   // (the switch-on's gap starts gapOf(plan) before the anchor: the anchor keeps it inside the ± 6 h bound)
-  const lo = -OFFSET_MAX / 60 + gapOf(plan) / 60;
-  if (plan.anchorAt !== 'p1' && !int(plan.anchor, lo, OFFSET_MAX / 60)) out.push(`the first cycle: sunset − ${-lo} to + ${OFFSET_MAX / 60} min`);
+  const lo = sunsetMin(plan);
+  if (plan.anchorAt !== 'p1' && !int(plan.anchor, lo, OFFSET_MAX / 60)) out.push(`Sunset ± min: − ${-lo} to + ${OFFSET_MAX / 60} (the off of one whole run before the first irrigation stays within FarmNet's ± 6 h)`);
   if (!int(plan.p1, plan.anchorAt === 'p1' ? lo : -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P1: sunrise ± ${OFFSET_MAX / 60} min at most`);
   if (!int(plan.p3, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P3: sunset ± ${OFFSET_MAX / 60} min at most`);
   plan.periods.forEach((p, i) => {
@@ -243,7 +236,10 @@ export function problemsOf(plan, sun) {
     }
   });
   if (plan.periods.every(p => p.off === null)) out.push('every period is OFF: switch the program off instead');
-  plan.valves.forEach(v => { if (!int(v.stm, 1, RUN_MAX)) out.push(`${v.name}: run 1 s – ${RUN_MAX / 3600} h`); });
+  if (plan.on !== undefined && plan.on !== null ? !int(plan.on, 1, RUN_MAX) : false) out.push(`on time: 1 s – ${RUN_MAX / 3600} h`);
+  if (plan.on === undefined || plan.on === null) plan.valves.forEach(v => { if (!int(v.stm, 1, RUN_MAX)) out.push(`${v.name}: run 1 s – ${RUN_MAX / 3600} h`); });
+  if (plan.name !== undefined && !String(plan.name).trim()) out.push('the program needs a name');
+  if (String(plan.name ?? '').trim().length > 40) out.push('the name: 40 characters at most');
   if (!plan.valves.length) out.push('the program has no valve');
   if (!int(plan.mint, 0, 1000) || !int(plan.maxt, 0, 1000)) out.push('min and max gap: 0–1000 min');
   if (plan.maxt && plan.mint > plan.maxt) out.push('the min gap is above the max gap');
@@ -261,7 +257,7 @@ const period = (tp, st, bv, itm = 0, lim = null) => ({ en: true, tp, st: stOf(tp
 // 1. program_set: cycle mode, TM[0] in use and the others off, valve run times, days, gaps, pumps, irrigate at the start
 export function programChanges(plan, par, sun) {
   const ch = { mode: 1, rsif: true, cmd: plan.cmd, mint: plan.mint * 60, maxt: plan.maxt * 60,
-    valves: plan.valves.map(v => ({ sid: v.sid, id: v.id, stm: v.stm })),
+    valves: plan.valves.map(v => ({ sid: v.sid, id: v.id, stm: plan.on ?? v.stm })),
     days: plan.days.mode === 1 ? { mode: 1, every: plan.days.every } : plan.days.mode === 2 ? { mode: 2, weekdays: plan.days.weekdays } : { mode: plan.days.mode } };
   const tm = Array.isArray(par?.TM) ? par.TM : [];
   ch.starts = tm.map((x, i) => ({ i, use: i === 0 })).filter((s, i) => (tm[i]?.USE === true) !== s.use);
@@ -281,6 +277,8 @@ export function programChanges(plan, par, sun) {
     ch.cycle = Math.max(60, Math.min(60000, cstSeconds(first?.off ?? 1, d?.on ?? 0)));
   }
   if (!ch.starts.length) delete ch.starts;
+  const name = String(plan.name ?? '').trim();
+  if (name && name !== String(par?.NM ?? '')) ch.name = name;
   // never on by Save: only the card's own "Switch the program on", and only here when EN stays a plain value (a DIY EN
   // or a period OFF: step 4 writes it)
   if (plan.switchOn && !plan.enLinked && !plan.periods.some(p => p.off === null)) ch.on = true;
@@ -300,9 +298,11 @@ export function anchorWords(plan, sun) {
   const what = plan.anchorAt === 'p1' ? `sunrise ${signed(plan.p1)} min (the P1 start)` : `sunset ${signed(plan.anchor)} min`;
   const k = periodAt(d, d.anchor);
   if (k >= 0 && plan.periods[k].off === null) return `none at ${clock(d.anchor)} (${what}): that period is OFF`;
+  if (plan.enNow && !plan.switchOn && !(plan.enNow[k] ?? false)) return `none: the program is off ${W_PERIOD[k] ? 'in the ' + W_PERIOD[k] : ''} (it would be ${clock(d.anchor)}, ${what})`;
   const how = anchorGap(plan, sun) ? `FarmNet switches the program off ${gapOf(plan) / 60} min before (one whole run) and on at it` : 'FarmNet switches the program on there';
   return `${clock(d.anchor)} today, ${what}, moving with the sun: ${how} (a cycle at the switch-on is to be confirmed on the trial copy)`;
 }
+const W_PERIOD = ['morning', 'afternoon', 'night'];
 const periodAt = (d, a) => d.periods.findIndex(p => (p.start <= p.end ? a >= p.start && a < p.end : a >= p.start || a < p.end));
 // the switch-on needs a gap only where the program is on just before the anchor (vines after an OFF P3: none)
 export function anchorGap(plan, sun) {

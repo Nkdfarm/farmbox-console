@@ -1,7 +1,10 @@
 // FarmNet › Windows (#/farmnet/windows; owner, 21 Nov 2026: "we have to start simple with the available data … use the
 // FarmNet logic without adding additional loop on Naked Heart. The irrigation logic has to be used in FarmNet, Naked
 // Heart just puts the good setting … a unique windows setting page"). Brief: docs/plan-irrigation-windows-2026-11-21.md.
-// One card per irrigation program of each fertigation centre, filled from FarmNet when the page opens: the program in
+// One settings window (owner's 12 requirements, 21 Nov 2026: "only one setting page window, including the name program"):
+// pick a program, then its name, the day (sunrise ± min, 12:00, sunset ± min), one on time, and per period the off time
+// (or no irrigation), Auto on drain and Weather; the first irrigation at sunset for every system. Filled from FarmNet when
+// the page opens: the program in
 // full (program_param), its valves' run times (STM), its DIY parameters (diy_get: CST, EN, TM[0].ST, and TM[0].ET when
 // it is DIY), MINT / MAXT, CMD, DT, RSIF; the measured volume per run (irrigation_records type 0, 7 days, median VLM).
 // Shown before anything is sent: today's clock times of the anchor and the three periods (FarmNet's riseT / setT),
@@ -80,7 +83,7 @@ export async function readCentre(farm, c) {
 }
 
 function centreCard(ctx, c, r, signals) {
-  const k = card(`${c.name} — irrigation windows`);
+  const k = card(`${c.name} — irrigation cycle`);
   if (r.programs.e) { k.append(bad(r.programs.e)); return k; }
   const list = r.programs.v || [];
   // today's sunrise and sunset, as FarmNet computes them for the centre (any DIY answer carries them)
@@ -90,8 +93,21 @@ function centreCard(ctx, c, r, signals) {
     ? `Today on FarmNet: sunrise ${W.clock(sun.rise)}, sunset ${W.clock(sun.set)}. Every card opens with what FarmNet runs now; nothing is sent until Save.`
     : 'FarmNet gave no sunrise and sunset for this centre: the clock times below cannot be worked out.'));
   if (r.records.e) k.append(bad(`Run records not read: ${r.records.e}`));
-  if (!list.length) k.append(el('div', 'hint', 'FarmNet lists no irrigation program.'));
-  list.forEach((p, i) => k.append(programCard(ctx, c, p, r.params[i], r.diys[i], sun, recs, signals)));
+  if (!list.length) { k.append(el('div', 'hint', 'FarmNet lists no irrigation program.')); return k; }
+  // one window: the program picked here (remembered per centre in this browser), its settings below
+  const key = `fn-win-${c.id}`;
+  let pick = 0;
+  try { const i = list.findIndex(p => String(p.ID) === localStorage.getItem(key)); if (i >= 0) pick = i; } catch { /* no storage */ }
+  const slot = el('div');
+  const s = el('select', 'input win-pick'); s.setAttribute('aria-label', 'Program');
+  list.forEach((p, i) => { const par = r.params[i].v; const on = par && Number(diyV(par.EN)) !== 0;
+    const o = el('option', null, `${p.NM} · ${par ? (on ? 'on' : 'off') : 'not read'}`); o.value = String(i); s.append(o); });
+  s.value = String(pick);
+  const show = i => { slot.replaceChildren(programCard(ctx, c, list[i], r.params[i], r.diys[i], sun, recs, signals));
+    try { localStorage.setItem(key, String(list[i].ID)); } catch { /* no storage */ } };
+  s.onchange = () => show(Number(s.value));
+  k.append(field('Program', s), slot);
+  show(pick);
   return k;
 }
 
@@ -110,8 +126,8 @@ export function programCard(ctx, c, prog, parR, diyR, sun, recs, signals) {
   const diyErr = ['st', 'cst', 'en'].map(x => diyR?.[x]?.e ? `${x.toUpperCase()}: ${diyR[x].e}` : null).filter(Boolean);
 
   // what FarmNet holds now
-  const now = el('div', 'win-now');
-  now.append(el('div', 'cx-kind-label', 'FarmNet now'));
+  const now = el('details', 'win-now');
+  now.append(el('summary', 'cx-kind-label', 'What FarmNet runs now'));
   const kv = el('div', 'ir-kv');
   const row = (k, v) => kv.append(el('span', 'hint', k), el('span', null, v));
   const t0 = Array.isArray(par.TM) ? par.TM[0] : null;
@@ -187,22 +203,28 @@ function formOf(plan, may, signals, replace, changed) {
     return s;
   };
 
-  // system type and its preset
-  const top = el('div', 'win-row');
-  const kind = sel(Object.entries(W.PRESETS).map(([k, p]) => [k, p.label]), plan.kind, v => { plan.kind = v; }, 'System type');
-  top.append(field('System type', kind));
-  if (may) {
-    const b = el('button', 'btn btn-sm', 'Apply preset'); b.type = 'button';
-    b.title = 'Vines 45 / 25 / OFF min, P1 sunrise + 60, P3 sunset − 150 · NFT 30 min every period · Ebb & flow 60 min every period';
-    b.onclick = () => replace(W.applyPreset(plan, kind.value));
-    top.append(b);
-  }
-  // the first cycle: at sunset ± min (NFT, ebb & flow run all night) or at the P1 start (vines: the day starts at P1,
-  // owner 21 Nov 2026)
-  top.append(field('First cycle at', sel([['sunset', 'Sunset ± min'], ['p1', 'The P1 start (sunrise ± P1)']], plan.anchorAt,
-    v => { plan.anchorAt = v; replace(plan); }, 'First cycle at')));
-  if (plan.anchorAt !== 'p1') top.append(field('Sunset ± min', numIn(plan.anchor, v => { plan.anchor = v; }, { min: -359, max: 360, label: 'Anchor, minutes from sunset' })));
-  out.push(top);
+  // the program's name (owner: "including the name program")
+  const nameRow = el('div', 'win-row');
+  const nm = el('input', 'input'); nm.type = 'text'; nm.maxLength = 40; nm.value = plan.name ?? ''; nm.disabled = !may; nm.style.width = '24em'; nm.style.maxWidth = '100%';
+  nm.setAttribute('aria-label', 'Program name'); nm.oninput = () => { plan.name = nm.value; changed(); };
+  nameRow.append(field('Name', nm));
+  out.push(nameRow);
+
+  // the day: sunrise ± min, 12:00 fixed, sunset ± min; the cycle restarts at sunset (± its shift) for every system
+  const day = el('div', 'win-row');
+  day.append(field('Sunrise ± min', numIn(plan.p1, v => { plan.p1 = v; }, { min: -360, max: 360, w: 4.5, label: 'Sunrise shift, minutes' })),
+    field('Noon', el('span', null, '12:00 (fixed)')),
+    field('Sunset ± min', numIn(plan.p3, v => { plan.p3 = v; plan.anchor = v; }, { min: W.sunsetMin(plan), max: 360, w: 4.5, label: 'Sunset shift, minutes' })));
+  out.push(day);
+  out.push(el('div', 'hint', 'The cycle restarts every day at sunset (with its shift): the first irrigation starts then, for every system. '
+    + 'FarmNet moves sunrise and sunset itself each day.'));
+
+  // one on time for all periods
+  const onRowT = el('div', 'win-row');
+  onRowT.append(field('On time, s', numIn(plan.on, v => { plan.on = v; }, { min: 1, max: W.RUN_MAX, w: 6, label: 'Irrigation on time, seconds' })));
+  if (plan.onDiffers) onRowT.append(el('span', 'hint', `FarmNet has different run times on the valves (${plan.valves.map(v => `${v.name} ${v.stm} s`).join(', ')}): Save gives them all this one`));
+  out.push(onRowT);
+
   // the program's on/off: kept as FarmNet holds it; only this box (off by default) lets Save switch it on
   const onRow = el('div', 'win-row');
   const allOn = W.isAllOnNow(plan), someOn = W.isOnNow(plan);
@@ -218,36 +240,33 @@ function formOf(plan, may, signals, replace, changed) {
   // the three periods
   const t = el('table', 'win-periods');
   const hr = el('tr');
-  hr.append(el('th'));
-  const h1 = el('th'); h1.append(el('span', null, 'P1 sunrise '), numIn(plan.p1, v => { plan.p1 = v; }, { min: -360, max: 360, w: 4.5, label: 'P1 start, minutes from sunrise' }), el('span', 'hint', ' min'));
-  const h2 = el('th', null, 'P2 12:00');
-  const h3 = el('th'); h3.append(el('span', null, 'P3 sunset '), numIn(plan.p3, v => { plan.p3 = v; }, { min: -360, max: 360, w: 4.5, label: 'P3 start, minutes from sunset' }), el('span', 'hint', ' min'));
-  hr.append(h1, h2, h3);
+  hr.append(el('th'), el('th', null, 'Morning · sunrise → 12:00'), el('th', null, 'Afternoon · 12:00 → sunset'), el('th', null, 'Night · sunset → sunrise'));
   const thead = el('thead'); thead.append(hr); t.append(thead);
   const tb = el('tbody');
   const line = (label, cellOf) => { const r = el('tr'); r.append(el('th', 'hint', label)); plan.periods.forEach((p, i) => { const td = el('td'); td.append(...cellOf(p, i)); r.append(td); }); tb.append(r); };
-  line('Off, min', (p, i) => {
-    const off = el('input'); off.type = 'checkbox'; off.checked = p.off === null; off.disabled = !may; off.setAttribute('aria-label', `P${i + 1} OFF`);
-    const n = numIn(p.off, v => { p.off = v; }, { min: 0, max: W.OFF_MAX_MIN, label: `P${i + 1} off, minutes` });
+  const PN = ['Morning', 'Afternoon', 'Night'];
+  line('Off time, min', (p, i) => {
+    const off = el('input'); off.type = 'checkbox'; off.checked = p.off === null; off.disabled = !may; off.setAttribute('aria-label', `${PN[i]}: no irrigation`);
+    const n = numIn(p.off, v => { p.off = v; }, { min: 0, max: W.OFF_MAX_MIN, label: `${PN[i]} off time, minutes` });
     n.disabled = !may || p.off === null;
     off.onchange = () => { p.off = off.checked ? null : (num(n.value) ?? 30); n.disabled = off.checked; if (!off.checked) n.value = String(p.off); changed(); };
-    const l = el('label', 'win-off'); l.append(off, document.createTextNode(' OFF'));
+    const l = el('label', 'win-off'); l.append(off, document.createTextNode(' No irrigation'));
     return [n, l];
   });
-  line('Ramp, min', (p, i) => [numIn(p.ramp, v => { p.ramp = v ?? 0; }, { min: 0, max: 240, label: `P${i + 1} ramp, minutes` })]);
   const autoOpts = [...signals.drain, ...signals.moisture];
-  line('Auto', (p, i) => influenceCell(p.auto, 'target', autoOpts, may, numIn, sel, `P${i + 1} Auto`,
+  line('Auto (drain %)', (p, i) => influenceCell(p.auto, 'target', autoOpts, may, numIn, sel, `${PN[i]} Auto`,
     signals.drain.length ? null : 'FarmNet has no drain, drain-ratio or substrate-weight signal: Auto on drain is not possible here'
       + (signals.moisture.length ? '; substrate moisture can be used' : '')));
-  line('Weather', (p, i) => influenceCell(p.weather, 'setpoint', signals.weather, may, numIn, sel, `P${i + 1} Weather`,
+  line('Weather (temp or VPD)', (p, i) => influenceCell(p.weather, 'setpoint', signals.weather, may, numIn, sel, `${PN[i]} Weather`,
     signals.weather.length ? null : 'FarmNet lists no inside VPD or air temperature'));
   t.append(tb);
   const wrap = el('div', 'table-wrap'); wrap.append(t);
   out.push(wrap);
-  // why Auto on drain is greyed (FB1 has no drain signal, 21 Nov 2026), said once under the periods
+  out.push(el('div', 'hint', 'Auto and Weather: the target (drain %, or temperature / VPD) and how far the off time may move, ± % of it. '
+    + 'An irrigation that runs past the end of a period is followed by the new period\'s off time.'));
   if (!signals.drain.length) out.push(el('div', 'hint win-grey', 'Auto on drain: FarmNet has no drain, drain-ratio or substrate-weight signal'
     + (signals.moisture.length ? '. Auto can follow the substrate moisture instead (an influence of FarmNet on the interval).' : ', and no substrate moisture either.')));
-  if (plan.estimated) out.push(el('div', 'hint', `Off per period estimated from its ${plan.estimated} timer starts a day, so the first Save gives about the same number of runs.`));
+  if (plan.estimated) out.push(el('div', 'hint', `Off time per period estimated from its ${plan.estimated} timer starts a day, so the first Save gives about the same number of irrigations.`));
   // CST's influences on signals the card does not offer: kept as FarmNet holds them, or — when they no longer fit the three
   // periods — listed, and Save refused until the person drops them
   (plan.kept || []).forEach(k => {
@@ -261,10 +280,11 @@ function formOf(plan, may, signals, replace, changed) {
     out.push(line);
   });
 
-  // run times, gaps, pumps, days
-  const more = el('div', 'win-row');
-  plan.valves.forEach(v => more.append(field(`${v.name} on, s`, numIn(v.stm, x => { v.stm = x; }, { min: 1, max: W.RUN_MAX, w: 6, label: `${v.name} run time, seconds` }))));
-  more.append(field('Min gap, min', numIn(plan.mint, v => { plan.mint = v ?? 0; }, { min: 0, max: 1000, label: 'Minimum gap, minutes' })),
+  // the rest of the program, folded: gaps, pumps, days (as FarmNet holds them unless changed here)
+  const more = el('details', 'win-more');
+  more.append(el('summary', 'hint', 'More: gaps, pump sharing, days'));
+  const mrow = el('div', 'win-row');
+  mrow.append(field('Min gap, min', numIn(plan.mint, v => { plan.mint = v ?? 0; }, { min: 0, max: 1000, label: 'Minimum gap, minutes' })),
     field('Max gap, min', numIn(plan.maxt, v => { plan.maxt = v ?? 0; }, { min: 0, max: 1000, label: 'Maximum gap, minutes' })),
     field('Sharing a pump', sel([[0, 'Wait'], [1, 'Run together']], plan.cmd, v => { plan.cmd = Number(v); }, 'Sharing a pump')));
   const days = el('div', 'win-days');
@@ -276,7 +296,8 @@ function formOf(plan, may, signals, replace, changed) {
     c.onchange = () => { plan.days.weekdays = c.checked ? plan.days.weekdays | (1 << i) : plan.days.weekdays & ~(1 << i); changed(); };
     const l = el('label', 'win-off'); l.append(c, document.createTextNode(' ' + d)); days.append(l);
   });
-  more.append(field('Days', days));
+  mrow.append(field('Days', days));
+  more.append(mrow);
   out.push(more);
   return out;
 }
@@ -299,10 +320,10 @@ function previewOf(plan, sun, diy) {
   if (d) {
     const kv = el('div', 'ir-kv');
     const row = (k, v) => kv.append(el('span', 'hint', k), el('b', null, v));
-    row('First cycle', W.anchorWords(plan, sun));
+    row('First irrigation', W.anchorWords(plan, sun));
     row('Stops', W.endWords(plan, sun));
     row('Program', plan.switchOn ? 'switched ON by this Save' : W.isOnNow(plan) ? 'on as now' : 'off as now (stays off)');
-    d.periods.forEach((p, i) => row(`P${i + 1}`, `${W.clock(p.start)} – ${W.clock(p.end)} · ${plan.periods[i].off === null ? 'OFF' : `off ${plan.periods[i].off} min · ≈ ${p.runs} run${p.runs === 1 ? '' : 's'}`}`));
+    d.periods.forEach((p, i) => row(['Morning', 'Afternoon', 'Night'][i], `${W.clock(p.start)} – ${W.clock(p.end)} · ${plan.periods[i].off === null ? 'OFF' : `off ${plan.periods[i].off} min · ≈ ${p.runs} run${p.runs === 1 ? '' : 's'}`}`));
     row('Irrigations a day', `≈ ${d.runs}${d.on ? ` (each ${d.on} s on)` : ''}`);
     out.push(kv);
   }

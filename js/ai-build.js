@@ -41,6 +41,80 @@ export const RANGE_COMMANDS = new Set(['formula_set', 'formula_add', 'formula_co
 export const EDITED_RANGE_NOTE = 'Changed by you: not checked again against the crops’ EC and pH ranges — compare it with FarmNet › Irrigation › EC and pH per crop before you validate.';
 export const EDITED_MARK = ' (changed by the person)';
 
+// ── step references (phase E): "copy it, then set it" in one build ──
+// An argument value {"$step": n, "key": "created"} is the number EARLIER step n makes. The key is "created", nothing else:
+// what runCommand returns for the commands that make a program or a recipe is the farmnet function's own answer
+// (registry-catalogue.js fnSend → farmnet/shell.js send → fn(): the parsed body), which supabase/functions/farmnet/index.ts
+// builds as   { data: { ID: <new number> }, created: <new number>, msg, ... }.
+// REF_TABLE says which steps make a number (makes) and which argument of which command may take one (takes): a program
+// feeds only the program number of a program command, a recipe only the recipe number of a recipe command; and step n is
+// on the same unit, where both units are known. It is the same table, with the same rules and the same words, as
+// supabase/functions/assistant/plan.ts checkRefs (scripts/check-ai-build.mjs fails when the two tables differ).
+// While building nothing is applied, so the reference is only checked (and the draft keeps it, shown as "step n: created");
+// it is replaced by the number when Validate reaches the step, and only if step n was applied by then: else the step
+// fails, with why.
+export const REF_TABLE = {
+  "makes": { "program_add": "program", "program_copy": "program", "formula_add": "recipe", "formula_copy": "recipe" },
+  "takes": {
+    "program_set": { "proId": "program" }, "program_remove": { "proId": "program" }, "program_copy": { "proId": "program" },
+    "diy_add": { "proId": "program" }, "diy_edit": { "proId": "program" }, "irrigation_program_start": { "proId": "program" },
+    "formula_set": { "proId": "recipe" }, "formula_remove": { "proId": "recipe" }, "formula_copy": { "proId": "recipe" }
+  }
+};
+export const REF_PRODUCERS = Object.keys(REF_TABLE.makes);
+const takers = kind => Object.keys(REF_TABLE.takes).filter(x => Object.values(REF_TABLE.takes[x]).includes(kind)).join(', ');
+const REF_WHERE = `the program number (proId) of ${takers('program')}, or the recipe number (proId) of ${takers('recipe')}`;
+export const isRef = v => !!v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, '$step');
+const refText = v => `step ${v.$step}: ${v.key}`;
+// unit: the unit of this step; home: the unit a step without one runs on (the FarmBox open), when known
+// → { error } | { args: the arguments with each reference replaced by a stand-in of the right type, for the registry's
+// check only, shown: the same with its text, for the preview, refs: how many }
+export function checkRefs(command, args, n, steps, unit = null, home = null) {
+  const c = getCommand(command);
+  const a = args && typeof args === 'object' && !Array.isArray(args) ? args : null;
+  if (!a || !c) return { args, shown: args, refs: 0 };
+  const stand = {}, shown = {};
+  let refs = 0;
+  const unitOf = u => (typeof u === 'string' && u ? u : home || null);
+  for (const [k, v] of Object.entries(a)) {
+    if (!isRef(v)) {
+      if (v && typeof v === 'object' && JSON.stringify(v).includes('"$step"')) return { error: `${c.label}: a step reference is only allowed as a whole argument, not inside "${k}"` };
+      continue;
+    }
+    refs++;
+    const what = `${c.label}: "${k}"`;
+    const ref = Number(v.$step);
+    if (Object.keys(v).some(x => x !== '$step' && x !== 'key')) return { error: `${what}: a step reference has only $step and key` };
+    if (!Number.isInteger(ref) || ref < 1 || ref >= n) return { error: `${what}: it refers to step ${v.$step}, which is not an earlier step (this is step ${n})` };
+    if (typeof v.key !== 'string' || !v.key.trim()) return { error: `${what}: the step reference has no key` };
+    if (v.key !== 'created') return { error: `${what}: the step reference's key is "created" (the number step ${ref} makes), not "${v.key}"` };
+    const takes = REF_TABLE.takes[c.name]?.[k];
+    if (!takes) return { error: `${what}: a step reference stands only for ${REF_WHERE}` };
+    const src = steps.find(x => x.n === ref);
+    const made = src ? REF_TABLE.makes[src.command] : undefined;
+    if (!src || !made) return { error: `${what}: step ${ref} is not a step that makes a program or a recipe (${REF_PRODUCERS.join(', ')})` };
+    if (made !== takes) return { error: `${what}: step ${ref} makes a ${made}, and "${k}" of ${c.name} is a ${takes} number` };
+    const u1 = unitOf(src.unit), u2 = unitOf(unit);
+    if (u1 !== u2 && u1 !== null && u2 !== null) return { error: `${what}: step ${ref} is on another unit` };
+    stand[k] = Math.max(c.args[k]?.min ?? 0, 0); shown[k] = refText(v);
+  }
+  return { args: { ...a, ...stand }, shown: { ...a, ...shown }, refs };
+}
+// Validate: the arguments with each reference replaced by the number step n made (results: Map step number → result)
+export function resolveRefs(args, results) {
+  if (!args || typeof args !== 'object') return args;
+  const out = { ...args };
+  for (const [k, v] of Object.entries(args)) {
+    if (!isRef(v)) continue;
+    if (!results.has(Number(v.$step))) throw new Error(`"${k}" is the ${v.key} of step ${v.$step}, which was not applied: nothing was made to use`);
+    const r = results.get(Number(v.$step));
+    const x = r !== null && typeof r === 'object' ? r.created : undefined;
+    if (typeof x !== 'number' || !Number.isInteger(x)) throw new Error(`"${k}": step ${v.$step} gave no whole number as "created"`);
+    out[k] = x;
+  }
+  return out;
+}
+
 // deps: { run(name, args, opts) (the registry's runCommand), farm, farmFor(unit) → the FarmBox to run a step on,
 //         navigate(page), locate(name, args) → element | null, highlight(element),
 //         fix(step, error) → { ok, step } | { ok: false, error }, mayBuild(family, unit) → true | reason,
@@ -49,6 +123,7 @@ export const EDITED_MARK = ' (changed by the person)';
 //         userId() → the person signed in now (Validate stops before a step when it is not the one who pressed it) }
 export function createBuild(plan, deps) {
   const steps = (plan?.steps || []).map((s, i) => ({ ...s, n: i + 1 }));
+  const home = deps.farm?.id || null;   // the unit a step without one runs on (step references: the same unit)
   // staged: how many drafts were ever staged (end() empties drafts, not this) — the plan counts as built from the first
   const st = { phase: 'building', at: 0, total: steps.length, drafts: [], staged: 0, notice: '', stopped: false, result: null, group: null };
   let timer = null, seq = 0;
@@ -83,7 +158,10 @@ export function createBuild(plan, deps) {
     if (!c.stageable || c.emergency) return { stop: `Step ${step.n}: ${c.label} may only be proposed to a person, never built.` };
     const may = deps.mayBuild ? deps.mayBuild(c.family, step.unit || null) : true;
     if (may !== true) return { stop: `Step ${step.n}: ${typeof may === 'string' ? may : 'the AI may not build this on this FarmBox'}.` };
-    let s = step, v = validateArgs(s.command, s.args);
+    let s = step;
+    const rc = checkRefs(s.command, s.args, s.n, steps, s.unit, home);
+    if (rc.error) return { stop: `Step ${s.n}: ${rc.error}` };
+    let v = validateArgs(s.command, rc.args);
     if (!v.ok) {
       // back to the model once
       let f = null;
@@ -93,7 +171,9 @@ export function createBuild(plan, deps) {
       const fixed = { ...s, ...f.step, n: s.n, unit: s.unit, fixed: true };
       const c2 = getCommand(fixed.command);
       const may2 = c2 && deps.mayBuild ? deps.mayBuild(c2.family, fixed.unit || null) : true;
-      v = c2 && c2.stageable && !c2.emergency && may2 === true ? validateArgs(fixed.command, fixed.args) : { ok: false, error: 'the fixed step may not be built' };
+      const rc2 = checkRefs(fixed.command, fixed.args, fixed.n, steps, fixed.unit, home);
+      v = rc2.error ? { ok: false, error: rc2.error }
+        : c2 && c2.stageable && !c2.emergency && may2 === true ? validateArgs(fixed.command, rc2.args) : { ok: false, error: 'the fixed step may not be built' };
       if (!v.ok) return { stop: `Step ${s.n} could not be staged, even after a fix: ${v.error}` };
       s = fixed;
     }
@@ -155,7 +235,9 @@ export function createBuild(plan, deps) {
     if (st.phase !== 'review') return { ok: false, error: 'Only a draft under review can be changed.' };
     const d = st.drafts.find(x => x.id === id);
     if (!d) return { ok: false, error: 'No such draft.' };
-    const v = validateArgs(d.command, args);
+    const rc = checkRefs(d.command, args, d.n, steps, d.unit, home);
+    if (rc.error) return { ok: false, error: rc.error };
+    const v = validateArgs(d.command, rc.args);
     if (!v.ok) return v;
     const changed = JSON.stringify(args) !== JSON.stringify(d.args);
     d.args = args; d.switches_on = switchesOn(d.command, args);
@@ -164,7 +246,7 @@ export function createBuild(plan, deps) {
       // log says the person changed it), the AI's warnings go, and a water step is said not to be range-checked again
       const c = getCommand(d.command);
       let line;
-      try { line = c.preview(v.args || args); } catch { line = ''; }
+      try { line = c.preview(rc.shown || args); } catch { line = ''; }
       d.summary = String(line || c.label).slice(0, 300 - EDITED_MARK.length) + EDITED_MARK;
       d.warnings = RANGE_COMMANDS.has(d.command) ? [EDITED_RANGE_NOTE] : [];
       d.edited = true;
@@ -197,6 +279,7 @@ export function createBuild(plan, deps) {
     // the person who pressed Validate: a sign-out or another sign-in meanwhile stops it before the next step
     const who = deps.userId ? deps.userId() : undefined;
     let failed = null, halted = null;
+    const results = new Map();   // step number → what its command returned, for the step references of later steps
     for (const d of st.drafts) {
       st.at++;
       if (failed || halted) { d.status = 'not-applied'; continue; }
@@ -204,7 +287,10 @@ export function createBuild(plan, deps) {
       d.status = 'applying'; tell();
       try {
         const farm = deps.farmFor ? deps.farmFor(d.unit) : deps.farm;
-        await within(deps.run(d.command, d.args, { actor: 'ai', group: st.group, source: 'ai-build', summary: d.summary, ctx: { farm } }), deps.stepMs || STEP_MS);
+        // a reference to an earlier step is replaced here, by that step's result (a step not applied gives a clear failure)
+        const args = resolveRefs(d.args, results);
+        const res = await within(deps.run(d.command, args, { actor: 'ai', group: st.group, source: 'ai-build', summary: d.summary, ctx: { farm } }), deps.stepMs || STEP_MS);
+        results.set(d.n, res);
         d.status = 'applied';
       } catch (e) {
         d.status = e?.timeout ? 'unknown' : 'failed'; d.error = e?.message || String(e); failed = d;

@@ -33,14 +33,27 @@ import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
 import { createMic, readAllOn } from './assistant-local.js';
 import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine, planPagesLine, estimateLine, STEP_MARK } from './assistant-shape.js';
-import { runCommand } from './registry.js';
+import { runCommand, getCommand } from './registry.js';
 import { startBuild, abandonBuild, building } from './ai-build-ui.js';
 
 // the changes a card may carry — the same list the function accepts
 const ALLOWED = new Set(['plan_position', 'plan_succession', 'steady_apply', 'move_batch', 'resize_batch', 'change_batch_crop',
   'cancel_crop_plan', 'set_batch_nursery', 'split_zone', 'clear_zone', 'save_order', 'plan_order_line', 'save_procedure',
   'save_crop', 'record_market_price', 'raise_issue', 'save_asset', 'save_maintenance_rule', 'save_farm_holiday', 'apply_batch_adjustment', 'fork_crop',
-  'save_valve_zones']);
+  'save_valve_zones',
+  // phase F (0291, owner 22 Nov 2026): cards only, never steps of a build
+  // (skip_task, make_purchase_orders, set_farm_market and save_crop_extras stay with a person: review of 22 Nov 2026)
+  'add_hand_task', 'delete_hand_task', 'assign_task', 'assign_tasks', 'unassign_tasks', 'move_task', 'set_task_slot',
+  'draft_labour_plan', 'close_issue', 'open_case', 'close_case', 'follow_traps', 'tag_photo', 'save_sticky_trap', 'save_ipm_threshold',
+  'save_spray_volume', 'remove_spray_volume', 'start_ipm_program', 'stop_program', 'save_program', 'compute_purchase_requests',
+  'save_item', 'adjust_stock', 'save_customer', 'set_basket_clients', 'save_cost', 'remove_cost',
+  'save_sump_reading', 'generate_maintenance_tasks', 'set_batch_dates', 'restore_crop', 'save_crop_tracking',
+  'save_growing_system', 'steady_rename', 'steady_set_positions', 'steady_leave', 'steady_undo', 'steady_dissolve', 'apply_camera_growth',
+  'dismiss_camera_growth', 'remove_farm_holiday',
+  // FarmNet run control and climate setpoints: Do it runs the registry command as the person (the farmnet function, actor
+  // human: it asks for the farm admin or farm manager itself)
+  'irrigation_program_start', 'irrigation_pause', 'irrigation_resume', 'irrigation_stop', 'fert_program_start', 'fert_pause',
+  'fert_resume', 'fert_stop', 'climate_set']);
 // "To check" (owner, 19 Nov 2026): the button beside Send; the person sees "To check", the assistant reads the longer ask
 const SPEAKER = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
 const CHECK = 'To check';
@@ -429,14 +442,21 @@ const short = r => {
 // A card's change, pressed by the person: a command of the registry (console 0.19.00, 0286), so it runs through the
 // server door public.run_command — every row it touches is kept and Revert on the Timeline puts it back. The person
 // pressed it: actor human, source assistant. ALLOWED stays the gate in front (the 0274 check reads it).
-const doCard = (name, args, summary) => runCommand(name, args, { actor: 'human', source: 'assistant', summary, ctx: { farm: ctx.farm() } });
+// A FarmNet card (run control, a climate setpoint; owner 22 Nov 2026) goes the same way, to the farmnet function as the
+// person: its arguments carry no farm, so it is sent to the unit the assistant proposed it for (a site of sister units),
+// else the FarmBox on screen; the function itself lets only that unit's admin or farm manager send it.
+const doCard = (name, args, summary, unit) => {
+  const f = ctx.farm();
+  const farm = typeof unit === 'string' && unit && f && unit !== f.id && getCommand(name)?.kind === 'farmnet' ? { ...f, id: unit } : f;
+  return runCommand(name, args, { actor: 'human', source: 'assistant', summary, ctx: { farm } });
+};
 
 async function doIt(v, btn) {
   if (!ALLOWED.has(v.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
   const c = convo(), key = ckey();   // the page it was pressed on: a slow change must not write into the page shown by then
   btn.disabled = true; btn.textContent = 'Doing…';
   try {
-    const r = await doCard(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args, v.summary);
+    const r = await doCard(v.rpc, v.rpc === 'apply_batch_adjustment' ? { ...v.args, p_card: v.card_id || null } : v.args, v.summary, v.unit);
     if (r && r.needs_manager && !v.card_id) {   // the card was not kept, so nobody could be asked: say so, and leave it as it is
       toast(r.message || 'This is above the limit: ask a manager', 'bad');
       btn.disabled = false; btn.textContent = 'Do it'; return;
@@ -513,7 +533,8 @@ async function sendNow(text, opts) {
     c.notes = []; c.at = Date.now();
     if (r.reply || r.plan) c.view.push({ role: 'assistant', text: r.reply || '', plan: r.plan || null });
     out = { reply: words(r.reply || ''), cards: (r.actions || []).length };
-    (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null }));
+    (r.actions || []).forEach(a => c.view.push({ role: 'action', id: a.id, card_id: a.card_id || null, rpc: a.rpc, args: a.args, summary: a.summary, impact: a.impact || null,
+      ...(typeof a.unit === 'string' ? { unit: a.unit } : {}) }));
   } catch (e) {
     c.view.push({ role: 'error', text: e.message });
     if (ctx.farm()?.id === f.id) {   // the words, the attachments and the shape come back for another try

@@ -44,11 +44,26 @@ export async function navigate(page) {
   location.hash = page;
   await wait(350);           // app.js draws the page on hashchange
 }
+// A drawer (ui.js drawer()) is appended to document.body, outside #shell: its buttons (a program's Save, Restore…, the
+// climate Save…, the run controls) are searched too — the open drawers first, the topmost first, then the page. Only
+// what is on screen: a drawer that is not in the document, hidden (display none, aria-hidden) or with no box is skipped,
+// and so is an anchor with no client rects.
+const shown = n => !!n && n.isConnected && !n.closest?.('[hidden], [aria-hidden="true"], [inert]') && n.getClientRects().length > 0;
+function findVisible(name, args) {
+  const roots = [...document.querySelectorAll('body > aside.drawer')].reverse();
+  const shell = document.getElementById('shell');
+  for (const r of [...roots, shell || document]) {
+    if (r !== shell && !shown(r)) continue;
+    const a = findAnchor(name, args, r);
+    if (shown(a)) return a;
+  }
+  return null;
+}
 export async function locate(name, args, findMs = FIND_MS) {
   const t0 = Date.now();
   for (;;) {
-    const a = findAnchor(name, args, document.getElementById('shell') || document);
-    if (a && a.getClientRects().length) return a;
+    const a = findVisible(name, args);
+    if (a) return a;
     if (Date.now() - t0 > findMs) return null;
     await wait(120);
   }
@@ -324,7 +339,9 @@ async function begin(plan, ctx, farm, release) {
   };
   const fix = async (step, error) => {
     const r = await fn('assistant', { farm_id: farm.id, units: ctx.units || undefined, messages: [{ role: 'user', content: 'Fix one step of a build.' }],
-      fix: { step: { command: step.command, args: step.args, page: step.page, summary: step.summary, unit: step.unit, reason: step.reason, valves: step.valves }, error } }, { quiet: true });
+      fix: { step: { command: step.command, args: step.args, page: step.page, summary: step.summary, unit: step.unit, reason: step.reason, valves: step.valves }, error,
+             // its number and the steps before it: the function checks a step reference as in a plan (assistant/plan.ts)
+             n: step.n, before: (plan.steps || []).slice(0, Math.max(0, (step.n || 1) - 1)).map(x => ({ command: x.command, unit: x.unit || null })) } }, { quiet: true });
     return r?.ok ? { ok: true, step: r.step } : { ok: false, error: r?.error || 'no answer' };
   };
   if (current) return null;   // only this function sets it, behind `starting`

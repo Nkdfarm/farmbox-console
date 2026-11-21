@@ -240,7 +240,7 @@ export async function openRecipe(ctx, c, r, usedBy, after) {
 
   const changes = () => inputs.filter(x => Number.isFinite(x.read()) && x.read() !== x.from);
   dirty = () => changes().length > 0 || nameChanged();
-  const save = el('button', 'btn btn-primary', 'Save…');
+  const save = tagCmd(el('button', 'btn btn-primary', 'Save…'), 'formula_set', r.ID);
   save.onclick = async () => {
     if (save.disabled) return;
     const nan = inputs.find(x => !Number.isFinite(x.read()));

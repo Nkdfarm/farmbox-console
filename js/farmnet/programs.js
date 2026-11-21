@@ -357,7 +357,7 @@ export async function openProgram(ctx, c, p, recipes, at, after, more = {}) {
   }
   dirty = () => Object.keys(diff().body).length > 0;
 
-  const save = el('button', 'btn btn-primary', 'Save…');
+  const save = tagCmd(el('button', 'btn btn-primary', 'Save…'), 'program_set', p.ID);
   save.onclick = async () => {
     if (save.disabled) return;
     const { words, body } = diff();

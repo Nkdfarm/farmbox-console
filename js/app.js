@@ -15,6 +15,7 @@ import { renderPurchasing, renderStock } from './purchasing.js';
 import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
+import { renderRoadmapBoard, renderRoadmapQuestions } from './roadmap.js';
 import { renderIssues } from './issues.js';
 import { renderOperations } from './operations.js';
 import { renderFeedback } from './feedback.js';
@@ -124,6 +125,8 @@ const SECTIONS = {
     ['climate', 'Climate', renderFnClimate], ['sensors', 'Sensors', renderFnSensors], ['alarms', 'Alarms', renderFnAlarms], ['commands', 'Commands', renderFnCommands]] },
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
+  // Roadmap (0292): the franchisor's company roadmap; currentRoute sends anybody else to the dashboard
+  roadmap: { title: 'Roadmap', tabs: [['board', 'Roadmap', renderRoadmapBoard], ['questions', 'Questions for the team', renderRoadmapQuestions]] },
 };
 // Tabs only some people may open (0092): People is for the unit's Admin and Farm manager,
 // the franchisee's admin and the franchisor. The database asks the same question
@@ -461,6 +464,7 @@ async function loadFarms() {
 function paintUnitsLink() {
   const show = choices.length > 1 || myRoles.some(r => r.role === 'franchisor_admin');
   $('unitsLink').hidden = !show; $('franchisorSep').hidden = !show;
+  $('roadmapLink').hidden = !myRoles.some(r => r.role === 'franchisor_admin');   // the franchisor's alone
 }
 
 // What am I here? Franchisor first — it outranks anything farm-level.
@@ -621,6 +625,8 @@ function currentRoute() {
   if (sec === 'farm' && tab === 'people') { sec = 'week'; tab = 'team'; }
   if (sec === 'week' && tab === 'hours') tab = 'team';
   if (!SECTIONS[sec]) { sec = 'dashboard'; tab = ''; }
+  // the roadmap is the franchisor's alone (the database refuses anybody else too): a link to it lands on the dashboard
+  if (sec === 'roadmap' && !myRoles.some(r => r.role === 'franchisor_admin')) { sec = 'dashboard'; tab = ''; }
   const tabs = tabsOf(sec);
   const t = tabs.find(x => x[0] === tab) || tabs[0];
   return { sec, tab: t };

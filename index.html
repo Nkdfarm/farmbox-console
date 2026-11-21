@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20261121m">
+  <link rel="stylesheet" href="styles.css?v=20261121n">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png?v=6" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=6">
@@ -70,6 +70,7 @@
     <a href="#/farm" data-route="farm" data-icon="farm">Farm setup</a>
     <div class="rail-sep" id="franchisorSep" hidden></div>
     <a href="#/units" data-route="units" data-icon="globe" id="unitsLink" hidden>All FarmBoxes</a>
+    <a href="#/roadmap" data-route="roadmap" data-icon="roadmap" id="roadmapLink" hidden>Roadmap</a>
 
     <div class="rail-foot">
       <button class="rail-me" id="meBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="meMenu">
@@ -125,6 +126,7 @@
 <link rel="modulepreload" href="js/prices.js">
 <link rel="modulepreload" href="js/reports.js">
 <link rel="modulepreload" href="js/network.js">
+<link rel="modulepreload" href="js/roadmap.js">
 <link rel="modulepreload" href="js/issues.js">
 <link rel="modulepreload" href="js/operations.js">
 <link rel="modulepreload" href="js/feedback.js">
@@ -180,7 +182,7 @@
 <link rel="modulepreload" href="js/assistant-settings.js">
 <link rel="modulepreload" href="js/aicost.js">
 <!-- /modulepreload -->
-<script type="module" src="js/app.js?v=20261121m"></script>
+<script type="module" src="js/app.js?v=20261121n"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

@@ -10,6 +10,7 @@ import { rpc, openFast, rpcInChunks, mergeValidated } from './api.js';
 import { loading, el, field, input, selectBox, toast, drawer, confirmDrawer, busy, systemLabel, mediumLabel, nurseryField, nurseryLine, pref,
          parseYmd, farmDate, shortDay, money } from './ui.js';
 import { renderTimeline } from './timeline.js';
+import { tagCmd } from './registry.js';
 
 const CAT = { leafy:'ag', mixed_leafy:'ag', herbs:'ag', fruiting_vines:'mt', fruiting_bush:'mt', microgreens:'of' };
 let farm = null, map = null, mount = null;
@@ -243,7 +244,7 @@ function zoneCard(s, cur) {
 
 function tile(p, s, cur) {
   const b = (p.batches || [])[0];
-  const t = el('button', 'plot-tile');
+  const t = tagCmd(el('button', 'plot-tile'), 'plan_position');
   if (b) t.classList.add('fam-' + (CAT[b.category] || 'ag'), 'is-' + b.status);
   else t.classList.add('is-empty');
 
@@ -294,7 +295,7 @@ function openPosition(p, s, cur) {
     // internal or external, until the seedlings are ordered (0101)
     if (map.may_plan && b.id && b.nursery && !b.nursery_plan?.ordered_at && b.status !== 'active') {
       const other = b.nursery === 'external' ? 'internal' : 'external';
-      const sw = el('button', 'btn btn-sm', other === 'external' ? 'Order from a nursery instead' : 'Sow it ourselves instead');
+      const sw = tagCmd(el('button', 'btn btn-sm', other === 'external' ? 'Order from a nursery instead' : 'Sow it ourselves instead'), 'set_batch_nursery');
       sw.onclick = async () => {
         busy(sw, true, 'Changing…');
         try {

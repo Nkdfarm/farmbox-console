@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc } from './api.js';
 import { loading, el, pageHead, toast, busy, cropAvatar, pref, parseYmd, farmDate, farmToday, ago, emptyState } from './ui.js';
+import { tagCmd } from './registry.js';
 
 const DAY = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
@@ -104,7 +105,7 @@ function row(b) {
     const same = el('button', 'btn btn-sm', 'As planned');
     same.title = 'Confirm: it is where the plan says';
     same.onclick = () => { if (stale()) return; save(same, b, b.planned_phase?.phase_type || phase.value, still() ? null : daysLeft(), null); };
-    const go = el('button', 'btn btn-sm btn-primary', 'Save');
+    const go = tagCmd(el('button', 'btn btn-sm btn-primary', 'Save'), 'apply_batch_adjustment');
     go.onclick = () => {
       if (stale()) return;
       // the days left as they were shown say "as planned": what is sent is today's count, not the figure painted

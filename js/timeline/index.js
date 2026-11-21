@@ -9,6 +9,7 @@ import { scale, legend, zoneBlock } from './grid.js';
 import { succession } from './succession.js';
 import { openLabels, validate, discard } from './batch.js';
 import { openCancelValidated } from './clear.js';
+import { tagCmd } from '../registry.js';
 
 // the window on screen: a week back from today, then the span (warm() reads the same)
 export function timelineRange(off = 0) {
@@ -94,12 +95,12 @@ export function paint() {
   const act = el('div', 'tl-actions');
   if (may) {
     // the whole farm is no longer planned in one go (0.7.137): Plan this bay on each zone
-    const suc = el('button', 'btn btn-sm', 'Succession…');
+    const suc = tagCmd(el('button', 'btn btn-sm', 'Succession…'), 'plan_succession');
     suc.title = 'The same crop planted again and again — every week, say — for a steady harvest';
     suc.onclick = () => succession();
     act.append(suc);
     if (!S.steadyMode) {
-      const st = el('button', 'btn btn-sm tl-steady-btn', steadyGroups().length ? '＋ Steady group…' : 'Steady harvest…');
+      const st = tagCmd(el('button', 'btn btn-sm tl-steady-btn', steadyGroups().length ? '＋ Steady group…' : 'Steady harvest…'), 'steady_apply');
       st.title = 'Pick zones to plan together for an even harvest every week — different crops may be mixed. ' +
         'Each group has its own rhythm; the zones of an existing group are changed from its own bar.';
       st.onclick = () => startSteady(null);
@@ -120,11 +121,11 @@ export function paint() {
       const ok = el('button', 'btn btn-sm btn-accent', `Validate ${S.selected.size ? 'selected ' + S.selected.size : proposed.length + ' on screen'}`);
       ok.title = 'Validates the proposals in the dates on screen. Choose a longer span (6 months, Year) to include the ones further ahead.';
       ok.onclick = () => validate(ok, S.selected.size ? [...S.selected] : proposed.map(b => b.id));
-      const no = el('button', 'btn btn-sm', S.selected.size ? `Remove selected ${S.selected.size}` : `Discard ${proposed.length} on screen`);
+      const no = tagCmd(el('button', 'btn btn-sm', S.selected.size ? `Remove selected ${S.selected.size}` : `Discard ${proposed.length} on screen`), 'cancel_crop_plan');
       no.onclick = () => discard(S.selected.size ? [...S.selected] : proposed.map(b => b.id));
       act.append(ok, no);
     } else if (S.selected.size) {
-      const no = el('button', 'btn btn-sm', `Remove selected ${S.selected.size}`);
+      const no = tagCmd(el('button', 'btn btn-sm', `Remove selected ${S.selected.size}`), 'cancel_crop_plan');
       no.onclick = () => discard([...S.selected]);
       act.append(no);
     }

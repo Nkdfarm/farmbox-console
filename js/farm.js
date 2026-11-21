@@ -13,6 +13,7 @@ import { loading, el, field, input, selectBox, toast, busy, drawer, confirmDrawe
 import { catalogCard } from './catalog.js';
 import { locationPicker, forecastLinks, readFarm } from './weather.js';
 import { patch } from './api.js';
+import { tagCmd } from './registry.js';
 
 const DAYS = [[1,'Mon'],[2,'Tue'],[3,'Wed'],[4,'Thu'],[5,'Fri'],[6,'Sat'],[7,'Sun']];
 const CHANNELS = [['direct','Direct to the consumer'], ['retail','To a retailer']];
@@ -392,7 +393,7 @@ function holidaysBlock() {
       add.style.marginTop = 'var(--space-3)'; add.style.alignItems = 'center';
       const day = el('input', 'input'); day.type = 'date';
       const nm = el('input', 'input'); nm.placeholder = 'Why, e.g. Staff day'; nm.style.flex = '1';
-      const go = el('button', 'btn btn-sm', 'Add a closed day');
+      const go = tagCmd(el('button', 'btn btn-sm', 'Add a closed day'), 'save_farm_holiday');
       go.onclick = async () => {
         if (!day.value) { toast('Pick a day', 'bad'); return; }
         busy(go, true, 'Adding…');

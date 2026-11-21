@@ -10,6 +10,7 @@ import { rpc, openFast } from './api.js';
 import { openCase } from './cases.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox,
          toast, busy, shortDate } from './ui.js';
+import { tagCmd } from './registry.js';
 
 const SEVERITY = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
                   ['critical', 'Critical']];
@@ -37,7 +38,7 @@ function paint() {
   const open = data.issues.filter(i => i.status !== 'closed');
   const critical = open.filter(i => i.severity === 'critical').length;
 
-  const raise = el('button', 'btn btn-primary', 'Raise an issue');
+  const raise = tagCmd(el('button', 'btn btn-primary', 'Raise an issue'), 'raise_issue');
   raise.onclick = () => raiseIssue();
 
   mount.append(pageHead(null,

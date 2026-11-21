@@ -7,6 +7,7 @@ import { clearButton } from './clear.js';
 import { propose, planHere } from './batch.js';
 import { dn, DAY, ds, nice, S } from './state.js';
 import { dropTarget, pressable, resizable } from './drag.js';
+import { tagCmd } from '../registry.js';
 
 // one zone: its header (name, positions, buttons), its kg and plants lines, its positions;
 // group = the steady group it belongs to (null: none)
@@ -89,7 +90,7 @@ function row(sys, p, from, to, px, today, cur) {
   const lab = el('div', 'tl-label');
   lab.append(el('b', null, p.code), el('span', 'hint', ` ${Number(p.capacity || 0).toLocaleString()}`));
   lab.title = `${sys.name} · ${p.code} · ${Number(p.capacity || 0).toLocaleString()} places` + (p.area_m2 ? ` · ${p.area_m2} m²` : '');
-  const track = el('div', 'tl-track');
+  const track = tagCmd(el('div', 'tl-track'), 'plan_position');
   if (today >= from && today <= to) {
     const n = el('span', 'tl-today'); n.style.left = ((today - from) * px) + 'px'; track.append(n);
   }
@@ -149,11 +150,12 @@ function barOf(b, sys, p, from, px, cur) {
     .filter(Boolean).join('\n');
 
   if (S.data.may_plan && b.status !== 'harvested') {
-    const handle = el('span', 'tl-handle');
+    const handle = tagCmd(el('span', 'tl-handle'), 'resize_batch');
     handle.title = 'Drag to lengthen or shorten the harvest';
     box.append(handle);
     resizable(handle, box, b, px);
   }
+  tagCmd(box, 'move_batch');
   pressable(box, b, sys, p, from, px);
   return box;
 }

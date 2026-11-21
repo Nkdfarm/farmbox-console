@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, cachedRpc } from './api.js';
 import { loading, el, pageHead, drawer, field, input, selectBox, toast, busy, confirmDrawer, cropAvatar, systemLabel, curSign, farmDate, addDays, ymd, once, emptyState } from './ui.js';
+import { tagCmd } from './registry.js';
 
 let farm = null, mount = null, data = null, showClosed = false, planMap = null;
 const nice = s => s ? new Date(String(s).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -40,7 +41,7 @@ const reload = () => load(true);
 
 function paint() {
   mount.textContent = '';
-  const add = data.may_edit ? el('button', 'btn btn-primary', 'New order') : null;
+  const add = data.may_edit ? tagCmd(el('button', 'btn btn-primary', 'New order'), 'save_order') : null;
   if (add) add.onclick = () => editOrder(null);
   const closed = el('button', 'btn btn-ghost btn-sm', showClosed ? 'Hide delivered and cancelled' : 'Show delivered and cancelled');
   closed.onclick = () => { showClosed = !showClosed; load(); };
@@ -110,7 +111,7 @@ function lineRow(o, l) {
   }
   if (data.may_edit && l.status !== 'cancelled') {
     const acts = el('div', 'row');
-    const plan = el('button', 'btn btn-sm', l.batches ? 'Plan again' : 'Plan');
+    const plan = tagCmd(el('button', 'btn btn-sm', l.batches ? 'Plan again' : 'Plan'), 'plan_order_line', l.id);
     plan.title = 'Place its batches on the Crop planner (as proposals); planning again replaces the proposals, keeps what is decided';
     plan.onclick = async () => {
       busy(plan, true, 'Planning…');

@@ -9,6 +9,7 @@
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, num, subFamilyTag, systemLabel, scheduleText } from './ui.js';
 import { editProcedure } from './procedure-edit.js';
+import { tagCmd } from './registry.js';
 
 const FAM = { Agriculture: 'fam-ag', Maintenance: 'fam-mt', Office: 'fam-of' };
 
@@ -205,7 +206,7 @@ async function openProcedure(row) {
   close.onclick = d.close;
   d.footer.append(close);
   if (p.may_edit) {
-    const edit = el('button', 'btn btn-primary', 'Edit');
+    const edit = tagCmd(el('button', 'btn btn-primary', 'Edit'), 'save_procedure');
     edit.onclick = () => {
       d.close();
       const cats = [...new Set((data?.procedures || []).map(x => x.category).filter(Boolean))].sort();

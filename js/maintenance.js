@@ -9,6 +9,7 @@
 import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, shortDate, ymd, addDays, farmDate, emptyState } from './ui.js';
+import { tagCmd } from './registry.js';
 
 const TYPES = [['pump', 'Pump'], ['filter', 'Filter'], ['dosing_unit', 'Dosing unit'],
                ['fan', 'Fan'], ['light', 'Light'], ['tank', 'Tank'],
@@ -45,7 +46,7 @@ function paint() {
   sched.title = 'Creates the tasks for the next 30 days. Running it twice changes nothing.';
   sched.onclick = () => schedule(sched);
 
-  const add = el('button', 'btn', 'Add equipment');
+  const add = tagCmd(el('button', 'btn', 'Add equipment'), 'save_asset');
   add.onclick = () => editAsset(null);
 
   mount.append(pageHead(null,
@@ -105,7 +106,7 @@ function assetRow(a, may) {
   if (may) {
     const edit = el('button', 'btn btn-ghost btn-sm', 'Edit');
     edit.onclick = () => editAsset(a);
-    const rule = el('button', 'btn btn-ghost btn-sm', 'Add routine');
+    const rule = tagCmd(el('button', 'btn btn-ghost btn-sm', 'Add routine'), 'save_maintenance_rule');
     rule.onclick = () => editRule(a, null);
     head.append(edit, rule);
   }

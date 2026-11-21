@@ -13,6 +13,7 @@ import { rpc, openFast } from './api.js';
 import { loading, el, table, pageHead, drawer, field, input, selectBox, num, toast, busy, sowingLine, cropAvatar,
          systemLabel, mediumLabel, systemsFor, nurseryField, emptyState } from './ui.js';
 import { editCrop, TRACK_SUBJECTS, trackingLine } from './crop-edit.js';
+import { tagCmd } from './registry.js';
 
 // the words on screen, and a colour, for a category code
 const CATS = {
@@ -173,7 +174,7 @@ function cropRow(c) {
       const lbl = el('label', 'hint', 'Plugs per tray ');
       lbl.append(plugs);
       tools.append(lbl);
-      const edit = el('button', 'btn btn-sm' + (editing ? '' : ' btn-primary'), editing ? 'Cancel' : 'Edit phases');
+      const edit = tagCmd(el('button', 'btn btn-sm' + (editing ? '' : ' btn-primary'), editing ? 'Cancel' : 'Edit phases'), 'save_crop');
       edit.onclick = () => paintBody(!editing);
       tools.append(edit);
       if (editing) {

@@ -6,6 +6,7 @@ import { printLabels } from '../labels.js';
 import { nice, DAY, dn, ds, span, S } from './state.js';
 import { fits, reload, cycleOf } from './index.js';
 import { dropProblem, openMoveBatch } from './drag.js';
+import { tagCmd } from '../registry.js';
 
 // ── one batch ────────────────────────────────────────────────────────────────
 export function openBatch(b, sys, p) {
@@ -38,7 +39,7 @@ export function openBatch(b, sys, p) {
     if (b.movable) {
       const fitting = (S.data.crops || []).filter(c => fits(c, sys));
       const crop = selectBox(fitting.map(c => [c.id, c.name]), b.crop_id);
-      const go = el('button', 'btn btn-sm', 'Change crop');
+      const go = tagCmd(el('button', 'btn btn-sm', 'Change crop'), 'change_batch_crop');
       go.onclick = async () => {
         if (crop.value === b.crop_id) return;
         busy(go, true, 'Changing…');

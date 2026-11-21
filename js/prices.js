@@ -17,6 +17,7 @@
 import { rpc, fn, openFast } from './api.js';
 import { loading, el, table, pageHead, card, drawer, field, input, selectBox,
          toast, busy, num, shortDate, curSign } from './ui.js';
+import { tagCmd } from './registry.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -45,7 +46,7 @@ async function load(fresh = false) {
 function paint() {
   mount.textContent = '';
   const ci = data.country_index || {};
-  const rec = el('button', 'btn btn-primary', 'Record a price');
+  const rec = tagCmd(el('button', 'btn btn-primary', 'Record a price'), 'record_market_price');
   rec.onclick = () => record();
   const scan = el('button', 'btn', 'Scan Cape Town now');
   scan.title = 'Collect this week’s Cape Town Market prices now. It also runs by itself every Monday at 13:30.';

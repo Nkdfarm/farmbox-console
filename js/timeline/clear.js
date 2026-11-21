@@ -4,6 +4,7 @@ import { rpc } from '../api.js';
 import { steadyGroups, groupName } from './steady.js';
 import { reload } from './index.js';
 import { S } from './state.js';
+import { tagCmd } from '../registry.js';
 
 // ── clearing a zone, after saying what goes ──────────────────────────────────
 // ── cancel the validated batches in bulk (0157): the whole unit or one steady group, then plan the groups again ──
@@ -92,7 +93,7 @@ export function openCancelValidated() {
 }
 
 export function clearButton(sys) {
-  const b = el('button', 'btn btn-sm btn-ghost tl-clear', 'Clear zone');
+  const b = tagCmd(el('button', 'btn btn-sm btn-ghost tl-clear', 'Clear zone'), 'clear_zone');
   b.title = `Remove the crops planned in ${sys.name} (and, if you choose, the ones growing)`;
   b.onclick = () => openClear(sys);
   return b;

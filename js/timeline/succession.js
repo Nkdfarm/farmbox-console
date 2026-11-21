@@ -3,6 +3,7 @@ import { drawer, selectBox, input, el, field, systemLabel, busy, toast, confirmD
 import { rpc } from '../api.js';
 import { ds, dn, nice, S } from './state.js';
 import { fits, cycleOf, reload } from './index.js';
+import { tagCmd } from '../registry.js';
 
 // ── succession: the same crop again and again ────────────────────────────────
 export function succession() {
@@ -76,7 +77,7 @@ export function splitMenu(sys) {
   const cur = (sys.positions || []).length;
   const base = Number(sys.base_units) || cur;
   const wrap = el('label', 'tl-split');
-  const sel = el('select', 'input');
+  const sel = tagCmd(el('select', 'input'), 'split_zone');
   const opts = (sys.splits || []).map(o => ({ n: Number(o.n), each: Number(o.places_each), rows: Number(o.rows_each) }));
   if (!opts.some(o => o.n === cur) && cur) opts.push({ n: cur, each: total / cur, rows: base / cur });
   opts.sort((a, b) => b.n - a.n).forEach(o => {

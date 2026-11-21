@@ -1669,6 +1669,22 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-machine { display: flex; flex-direction: column; gap: 6px; min-width: 200px; max-width: 280px; padding: 10px; border-radius: var(--radius-md);
   border: 1px solid var(--divider); background: var(--surface-2); font-size: var(--text-sm); }
 .ir-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+/* FarmNet › Windows (21 Nov 2026): one card a program, FarmNet now, the form, today's clock times */
+.win-card { margin-top: var(--space-3); }
+.win-now, .win-preview { margin: var(--space-2) 0; }
+.win-form .win-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: flex-end; margin: var(--space-2) 0; }
+.win-form .win-row .field { margin: 0; }
+.win-periods { border-collapse: collapse; width: 100%; min-width: 560px; }
+.win-periods th, .win-periods td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); font-weight: normal; }
+.win-periods thead th { white-space: nowrap; }
+.win-num { padding: 2px 6px; }
+.win-signal { max-width: 14em; }
+.win-off { white-space: nowrap; margin-left: 6px; }
+.win-grey { opacity: .7; }
+.win-days { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.win-steps { margin: var(--space-2) 0; padding-left: 1.2em; }
+.win-steps li.is-done { color: var(--success); }
+.win-steps li.is-bad { color: var(--error); }
 .ir-meas { display: flex; align-items: baseline; gap: 8px; }
 .ir-meas b { font-size: var(--text-lg); }
 .ir-meas .ir-off { color: var(--warning); }

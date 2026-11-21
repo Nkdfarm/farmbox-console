@@ -15,8 +15,12 @@
 // the body of an edit, a copy or a new one, as the pages built it before the registry.
 const fnSend = (action, fixed) => async (a, ctx) => {
   const { send } = await import('./farmnet/shell.js');
-  const { changes, ...args } = a || {};
-  return send(ctx.farm, action, { ...args, ...(fixed || {}) }, changes, ctx.op);   // op: its row of the operation log (0286)
+  // diy (diy_edit): the periods and influences, sent as changes.diy (the function reads them there)
+  // switch_on (diy_edit of on/off): the card's own "Switch the program on" — the function refuses 100 while the program is
+  // off without it, and refuses it from the AI
+  const { changes, diy, switch_on, ...args } = a || {};
+  const ch = diy !== undefined ? { ...(changes || {}), diy, ...(switch_on === true ? { switch_on: true } : {}) } : changes;
+  return send(ctx.farm, action, { ...args, ...(fixed || {}) }, ch, ctx.op);   // op: its row of the operation log (0286)
 };
 // the button of one program or recipe first (data-cmd-key = its number), else any button of the command on screen
 const keyed = (name, keyOf) => (a, root) => {
@@ -30,13 +34,16 @@ const recId = { type: 'int', required: true, min: 0, label: 'Recipe number' };
 const mixer = { type: 'int', required: true, min: 0, label: 'Mixer' };
 const snapshot = { type: 'uuid', required: true, label: 'Kept state' };
 const IRR = ['#/farmnet/irrigation'];
+const WIN = ['#/farmnet/windows'];   // FarmNet › Windows (21 Nov 2026)
+const setting = { type: 'int', required: true, min: 1, max: 1000, label: 'The program setting (SR: 1 on/off, 3 interval, 10–19 a start, 20–29 its end)' };
+const irrigationProgram = { type: 'int', required: true, enum: [0], label: 'Irrigation program (0)' };
 const RUN = ['#/farmnet/overview', '#/farmnet/irrigation'];
 const MIX = ['#/farmnet/overview', '#/farmnet/mixing'];
 const what = (a, word) => `${word}${a?.changes?.name ? ` "${a.changes.name}"` : ''}`;
 
 const FARMNET = [
   // programs and recipes: FarmNet keeps no history, the function does (0283) — every change can be put back (A)
-  { name: 'program_set', family: 'water', label: 'Change an irrigation program', pages: IRR, revert: 'A', stageable: true,
+  { name: 'program_set', family: 'water', label: 'Change an irrigation program', pages: [...IRR, ...WIN], revert: 'A', stageable: true,
     args: { id: centre, proId, changes: { type: 'object', required: true, label: 'What changes' } },
     preview: a => `Change program ${a.proId}: ${Object.keys(a.changes || {}).join(', ') || 'nothing'}`,
     anchor: keyed('program_set', a => a.proId) },
@@ -50,6 +57,19 @@ const FARMNET = [
     args: { id: centre, proId }, preview: a => `Delete program ${a.proId} (kept, to make again)`, anchor: keyed('program_remove', a => a.proId) },
   { name: 'program_restore', family: 'water', label: 'Put an irrigation program back as it was', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, snapshot }, preview: () => 'Put a program back as it was', anchor: keyed('program_restore', a => a.snapshot) },
+  // a program setting's DIY periods (FarmNet › Windows): the function keeps the DIY before each change (0289), so each is
+  // put back (A) — diy_add by FarmNet's DIY remove, diy_edit by the periods kept. diy_edit needs the setting DIY first:
+  // a build stages diy_add before it
+  { name: 'diy_add', family: 'water', label: 'Make a program setting follow DIY periods', pages: WIN, revert: 'A', stageable: true,
+    args: { id: centre, type: irrigationProgram, proId, SR: setting },
+    preview: a => `Program ${a.proId}: setting ${a.SR} follows DIY periods (one, holding its value)`, anchor: keyed('diy_add', a => a.proId) },
+  { name: 'diy_edit', family: 'water', label: 'Change the DIY periods of a program setting', pages: WIN, revert: 'A', stageable: true,
+    args: { id: centre, type: irrigationProgram, proId, SR: setting, diy: { type: 'object', required: true, label: 'The periods (time) and influences (influe)' },
+            switch_on: { type: 'boolean', label: 'Switch the program on (on/off only; a person only, never the AI)' } },
+    preview: a => `Program ${a.proId}: setting ${a.SR}, ${a.diy?.time?.length ?? 0} period${a.diy?.time?.length === 1 ? '' : 's'}, ${a.diy?.influe?.length ?? 0} influence${a.diy?.influe?.length === 1 ? '' : 's'}`,
+    anchor: keyed('diy_edit', a => a.proId) },
+  { name: 'diy_restore', family: 'water', label: 'Put the DIY periods of a program setting back as they were', pages: WIN, revert: 'A', stageable: true,
+    args: { id: centre, snapshot }, preview: () => 'Put the DIY periods of a program setting back as they were' },
   { name: 'formula_set', family: 'water', label: 'Change a recipe', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, proId: recId, changes: { type: 'object', required: true, label: 'What changes' } },
     preview: a => `Change recipe ${a.proId}: ${Object.keys(a.changes || {}).join(', ') || 'nothing'}`,

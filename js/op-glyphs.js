@@ -49,6 +49,8 @@ const S = true, R = false;
 export const COMMAND_GLYPH = {
   program_set: ['program', 'changed', S], program_add: ['program', 'new', S], program_copy: ['program', 'new', S],
   program_remove: ['program', 'deleted', S], program_restore: ['program', 'revert', S],
+  // a program setting turned DIY and its periods (FarmNet › Windows, 0289): the program's own glyph
+  diy_add: ['program', 'changed', S], diy_edit: ['program', 'changed', S], diy_restore: ['program', 'revert', S],
   formula_set: ['recipe', 'changed', S], formula_add: ['recipe', 'new', S], formula_copy: ['recipe', 'new', S],
   formula_remove: ['recipe', 'deleted', S], formula_restore: ['recipe', 'revert', S],
   irrigation_program_start: ['run', 'start', R], irrigation_pause: ['run', 'pause', R],

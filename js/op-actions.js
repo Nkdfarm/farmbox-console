@@ -63,7 +63,10 @@ export function actionsOf(o, ctx) {
 const fnPrefix = o => o.command.split('_')[0];
 export function farmnetUndo(o) {
   const id = o.args?.id;
-  if (id == null || !['program', 'formula'].includes(fnPrefix(o))) return null;
+  if (id == null || !['program', 'formula', 'diy'].includes(fnPrefix(o))) return null;
+  // a program setting's DIY (FarmNet › Windows, 0289): the copy kept before it — its periods back, or FarmNet's DIY remove
+  // when it was not DIY then (diy_add)
+  if (fnPrefix(o) === 'diy') return o.snapshot_id ? { name: 'diy_restore', args: { id, snapshot: o.snapshot_id }, text: 'FarmNet gets back the DIY periods kept just before this change (or the setting its own value again, when it was not DIY then).' } : null;
   if (o.snapshot_id) return { name: `${fnPrefix(o)}_restore`, args: { id, snapshot: o.snapshot_id }, text: 'FarmNet gets back the copy kept just before this change.' };
   if (o.args?.created != null) return { name: `${fnPrefix(o)}_remove`, args: { id, proId: o.args.created }, text: `FarmNet deletes the ${fnPrefix(o) === 'program' ? 'program' : 'recipe'} ${o.args.created} this made (a copy is kept, to make it again).` };
   return null;

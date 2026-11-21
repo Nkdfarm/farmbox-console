@@ -12,6 +12,8 @@
 //               commands — read again every minute while it is on screen
 //   Irrigation  the water's way (tanks drawn to their level), today's programs on a clock, the recipes
 //               drawn and, for the Admin and Farm manager, changed (20 Nov 2026); runs
+//   Windows     one card per irrigation program: its day in three periods from sunrise and sunset, a first cycle at
+//               sunset, FarmNet's own DIY periods and influences (21 Nov 2026, plan-irrigation-windows-2026-11-21)
 //   Mixing      each mixer live; its programs, its runs, the recipes in a list
 //   Climate     each zone's devices and their state; its setpoints
 //   Sensors     every signal source FarmNet has: choose up to 8 for the
@@ -27,5 +29,6 @@
 export { renderFnOverview } from './farmnet/overview.js';
 export { renderFnMixing, renderFnClimate } from './farmnet/control.js';
 export { renderFnIrrigation } from './farmnet/irrigation.js';
+export { renderFnWindows } from './farmnet/windows.js';   // the irrigation windows, one card a program (21 Nov 2026)
 export { renderFnSensors, renderFnAlarms, renderFnCommands } from './farmnet/sensors.js';
 export { forgetFarmnet } from './farmnet/shell.js';   // the answers kept for opening a page at once (shell.js): gone at sign-out

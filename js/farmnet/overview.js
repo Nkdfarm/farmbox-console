@@ -111,7 +111,9 @@ async function realOf(farm, ids) {
 // FN_ASM_2 is bay 7, FN_ETH_31 are bay 5-6-7, FN_ETH_32 is bay 1-2-3-4, other i do not know now". Corrected the
 // same day: "strawberry air temp is eth33 … s3 win1 and win2 are the windows, custom equipment is the strawberry
 // position 0% bottom, 100% top. EBB and flow and NFT: eth2 [FN_ETH_32] air sensor, screen s2 win1,2,3,4; vines air
-// and medium sensor asm2 and eth31 only air sensor". FN_ASM_2 (air and soil) serves the vines and the strawberries; FN_ASM_1 is not on the plan. The vines' six vents are still
+// and medium sensor asm2 and eth31 only air sensor". Corrected 21 Nov 2026 from FarmNet's own readings: FN_ASM_1 and FN_ASM_2
+// ("Soil Humid. %") both rise 1–9 min after every Strawberry vegetative run (17–20 Nov) and not at the tomato runs, so both
+// are in Bay 8 (plan-irrigation-windows-2026-11-21); the vines have FN_ETH_31 only (air). The vines' six vents are still
 // ASSUMED two a bay, in FarmNet's order: each one shows its own name, so a wrong guess shows and is corrected here.
 const PLANS = {
   FB1: {
@@ -123,14 +125,17 @@ const PLANS = {
       { fn: 'Strawberries', bays: [8], vents: ['S3_Win1', 'S3_Win2'], shade: 'S3_Shade', lift: 'Strawberry position' },
     ],
     // the first sensor of a bay is the one shown big; one that serves several bays is marked "zone sensor"
-    sensors: { 1: ['FN_ETH_32'], 2: ['FN_ETH_32'], 3: ['FN_ETH_32'], 4: ['FN_ETH_32'], 5: ['FN_ETH_31', 'FN_ASM_2'], 6: ['FN_ETH_31', 'FN_ASM_2'], 7: ['FN_ETH_31', 'FN_ASM_2'], 8: ['FN_ETH_33', 'FN_ASM_2'] },
+    sensors: { 1: ['FN_ETH_32'], 2: ['FN_ETH_32'], 3: ['FN_ETH_32'], 4: ['FN_ETH_32'], 5: ['FN_ETH_31'], 6: ['FN_ETH_31'], 7: ['FN_ETH_31'], 8: ['FN_ETH_33', 'FN_ASM_1', 'FN_ASM_2'] },
     // the sensors that also read the growing medium: of the rest of their values, light and CO2 are the air's, battery and signal the sensor's own, the others the medium's
-    medium: ['FN_ASM_2'],
+    medium: ['FN_ASM_1', 'FN_ASM_2'],
     // what each sensor reads (owner, 5 and 8 Nov: "asm2 air and soil, eth31 air", "eth33 air", "eth2 air"). They hang at different heights, so two in one bay read a little apart
-    kinds: { FN_ETH_31: 'air', FN_ETH_32: 'air', FN_ETH_33: 'air', FN_ASM_2: 'air and soil' },
+    kinds: { FN_ETH_31: 'air', FN_ETH_32: 'air', FN_ETH_33: 'air', FN_ASM_1: 'air and soil', FN_ASM_2: 'air and soil' },
     valves: { 1: ['EBB 1A', 'EBB 1B'], 2: ['NFT Bay234'], 3: ['NFT Bay234'], 4: ['NFT Bay234'], 5: ['Bay 5'], 6: ['Bay 6'], 7: ['Bay 7'], 8: ['Bay 8'] },
   },
 };
+
+// the bays a sensor of the plan is in (FarmNet › Windows offers Bay 8's substrate moisture to Auto): [] when not on it
+export const baysOfSensor = (code, name) => Object.entries(PLANS[code]?.sensors || {}).filter(([, l]) => l.includes(name)).map(([n]) => Number(n));
 
 // the plan with each place's source: { bays: [{ n, kind, zone, vents, sensors, valves, shared }], zones, weather, ids }
 function planOf(P, src) {

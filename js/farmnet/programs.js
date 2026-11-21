@@ -71,7 +71,7 @@ export async function newProgram(ctx, c, recipes, existing, redraw) {
 
 // at: the time pressed on the clock (minutes after midnight), offered for a new start; after: called when the drawer
 // closes having changed something (a new program redraws the page even when nothing more was saved)
-export async function openProgram(ctx, c, p, recipes, at, after) {
+export async function openProgram(ctx, c, p, recipes, at, after, more = {}) {
   let dirty = () => false;
   const d = drawer(p.NM || `Program ${p.ID}`, `${c.name} · as FarmNet holds it now`, {
     guard: () => (dirty() ? confirmDrawer('Leave without saving?', 'The values you changed are not sent to FarmNet.', 'Leave') : true),
@@ -418,5 +418,15 @@ export async function openProgram(ctx, c, p, recipes, at, after) {
     dirty = () => false; d.close();
     copyThing(ctx, c, 'program', { ID: p.ID, NM: was.name || p.NM }, c.names?.programs, recipes, after);
   };
-  d.footer.append(del, copy, save);
+  // the transition (owner, 21 Nov 2026: every program moves to the new format once it works on FarmNet): this program
+  // opened in the sun-cycle panel, filled from what FarmNet holds; nothing changes until Save there
+  const conv = el('button', 'btn', '☀ Convert to sun cycle…'); conv.type = 'button';
+  conv.title = 'Open this program in the simple sun-cycle panel; FarmNet changes only when you Save there';
+  conv.onclick = async () => {
+    if (dirty()) { toast('Save or undo your changes first', 'bad'); return; }
+    dirty = () => false; d.close();
+    const { openSunCycle } = await import('./suncycle.js');
+    openSunCycle(ctx, c, p, { recipes, records: more.records || [], programs: more.programs || [], after: after || ctx.redraw });
+  };
+  d.footer.append(del, copy, ...(ctx.may ? [conv] : []), save);
 }

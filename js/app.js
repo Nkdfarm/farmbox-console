@@ -36,7 +36,7 @@ import { renderValidation } from './validation.js';
 import { renderBaskets, basketArgs } from './baskets.js';
 import { renderFarmnet, renderHeatmap, renderGrowth, renderCounting, renderDevices } from './connect.js';
 import { drop3d } from './farmnet3d.js';
-import { renderFnOverview, renderFnIrrigation, renderFnWindows, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands, forgetFarmnet } from './farmnet.js';
+import { renderFnOverview, renderFnIrrigation, renderFnMixing, renderFnClimate, renderFnSensors, renderFnAlarms, renderFnCommands, forgetFarmnet } from './farmnet.js';
 import { initAssistant, assistantFarmChanged, forgetAssistant, assistantReady, assistantRouteChanged } from './assistant.js';
 import { initStrip, stripRouteChanged, forgetStrip } from './op-strip.js';
 import { liveOpen } from './live.js';
@@ -120,7 +120,7 @@ const SECTIONS = {
     ['counting', 'Counting', renderCounting], ['devices', 'Devices & API', renderDevices]] },
   // FarmNet (0272, 5 Nov 2026): the controller itself, live, through the edge function farmnet; its admin and farm manager send commands
   farmnet: { title: 'FarmNet', tabs: [
-    ['overview', 'Overview', renderFnOverview], ['irrigation', 'Irrigation', renderFnIrrigation], ['windows', 'Windows', renderFnWindows], ['mixing', 'Mixing', renderFnMixing],
+    ['overview', 'Overview', renderFnOverview], ['irrigation', 'Irrigation', renderFnIrrigation], ['mixing', 'Mixing', renderFnMixing],
     ['climate', 'Climate', renderFnClimate], ['sensors', 'Sensors', renderFnSensors], ['alarms', 'Alarms', renderFnAlarms], ['commands', 'Commands', renderFnCommands]] },
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
@@ -151,7 +151,7 @@ const PAGE_KIND = {
   'connect/farmnet': 'overview', 'connect/heatmap': 'overview', 'connect/growth': 'overview', 'connect/counting': 'overview',
   'grow/planner': 'work', 'maintenance/equipment': 'work', 'dashboard/timeline': 'work', 'connect/devices': 'work', 'farm/zones': 'work',
   // FarmNet: one controller per unit (the farm's code names its secrets), so one unit at a time
-  'farmnet/overview': 'work', 'farmnet/irrigation': 'work', 'farmnet/windows': 'work', 'farmnet/mixing': 'work', 'farmnet/climate': 'work',
+  'farmnet/overview': 'work', 'farmnet/irrigation': 'work', 'farmnet/mixing': 'work', 'farmnet/climate': 'work',
   'farmnet/sensors': 'work', 'farmnet/alarms': 'work', 'farmnet/commands': 'work',
 };
 // Both loads the page's module once per unit (./x.js?unit=…): each copy keeps its own state

@@ -1670,10 +1670,6 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
   border: 1px solid var(--divider); background: var(--surface-2); font-size: var(--text-sm); }
 .ir-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
 /* FarmNet › Windows (21 Nov 2026): one card a program, FarmNet now, the form, today's clock times */
-.win-card { margin-top: var(--space-3); }
-.win-now, .win-preview { margin: var(--space-2) 0; }
-.win-form .win-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: flex-end; margin: var(--space-2) 0; }
-.win-form .win-row .field { margin: 0; }
 .win-periods { border-collapse: collapse; width: 100%; min-width: 560px; }
 .win-periods th, .win-periods td { padding: 4px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); font-weight: normal; }
 .win-periods thead th { white-space: nowrap; }
@@ -3208,3 +3204,37 @@ body.ai-building .toast { z-index: 1004; }
   .tls-toggle { padding: 0 6px; }
   .tls-pop { width: calc(100vw - 16px); }
 }
+
+/* FarmNet › Irrigation: the sun-cycle panel (farmnet/suncycle.js, 21 Nov 2026) */
+.drawer.sc-drawer { width: min(640px, 100vw); }
+.sc-sec { margin: var(--space-3) 0; }
+.sc-head { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: flex-end; }
+.sc-name { width: 22em; max-width: 100%; }
+.sc-label { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: var(--space-1); }
+.sc-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; }
+.sc-step, .sc-shift { display: inline-flex; align-items: center; gap: var(--space-2); }
+.sc-stepbtn { min-width: 2.2em; font-size: var(--text-base, 15px); }
+.sc-big { font-size: 1.5rem; min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.sc-shifts { justify-content: space-between; margin-top: var(--space-1); }
+.sc-bar { width: 100%; height: auto; display: block; margin: var(--space-2) 0 0; }
+.sc-band { opacity: .55; }
+.sc-band.sc-p0 { fill: #f2b84b; } .sc-band.sc-p1 { fill: #e8894a; } .sc-band.sc-p2 { fill: #5b6fd6; }
+.sc-band.is-off { opacity: .15; }
+.sc-tick { fill: var(--text); opacity: .85; }
+.sc-first { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.sc-sun { stroke: var(--text-muted); stroke-dasharray: 3 3; }
+.sc-txt { fill: var(--text-muted); font-size: 30px; }
+.sc-sun { stroke-width: 3; }
+.sc-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.sc-period { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); border-top-width: 4px; }
+.sc-period.sc-p0 { border-top-color: #f2b84b; } .sc-period.sc-p1 { border-top-color: #e8894a; } .sc-period.sc-p2 { border-top-color: #5b6fd6; }
+.sc-ptitle { font-weight: 600; }
+.sc-pair { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-1); }
+.sc-num { width: 4.5em; }
+.sc-none { color: var(--text-muted); margin: var(--space-2) 0; }
+.sc-summary { margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--accent-soft); font-weight: 500; }
+.sc-water { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-1) 0; }
+.sc-copy { margin: var(--space-2) 0; }
+.sc-more { margin: var(--space-2) 0; }
+.sc-badge { margin-left: 6px; font-size: var(--text-xs); padding: 1px 6px; border-radius: var(--radius-full); background: var(--warning-bg); color: var(--warning); white-space: nowrap; }
+@media (max-width: 560px) { .sc-periods { grid-template-columns: 1fr; } }

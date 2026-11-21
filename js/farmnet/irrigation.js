@@ -21,6 +21,8 @@ import { el, drawer, field, pref, toast } from '../ui.js';
 import { centreButtons } from './overview.js';
 import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
 import { openProgram, newProgram } from './programs.js';
+import { openSunCycle, newSunCycle } from './suncycle.js';
+import { isSunCycle } from './windows-plan.js';
 import { quickDelete, assignRecipe, deletedList } from './irrigation-actions.js';
 import { valvesSection, rangesSection } from './valves.js';
 import { tagCmd } from '../registry.js';
@@ -96,13 +98,24 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       if (ctx.may && !programs.e) {
         const nb = tagCmd(el('button', 'btn btn-sm', '＋ New program'), 'program_add'); nb.type = 'button';
         nb.onclick = () => newProgram(ctx, c, recipes, programs.v || [], ctx.redraw);
-        th.append(nb);
+        // the new format (owner, 21 Nov 2026): a program run by the sun, set in one simple panel
+        const ns = tagCmd(el('button', 'btn btn-sm btn-primary', '☀ New sun-cycle program'), 'program_add'); ns.type = 'button';
+        ns.onclick = () => newSunCycle(ctx, c, { recipes, records: records.v?.record || [], programs: programs.v || [], after: ctx.redraw });
+        th.append(ns, nb);
       }
       k.append(th);
       if (programs.e) k.append(bad(programs.e));
       else {
         const box = clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
-          (p, at) => openProgram(ctx, c, p, recipes, at));
+          (p, at) => (isSunCycle(parOf(p.ID))
+            ? openSunCycle(ctx, c, p, { recipes, records: records.v?.record || [], programs: programs.v || [], after: ctx.redraw })
+            : openProgram(ctx, c, p, recipes, at, undefined, { records: records.v?.record || [], programs: programs.v || [] })));
+        // a sun-cycle program says so on its row
+        box.querySelectorAll('.ir-row[data-pid]').forEach(row => {
+          if (!isSunCycle(parOf(row.dataset.pid))) return;
+          const b = el('span', 'sc-badge', '☀ Sun cycle'); b.title = 'Set in the sun-cycle panel: FarmNet runs it with the sun';
+          row.querySelector('.ir-label')?.append(b);
+        });
         if (ctx.may) box.querySelectorAll('.ir-row.is-open[data-pid]').forEach(row => {
           const p = (programs.v || []).find(x => String(x.ID) === row.dataset.pid);
           if (!p) return;

@@ -84,6 +84,17 @@ export function valvesOf(par) {
   return (Array.isArray(par?.SRC) ? par.SRC : []).flatMap(s => (Array.isArray(s?.VAL) ? s.VAL : [])
     .map(v => ({ sid: Number(s.SID), id: Number(v.ID), name: String(v.NM ?? v.ID), stm: num(diyV(v.STM)) ?? 0 })));
 }
+// a program's water sources as FarmNet holds them: each with its recipe (FID, −1 none; ff: it takes one) and valves
+export function sourcesOf(par) {
+  return (Array.isArray(par?.SRC) ? par.SRC : []).map(s => ({ sid: Number(s.SID), name: String(s.SNM ?? `Water source ${s.SID}`), ff: s.FF !== false,
+    fid: Number(s.FID ?? -1), valves: (Array.isArray(s.VAL) ? s.VAL : []).map(v => ({ id: Number(v.ID), name: String(v.NM ?? v.ID), stm: num(diyV(v.STM)) ?? 0 })) }));
+}
+// a sun-cycle program (the new format, Save below): cycle mode, the interval DIY, start 1 the whole day (00:00 → 23:59)
+export function isSunCycle(par) {
+  const t0 = Array.isArray(par?.TM) ? par.TM[0] : null;
+  return Number(par?.SMD) === 1 && par?.CST?.DEN === true && !!t0 && t0.USE === true
+    && num(diyV(t0.ST)) === WINDOW[0] && num(diyV(t0.ET)) === WINDOW[1];
+}
 const PERIOD_OF_TP = { 1: 0, 0: 1, 2: 2 };
 const blankPeriod = () => ({ off: null, ramp: 0, auto: { signal: '', target: null, range: 20 }, weather: { signal: '', setpoint: null, range: 20 } });
 
@@ -134,7 +145,12 @@ export function planFromFarmnet(prog, par, diy = {}) {
   plan.periods.forEach(p => { if (p.off !== null && p.off > OFF_MAX_MIN) p.off = null; });
   // the owner's cycle (21 Nov 2026): the cycle restarts every day at sunset — the first irrigation at the night period's
   // start (sunset ± its shift), for every system; one on time for all periods (every valve the same)
-  plan.anchorAt = 'sunset'; plan.anchor = plan.p3;
+  // the first irrigation: at sunset (the night start) or at sunrise (the morning start) — owner, 21 Nov 2026: one window
+  // for NFT and vines, an easy switch. Read back from Save's switch-on (the gap: a 4th+ EN period holding 0, of tp 2 or 1)
+  const gapP = linked(diy.en) && Array.isArray(diy.en.time) ? diy.en.time.slice(3).find(x => num(x?.bv) === 0) : null;
+  plan.anchorAt = gapP && Number(gapP.tp) === 1 ? 'p1' : 'sunset';
+  plan.anchor = plan.p3;
+  plan.sources = sourcesOf(par);
   plan.on = valves.length ? Math.max(...valves.map(v => v.stm)) : null;
   plan.onDiffers = new Set(valves.map(v => v.stm)).size > 1;
   plan.name = String(prog?.NM ?? par?.NM ?? '');
@@ -198,6 +214,46 @@ export function dayOf(plan, sun) {
   const order = periods.every((p, i) => i === 0 || p.len > 0) && periods[0].len > 0;
   const a = plan.anchorAt === 'p1' ? sun.rise + plan.p1 * 60 : sun.set + plan.anchor * 60;
   return { anchor: ((a % DAY) + DAY) % DAY, periods, runs: periods.reduce((a, p) => a + p.runs, 0), order, on };
+}
+
+export function simulate(plan, sun) {
+  const d = dayOf(plan, sun); if (!d) return null;
+  const on = num(plan.on) ?? d.on;
+  if (!on || on <= 0) return { starts: [], perPeriod: [0, 0, 0], on: 0 };
+  const kOf = s => periodAt(d, ((s % DAY) + DAY) % DAY);
+  const nextOnStart = s => {   // the next start of a period that irrigates, after s (absolute seconds)
+    let best = null;
+    for (let k = 0; k < 3; k++) {
+      if (plan.periods[k].off === null) continue;
+      let t = d.periods[k].start; while (t <= s) t += DAY;
+      if (best === null || t < best) best = t;
+    }
+    return best;
+  };
+  const a0 = d.anchor, stop = a0 + DAY, starts = [], perPeriod = [0, 0, 0];
+  let t = a0;
+  if (plan.periods[kOf(t)]?.off === null) t = nextOnStart(t);
+  let guard = 0;
+  while (t !== null && t < stop && guard++ < 2000) {
+    const k = kOf(t);
+    starts.push({ at: t % DAY, k }); perPeriod[k]++;
+    const end = t + on, ke = kOf(end), off = plan.periods[ke]?.off;
+    t = off === null || off === undefined ? nextOnStart(end) : end + Math.max(60, off * 60);
+  }
+  return { starts, perPeriod, on };
+}
+// cycles ⇄ off time in a period: n cycles in today's length of the period (FarmNet holds the off time only, so the count
+// moves a little as the days lengthen or shorten)
+export function offForCycles(plan, sun, k, n) {
+  const d = dayOf(plan, sun);
+  if (!d || !Number.isInteger(n) || n < 1 || plan.periods[k]?.off === null) return null;
+  // the longest off time that still gives n cycles today (the count falls as the off time grows): a search, so the
+  // number typed is the number the day shows (verifier, 21 Nov 2026)
+  const count = off => { const p = structuredClone(plan); p.periods[k].off = off; return simulate(p, sun)?.perPeriod[k] ?? 0; };
+  if (count(1) < n) return 1;
+  let lo = 1, hi = OFF_MAX_MIN;
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (count(mid) >= n) lo = mid; else hi = mid - 1; }
+  return lo;
 }
 
 // the median of the measured volume of a program's runs (irrigation_records type 0, VLM m³), in litres; 0 = no flow reading
@@ -277,6 +333,13 @@ export function programChanges(plan, par, sun) {
     ch.cycle = Math.max(60, Math.min(60000, cstSeconds(first?.off ?? 1, d?.on ?? 0)));
   }
   if (!ch.starts.length) delete ch.starts;
+  // valves or a recipe changed on the panel: the sources in full (every valve the one on time), else the run times only
+  const was = sourcesOf(par);
+  const shape = ss => JSON.stringify((ss || []).map(s => [s.sid, s.ff ? s.fid : null, s.valves.map(v => v.id)]));
+  if (plan.sources && shape(plan.sources) !== shape(was)) {
+    ch.sources = plan.sources.map(s => ({ sid: s.sid, ...(s.ff ? { fid: s.fid } : {}), valves: s.valves.map(v => ({ id: v.id, stm: plan.on ?? v.stm })) }));
+    delete ch.valves;
+  }
   const name = String(plan.name ?? '').trim();
   if (name && name !== String(par?.NM ?? '')) ch.name = name;
   // never on by Save: only the card's own "Switch the program on", and only here when EN stays a plain value (a DIY EN
@@ -386,13 +449,17 @@ export function enDiy(plan, enLinked, sun = null) {
   const d = sun ? dayOf(plan, sun) : null;
   const k = d ? periodAt(d, d.anchor) : -1;
   const gap = sun && anchorGap(plan, sun) && k >= 0 && bv[k] === 100;
-  if (!anyOff && !enLinked && !gap) return null;
-  if (!enLinked && bv.every(v => v === 0)) return null;
+  if (!sun) {   // (no sun: the plain rule — written only when a period is OFF or EN is DIY already)
+    if (!anyOff && !enLinked) return null;
+    if (!enLinked && bv.every(v => v === 0)) return null;
+  }
   const time = [period(1, plan.p1 * 60, bv[0]), period(0, NOON, bv[1]), period(2, plan.p3 * 60, bv[2])];
-  if (gap) {
+  if (sun) {
+    // the gap before the first irrigation, always written (verifier, 21 Nov 2026): its type keeps the sunrise / sunset
+    // choice for a program that is off or an OFF night too; holding 0, it ends a run in the period before in time
     const [tp, off] = anchorRel(plan);
     time.push(period(tp, off - gapOf(plan), 0));
-    if (!time.slice(0, 3).some(x => x.tp === tp && x.st === stOf(tp, off))) time.push(period(tp, off, 100));
+    if (gap && !time.slice(0, 3).some(x => x.tp === tp && x.st === stOf(tp, off))) time.push(period(tp, off, 100));
   }
   return { time, influe: [] };
 }
@@ -460,7 +527,7 @@ export function prepareSave(plan, sun, fresh, sourceIds, managed = () => false) 
   // start 1 already DIY: set to one period holding 00:00 (never made DIY by Save)
   if (linked(fresh.st) && !isStartDiy(fresh.st)) diy('st', srs.st, fresh.st, { ...startDiy(), influe: fresh.st?.influe || [] }, 'start 1');
   keptInfluences(fresh.cst, managed, plan.drop).filter(k => k.why && !k.dropped)
-    .forEach(k => problems.push(`the interval: the influence on ${k.name} — ${k.why}: drop it on the card first`));
+    .forEach(k => problems.push(`the interval: the influence on ${k.name} — ${k.why}: drop it in the panel first`));
   diy('cst', srs.cst, fresh.cst, cstDiy(plan, sun, fresh.cst?.influe || [], managed), 'the interval');
   const e = enDiy({ ...plan, enNow: enNowOf(par, fresh.en) }, linked(fresh.en), sun);
   diy('en', srs.en, fresh.en, e ? { ...e, influe: fresh.en?.influe || [] } : null, 'on/off');

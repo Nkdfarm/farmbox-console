@@ -37,7 +37,7 @@ const recId = { type: 'int', required: true, min: 0, label: 'Recipe number' };
 const mixer = { type: 'int', required: true, min: 0, label: 'Mixer' };
 const snapshot = { type: 'uuid', required: true, label: 'Kept state' };
 const IRR = ['#/farmnet/irrigation'];
-const WIN = ['#/farmnet/windows'];   // FarmNet › Windows (21 Nov 2026)
+const WIN = ['#/farmnet/irrigation'];   // the sun-cycle panel, opened from FarmNet › Irrigation (21 Nov 2026; was the Windows tab)
 const setting = { type: 'int', required: true, min: 1, max: 1000, label: 'The program setting (SR: 1 on/off, 3 interval, 10–19 a start, 20–29 its end)' };
 const irrigationProgram = { type: 'int', required: true, enum: [0], label: 'Irrigation program (0)' };
 const RUN = ['#/farmnet/overview', '#/farmnet/irrigation'];
@@ -46,7 +46,7 @@ const what = (a, word) => `${word}${a?.changes?.name ? ` "${a.changes.name}"` : 
 
 const FARMNET = [
   // programs and recipes: FarmNet keeps no history, the function does (0283) — every change can be put back (A)
-  { name: 'program_set', family: 'water', label: 'Change an irrigation program', pages: [...IRR, ...WIN], revert: 'A', stageable: true,
+  { name: 'program_set', family: 'water', label: 'Change an irrigation program', pages: [...new Set([...IRR, ...WIN])], revert: 'A', stageable: true,
     args: { id: centre, proId, changes: { type: 'object', required: true, label: 'What changes' } },
     preview: a => `Change program ${a.proId}: ${Object.keys(a.changes || {}).join(', ') || 'nothing'}`,
     anchor: keyed('program_set', a => a.proId) },

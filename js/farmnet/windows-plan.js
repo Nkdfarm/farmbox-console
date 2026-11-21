@@ -268,7 +268,7 @@ export function medianVolume(records, name) {
 export function warningsOf(plan, sun) {
   const d = dayOf(plan, sun); if (!d) return [];
   const a = d.anchor, k = d.periods.findIndex(p => (p.start <= p.end ? a >= p.start && a < p.end : a >= p.start || a < p.end));
-  return k >= 0 && plan.periods[k].off === null ? [`the first cycle (${clock(a)}) falls in P${k + 1}, which is OFF: no cycle at the anchor`] : [];
+  return k >= 0 && plan.periods[k].off === null ? [`The first irrigation would be at ${clock(a)}, in the ${['morning', 'afternoon', 'night'][k]}, which has no irrigation: the day starts at the next period that irrigates`] : [];
 }
 
 // ── the plan checked before anything is sent (the function checks again, against FarmNet's own limits) ──────────────
@@ -470,12 +470,14 @@ export function enDiy(plan, enLinked, sun = null) {
 // clock time), ≤ 15 influences on signals FarmNet lists, en / iT 0|1 / numbers / iMin ≤ iMax, never on past the periods.
 // EN never 100 in a period while the program is off now, unless the person ticked "Switch the program on".
 const SANE = { en: [0, 100], cst: [0, 60000], st: [0, DAY - 1], et: [0, DAY] };
-export function checkDiy(role, read, body, sourceIds, { switchOn = false, offNow = false } = {}) {
+export function checkDiy(role, read, body, sourceIds, { switchOn = false, offNow = false, lim = null } = {}) {
   const out = [];
   const time = body?.time, inf = body?.influe ?? [];
   if (!Array.isArray(time) || !time.length || time.length > 30) return ['the periods: 1 to 30'];
   if (!Array.isArray(inf) || inf.length > 15) return ['at most 15 influences'];
-  const pl = num(read?.param?.PL), ph = num(read?.param?.PH);
+  // FarmNet's range: the DIY's own when it is DIY; a setting not DIY yet answers PL / PH "0" (owner's screen, 21 Nov 2026:
+  // "its value must be 0–0"), so then the program's own L / H for that setting (lim)
+  const pl = linked(read) ? num(read?.param?.PL) : num(lim?.L), ph = linked(read) ? num(read?.param?.PH) : num(lim?.H);
   const lo = Math.max(pl ?? SANE[role][0], SANE[role][0]), hi = Math.min(ph ?? SANE[role][1], SANE[role][1]);
   time.forEach((t, i) => {
     const n = `period ${i + 1}`;
@@ -521,7 +523,8 @@ export function prepareSave(plan, sun, fresh, sourceIds, managed = () => false) 
   const offNow = !enNowOf(par, fresh.en).some(Boolean);
   const diy = (role, sr, read, body, what) => {
     if (!body) return;
-    checkDiy(role, read, body, sourceIds, { switchOn: plan.switchOn, offNow }).forEach(p => problems.push(`${what}: ${p}`));
+    const lim = role === 'en' ? par?.EN : role === 'cst' ? par?.CST : role === 'st' ? (Array.isArray(par?.TM) ? par.TM[0]?.ST : null) : null;
+    checkDiy(role, read, body, sourceIds, { switchOn: plan.switchOn, offNow, lim }).forEach(p => problems.push(`${what}: ${p}`));
     steps.push({ kind: 'diy', role, sr, add: !linked(read), body, what });
   };
   // start 1 already DIY: set to one period holding 00:00 (never made DIY by Save)

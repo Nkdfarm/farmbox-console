@@ -83,8 +83,14 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
   plan.p1 = clamp(plan.p1); plan.p3 = clamp(plan.p3); plan.anchor = plan.p3;
   plan.kept = W.keptInfluences(r.cst, () => false, plan.drop);
   let was = JSON.stringify(strip(plan));
-  dirty = () => JSON.stringify(strip(plan)) !== was;
-  const may = ctx.may;
+  // view first, Edit to change (owner, 21 Nov 2026: "add an edit mode in the program window to modify existing programs");
+  // a new program, and one being converted, open editing
+  let may = ctx.may && (isNew || !W.isSunCycle(r.par));
+  let saved = structuredClone(plan);   // what Cancel puts back: as read, or as last saved
+  // Cancel only where `saved` is what FarmNet holds: a sun-cycle program as read, or after a Save (verifier, 21 Nov 2026:
+  // not a new program made but not set, nor one being converted — the drawer's ✕ leaves those)
+  let held = !isNew && W.isSunCycle(r.par);
+  dirty = () => may && JSON.stringify(strip(plan)) !== was;
   const sourceIds = new Set((srcs.v || []).map(s => s.id));
 
   const body = el('div', 'sc');
@@ -102,6 +108,7 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
     const nm = el('input', 'input sc-name'); nm.maxLength = 40; nm.value = plan.name; nm.disabled = !may; nm.setAttribute('aria-label', 'Program name');
     nm.oninput = () => { plan.name = nm.value; };
     head.append(field('Name', nm));
+    if (ctx.may && !may) head.append(el('span', 'hint sc-view', 'Viewing — press Edit to change it'));
     const onNow = W.isOnNow(plan);
     const pill = el('span', 'pill ' + (onNow ? 'ok' : ''), onNow ? 'On' : 'Off');
     head.append(pill);
@@ -281,6 +288,7 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
       s.disabled = true;
       try {
         const q = await readProgram(ctx, c, o.ID);
+        if (!may) return;   // the window went back to viewing meanwhile
         const from = W.planFromFarmnet(o, q.par, { st: q.st, cst: q.cst, en: q.en, isDrain: () => false, isWeather: () => false });
         plan.on = from.on ?? plan.on; plan.p1 = clamp(from.p1); plan.p3 = clamp(from.p3); plan.anchor = plan.p3; plan.anchorAt = from.anchorAt;
         plan.periods.forEach((x, i) => { x.off = from.periods[i].off; });
@@ -319,16 +327,40 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
   }
 
   redraw();
-  if (may) {
-    const go = tagCmd(el('button', 'btn btn-primary', isNew ? 'Make it on FarmNet' : 'Save → FarmNet'), isNew ? 'program_add' : 'diy_edit', prog?.ID); go.type = 'button';
+  // the footer: Edit while viewing; Cancel and Save while editing
+  const footer = () => {
+    d.footer.replaceChildren();
+    if (!ctx.may) return;
+    if (!may) {
+      const ed = tagCmd(el('button', 'btn btn-primary', 'Edit'), 'program_set', prog?.ID); ed.type = 'button';
+      ed.onclick = () => { may = true; out.replaceChildren(); redraw(); footer(); };
+      d.footer.append(ed);
+      return;
+    }
+    let cancel = null;
+    if (held) {
+      cancel = el('button', 'btn', 'Cancel'); cancel.type = 'button';
+      cancel.onclick = () => { plan = structuredClone(saved); was = JSON.stringify(strip(plan)); may = false; out.replaceChildren(); redraw(); footer(); };
+      d.footer.append(cancel);
+    }
+    const made = !!prog;
+    const go = tagCmd(el('button', 'btn btn-primary', made ? 'Save → FarmNet' : 'Make it on FarmNet'), made ? 'diy_edit' : 'program_add', prog?.ID); go.type = 'button';
     go.onclick = async () => {
+      if (cancel) cancel.disabled = true;   // not while a Save is running (verifier)
       const res = await saveSun(ctx, c, prog, plan, sun, out, go, sourceIds, programs);
-      if (res?.prog) prog = res.prog;   // made: later Saves change this program
-      if (res?.prog && isNew) { go.textContent = 'Save → FarmNet'; go.dataset.label = 'Save → FarmNet'; tagCmd(go, 'diy_edit', res.prog.ID); }
-      if (res?.ok) { was = JSON.stringify(strip(plan)); d.body.scrollTop = d.body.scrollHeight; }   // later edits are guarded again
+      if (cancel) cancel.disabled = false;
+      if (res?.prog) prog = res.prog;   // made: later Saves change this program, never a second one
+      if (res?.ok) {   // sent: back to viewing what FarmNet now holds
+        if (plan.switchOn) { plan.enNow = plan.periods.map(x => x.off !== null); plan.switchOn = false; }   // it is on now
+        plan.kept = (plan.kept || []).filter(k => !k.dropped); plan.drop = [];   // the dropped influences are gone on FarmNet
+        held = true;
+        saved = structuredClone(plan); was = JSON.stringify(strip(plan)); may = false; redraw(); footer();
+        d.body.scrollTop = d.body.scrollHeight;
+      } else if (res?.prog && !made) footer();   // made but not all sent: the button becomes this program's Save
     };
     d.footer.append(go);
-  }
+  };
+  footer();
 }
 
 // the plan without what the panel only shows (for "unsaved changes")

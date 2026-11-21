@@ -3,8 +3,7 @@
 // change only the anchors of + or − 120 minutes. Inside each period 2 simple options, cycle off time or number of cycles …
 // initial data is the cycle on time. The setting has to be done in less than 1 min from a user without experience"; then
 // "same window for nft or vines, easy change in the setting … all programs will convert with the new format").
-// One side panel, top to bottom: name and on/off · water (valves by name, the recipe) · the on time · the first irrigation
-// at sunset or sunrise · the day bar (the three periods, every irrigation of today as a tick) with the sunrise and sunset
+// One side panel, top to bottom: name and on/off · water (valves by name, the recipe) · the on time · the day bar (the three periods, every irrigation of today as a tick) with the sunrise and sunset
 // shifts · per period the off time ⇄ the number of cycles, or no irrigation · one line saying what the day will be · copy
 // from another program · More (gaps, pump sharing, days). Save writes FarmNet's own settings (windows-plan.js prepareSave):
 // FarmNet runs the cycle itself, every day, moving the periods with the sun; Naked Heart has no loop.
@@ -34,10 +33,15 @@ async function readProgram(ctx, c, id) {
   return { par, st: st.v, cst: cst.v, en: en.v, errs: [st, cst, en].map(x => x.e).filter(Boolean) };
 }
 
-// a program in the new format (or one being converted / just made): the sun-cycle panel
+// a program in the new format, one being converted, or (p null) a new one: the sun-cycle panel. A new program is made on
+// FarmNet only when Save is pressed (owner, 21 Nov 2026: "program name has to be in the same window")
+const BLANK = { ID: 0, NM: '', SMD: 1, CMD: 1, RSIF: true, EN: { SR: 1, V: '0' }, CST: { SR: 3, V: '1800' }, MINT: { V: '0' }, MAXT: { V: '0' }, DT: { DMD: 0 }, TM: [], SRC: [] };
 export async function openSunCycle(ctx, c, p, { recipes = [], records = [], programs = [], fresh = false, after } = {}) {
   let dirty = () => false;
-  const d = drawer(p.NM || `Program ${p.ID}`, `${c.name} · sun cycle · FarmNet runs it by itself`, {
+  const isNew = !p;
+  if (isNew) fresh = true;
+  let prog = p;   // a new program gets its number from FarmNet at Save
+  const d = drawer(isNew ? 'New sun-cycle program' : (p.NM || `Program ${p.ID}`), `${c.name} · sun cycle · FarmNet runs it by itself`, {
     guard: () => (dirty() ? confirmDrawer('Leave without saving?', 'The values you changed are not sent to FarmNet.', 'Leave') : true),
     onClose: () => { if (after) after(); },
   });
@@ -45,8 +49,12 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
   d.body.append(loading('Reading the program from FarmNet…'));
   let r, tree = null, srcs = { v: [] };
   try {
+    // a new program: today's sunrise and sunset from any program's DIY answer (FarmNet gives them with every one)
+    const sunOnly = async () => { const q = programs[0]; if (!q) return { par: BLANK, st: null, cst: null, en: null, errs: [] };
+      const x = await soft(askNow(ctx.farm, 'diy_get', { id: c.id, type: 0, proId: q.ID, SR: 3 }).then(W.diyOf));
+      return { par: BLANK, st: x.v, cst: null, en: null, errs: [] }; };
     [r, tree, srcs] = await Promise.all([
-      readProgram(ctx, c, p.ID),
+      isNew ? sunOnly() : readProgram(ctx, c, p.ID),
       ctx.may ? askNow(ctx.farm, 'valve_groups', { id: c.id, group: 1 }).then(treeOf).catch(() => null) : null,
       soft(sourcesOf(ctx.farm)),
     ]);
@@ -58,7 +66,7 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
   if (mode !== 0 && mode !== 1) { d.body.append(el('div', 'note', `This program starts on FarmNet's ${mode === 4 ? 'substrate weight' : mode === 5 ? 'AI' : 'light or custom'} mode: it is set on FarmNet's own screen.`)); return; }
 
   // the plan: what FarmNet runs now (or, for a program not yet in the new format, a sensible start)
-  let plan = W.planFromFarmnet(p, r.par, { st: r.st, cst: r.cst, en: r.en, isDrain: () => false, isWeather: () => false });
+  let plan = W.planFromFarmnet(p || { NM: '' }, r.par, { st: isNew ? null : r.st, cst: r.cst, en: r.en, isDrain: () => false, isWeather: () => false });
   const notes = [];
   if (fresh) {
     plan.on = DEFAULT.on; plan.p1 = 0; plan.p3 = 0; plan.anchor = 0; plan.anchorAt = 'sunset';
@@ -119,18 +127,9 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
     onSec.append(onRow);
     parts.push(onSec);
 
-    // ── the day: first irrigation, the bar, the shifts ──
+    // ── the day: the bar, the shifts (the cycle starts when the program is switched on: owner, 21 Nov 2026) ──
     const day = el('div', 'sc-sec');
-    const top = el('div', 'sc-row');
-    top.append(el('span', 'sc-label', 'First irrigation at'));
-    const seg = el('div', 'seg');
-    [['sunset', 'Sunset'], ['p1', 'Sunrise']].forEach(([v, t]) => {
-      const b = el('button', 'seg-btn', t); b.type = 'button'; b.setAttribute('aria-pressed', String(plan.anchorAt === v)); b.disabled = !may;
-      b.onclick = () => { plan.anchorAt = v; plan.anchor = plan.p3; redraw(); };
-      seg.append(b);
-    });
-    top.append(seg);
-    day.append(top, dayBar());
+    day.append(el('div', 'sc-label', 'The day — a tick for every irrigation'), dayBar());
     const shifts = el('div', 'sc-row sc-shifts');
     shifts.append(shiftOf('Sunrise', 'p1'), el('span', 'hint', 'Noon 12:00'), shiftOf('Sunset', 'p3'));
     day.append(shifts);
@@ -173,9 +172,9 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
     const nl = el('label', 'win-off'); nl.append(none, document.createTextNode(' No irrigation'));
     if (x.off === null) { box.append(el('div', 'sc-none', 'No irrigation'), nl); return box; }
     // the off time ⇄ the number of cycles: type either, the other follows
-    const off = el('input', 'input sc-num'); off.type = 'number'; off.min = '1'; off.max = String(W.OFF_MAX_MIN); off.value = String(x.off); off.disabled = !may;
+    const off = el('input', 'input sc-num'); off.type = 'number'; off.min = '1'; off.max = String(W.OFF_MAX_MIN - 1); off.value = String(x.off); off.disabled = !may;
     off.setAttribute('aria-label', `${PN[k]} off time, minutes`);
-    off.onchange = () => { const n = Math.round(Number(off.value)); if (Number.isFinite(n) && n >= 1) { x.off = Math.min(W.OFF_MAX_MIN, n); } redraw(); };
+    off.onchange = () => { const n = Math.round(Number(off.value)); if (Number.isFinite(n) && n >= 1) { x.off = Math.min(W.OFF_MAX_MIN - 1, n); } redraw(); };
     const cyc = el('input', 'input sc-num'); cyc.type = 'number'; cyc.min = '1'; cyc.max = '200'; cyc.value = String(sim?.perPeriod[k] ?? ''); cyc.disabled = !may;
     cyc.setAttribute('aria-label', `${PN[k]} number of cycles`);
     cyc.onchange = () => { const n = Math.round(Number(cyc.value)); const o = W.offForCycles(plan, sun, k, n); if (o !== null) x.off = o; redraw(); };
@@ -205,20 +204,17 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
       const tx = add('text', { x: Math.min(1290, Math.max(4, m(t) - 70)), y: 26, class: 'sc-txt' }); tx.textContent = label;
     });
     [0, 6, 12, 18, 24].forEach(h => { const tx = add('text', { x: Math.min(1350, h * 60 + 4), y: 162, class: 'sc-txt' }); tx.textContent = `${String(h).padStart(2, '0')}:00`; });
-    if (dd && sim?.starts.length) add('circle', { cx: m(sim.starts[0].at), cy: 82, r: 16, class: 'sc-first' });
     return svg;
   }
 
   function summary(sim) {
     const valves = (plan.sources || []).flatMap(s => s.valves.map(v => v.name));
     const n = sim?.starts.length ?? 0;
-    const vol = W.medianVolume(records, p.NM);
+    const vol = W.medianVolume(records, prog?.NM ?? '');
     // the measured litres per run (median, 7 days) at the run time FarmNet holds now, scaled to this on time
     const oldOn = Math.max(0, ...W.valvesOf(r.par).map(v => v.stm));
     const litres = vol.litres && oldOn ? ` · about ${Math.round(vol.litres * (num(plan.on) ?? 0) / oldOn * n)} L a day` : '';
-    const dd = W.dayOf(plan, sun), f = sim?.starts[0];
-    const why = !f ? '' : dd && f.at === dd.anchor ? (plan.anchorAt === 'p1' ? 'sunrise' : 'sunset') : `${PN[f.k].toLowerCase()} start: the ${plan.anchorAt === 'p1' ? 'morning' : 'night'} has no irrigation`;
-    const first = f ? ` · first at ${W.clock(f.at)} (${why})` : '';
+    const first = ' · starts as soon as it is switched on';
     const on = plan.switchOn ? ' · switched ON by Save' : W.isOnNow(plan) ? '' : ' · the program is off: nothing runs until it is switched on';
     return el('div', 'sc-summary', `${valves.length ? valves.join(', ') : 'No valve yet'} · ${n} irrigation${n === 1 ? '' : 's'} today · ${mmss(plan.on)} each${litres}${first}${on}`);
   }
@@ -275,7 +271,7 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
 
   // copy the cycle (on time, first irrigation, shifts, periods) of another program; its valves stay this program's own
   function copyRow() {
-    const others = programs.filter(x => Number(x.ID) !== Number(p.ID));
+    const others = programs.filter(x => Number(x.ID) !== Number(prog?.ID));
     const row = el('div', 'sc-row sc-copy');
     if (!may || !others.length) return row;
     const s = sel([['', 'Copy the cycle of…'], ...others.map(x => [x.ID, x.NM])], '');
@@ -324,10 +320,12 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
 
   redraw();
   if (may) {
-    const go = tagCmd(el('button', 'btn btn-primary', 'Save → FarmNet'), 'diy_edit', p.ID); go.type = 'button';
+    const go = tagCmd(el('button', 'btn btn-primary', isNew ? 'Make it on FarmNet' : 'Save → FarmNet'), isNew ? 'program_add' : 'diy_edit', prog?.ID); go.type = 'button';
     go.onclick = async () => {
-      const done = await saveSun(ctx, c, p, plan, sun, out, go, sourceIds);
-      if (done) { was = JSON.stringify(strip(plan)); d.body.scrollTop = d.body.scrollHeight; }   // later edits are guarded again
+      const res = await saveSun(ctx, c, prog, plan, sun, out, go, sourceIds, programs);
+      if (res?.prog) prog = res.prog;   // made: later Saves change this program
+      if (res?.prog && isNew) { go.textContent = 'Save → FarmNet'; go.dataset.label = 'Save → FarmNet'; tagCmd(go, 'diy_edit', res.prog.ID); }
+      if (res?.ok) { was = JSON.stringify(strip(plan)); d.body.scrollTop = d.body.scrollHeight; }   // later edits are guarded again
     };
     d.footer.append(go);
   }
@@ -336,56 +334,48 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
 // the plan without what the panel only shows (for "unsaved changes")
 const strip = plan => ({ ...plan, kept: undefined, enNow: undefined });
 
-// a new sun-cycle program: its name, then FarmNet makes it (switched off) and the panel opens on it
-export function newSunCycle(ctx, c, opts = {}) {
-  const d = drawer('New sun-cycle program', `${c.name} · FarmNet makes it switched off; you set it next`);
-  const name = el('input', 'input'); name.maxLength = 40; name.placeholder = 'Lettuce bay 3';
-  d.body.append(field('Name', name), el('div', 'hint', 'Next: its valves, the on time, and the three periods. It stays off until you switch it on.'));
-  const go = tagCmd(el('button', 'btn btn-primary', 'Make it'), 'program_add');
-  go.onclick = async () => {
-    const n = name.value.trim();
-    if (!n) { toast('Give it a name', 'bad'); name.focus(); return; }
-    if ((opts.programs || []).some(x => String(x.NM).trim().toLowerCase() === n.toLowerCase())) { toast(`A program "${n}" exists already`, 'bad'); return; }
-    busy(go, true, 'Making it…');
-    let res;
-    try { res = await runCommand('program_add', { id: c.id, changes: { name: n } }, { ctx }); }
-    catch (e) {
-      d.body.append(el('div', 'note bad', `${e.message}. FarmNet may have made the program all the same: look for it on the page before making another.`));
-      busy(go, false, 'Make it'); go.disabled = true; opts.after?.(); return;
-    }
-    d.close();
-    const id = Number(res?.created ?? res?.data?.ID);
-    if (Number.isInteger(id)) openSunCycle(ctx, c, { ID: id, NM: n }, { ...opts, fresh: true });
-    else opts.after?.();
-  };
-  d.footer.append(go);
-  setTimeout(() => name.focus(), 50);
-}
-
+// a new sun-cycle program: the same window, empty; FarmNet makes it on Save
+export function newSunCycle(ctx, c, opts = {}) { return openSunCycle(ctx, c, null, opts); }
 // ── Save → FarmNet: FarmNet read fresh, every step built and checked first (windows-plan.js prepareSave), then sent in
 // order as one group on the Timeline, each kept before it changes ──────────────────────────────────────────────────────
 const STEPS = ['The program: name, cycle, the window 00:00–23:59, valves and recipe, on time, days, gaps, pumps',
   'Start 1, where it is DIY: one period holding 00:00', 'The window ends 23:59 (with the program)',
-  'The off time per period (CST, DIY)', 'On / off per period, and the first irrigation (EN, DIY)', 'Read back from FarmNet'];
+  'The off time per period (CST, DIY)', 'On / off per period (EN, DIY)', 'Read back from FarmNet'];
 const STEP_OF = { st: 1, et: 2, cst: 3, en: 4 };
 
-export async function saveSun(ctx, c, prog, planIn, sun, out, go, sourceIds) {
+export async function saveSun(ctx, c, prog, planIn, sun, out, go, sourceIds, programs = []) {
   const plan = structuredClone(strip(planIn));
   plan.enNow = planIn.enNow;
   const early = W.problemsOf(plan, sun);
-  if (early.length) { toast(`Not sent: ${early[0]}`, 'bad'); return false; }
+  if (early.length) { toast(`Not sent: ${early[0]}`, 'bad'); return { ok: false }; }
+  const sim0 = W.simulate(plan, sun);
+  if (plan.switchOn && !(await confirmDrawer(`Switch "${plan.name}" on?`,
+    `FarmNet starts watering with it as soon as it is on: ${sim0?.starts.length ?? 0} irrigations a day, ${mmss(plan.on)} each.`, 'Switch it on'))) return { ok: false };
+  let made = null;
+  if (!prog) {
+    const n = String(plan.name).trim();
+    if (programs.some(x => String(x.NM).trim().toLowerCase() === n.toLowerCase())) { toast(`A program "${n}" exists already`, 'bad'); return { ok: false }; }
+    busy(go, true, 'Making it on FarmNet…');
+    let res;
+    try { res = await runCommand('program_add', { id: c.id, changes: { name: n } }, { ctx }); }
+    catch (e) { busy(go, false); out.replaceChildren(el('div', 'note bad', `${e.message}. FarmNet may have made the program all the same: look for "${n}" on the page before making another.`)); return { ok: false }; }
+    const id = Number(res?.created ?? res?.data?.ID);
+    if (!Number.isInteger(id)) { busy(go, false); out.replaceChildren(el('div', 'note bad', `FarmNet made "${n}" but did not say its number: open it from the page to set it.`)); return { ok: false }; }
+    prog = made = { ID: id, NM: n };
+    toast(`"${n}" made on FarmNet, switched off; now its settings…`, 'ok');
+  }
   busy(go, true, 'Reading FarmNet…');
   let prep, fresh;
   try {
     fresh = await readProgram(ctx, c, prog.ID);
     prep = W.prepareSave(plan, sun, { par: fresh.par, st: fresh.st, cst: fresh.cst, en: fresh.en }, sourceIds, () => false);
-  } catch (e) { busy(go, false); toast(`Not sent: ${e?.message || e}`, 'bad'); return false; }
+  } catch (e) {
+    busy(go, false);
+    toast(made ? `"${made.NM}" was made on FarmNet (switched off), but its settings were not sent: ${e?.message || e}` : `Not sent: ${e?.message || e}`, 'bad');
+    return { ok: false, prog: made };
+  }
   busy(go, false);
-  if (prep.problems.length) { out.replaceChildren(el('div', 'note bad', `Nothing sent. ${prep.problems.join(' · ')}`)); return false; }
-  const sim = W.simulate(plan, sun);
-  if (plan.switchOn && !(await confirmDrawer(`Switch "${plan.name}" on?`,
-    `FarmNet starts watering with it: ${sim?.starts.length ?? 0} irrigations a day, ${mmss(plan.on)} each, first at ${sim?.starts[0] ? W.clock(sim.starts[0].at) : '—'}. `
-    + 'The way FarmNet starts the first irrigation at the switch-on is still being checked on a trial program.', 'Switch it on'))) return false;
+  if (prep.problems.length) { out.replaceChildren(el('div', 'note bad', `${made ? `"${made.NM}" was made on FarmNet (switched off), but its settings were not sent: ` : 'Nothing sent. '}${prep.problems.join(' · ')}`)); return { ok: false, prog: made }; }
   busy(go, true, 'Sending…');
   const group = globalThis.crypto?.randomUUID?.() ?? null;
   const state = STEPS.map(label => ({ label, st: 'todo', note: '' }));
@@ -424,7 +414,7 @@ export async function saveSun(ctx, c, prog, planIn, sun, out, go, sourceIds) {
     draw();
   }
   busy(go, false);
-  if (stopped) { toast(`Stopped: ${state.find(s => s.st === 'bad')?.note || 'refused'}`, 'bad'); return false; }
+  if (stopped) { toast(`Stopped: ${state.find(s => s.st === 'bad')?.note || 'refused'}`, 'bad'); return { ok: false, prog: made }; }
   toast(`"${plan.name}" sent to FarmNet`, 'ok');
-  return true;
+  return { ok: true, prog: made };
 }

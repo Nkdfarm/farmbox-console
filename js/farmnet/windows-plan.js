@@ -137,18 +137,20 @@ export function planFromFarmnet(prog, par, diy = {}) {
       });
     });
   }
-  // a period FarmNet switches off (EN as DIY, bv 0 in it)
-  if (linked(diy.en) && Array.isArray(diy.en.time)) diy.en.time.slice(0, 3).forEach(t => {
+  // a period FarmNet switches off (EN as DIY, bv 0 in it) — only when on/off is on somewhere: a program switched off holds
+  // 0 in every period, which says nothing about its periods (owner's test11, 21 Nov 2026: every period read as none)
+  const enThree = linked(diy.en) && Array.isArray(diy.en.time) ? diy.en.time.slice(0, 3) : [];
+  if (enThree.some(t => num(t?.bv) === 100)) enThree.forEach(t => {
     const k = PERIOD_OF_TP[Number(t?.tp)];
     if (k !== undefined && num(t.bv) === 0) plan.periods[k].off = null;
   });
-  plan.periods.forEach(p => { if (p.off !== null && p.off > OFF_MAX_MIN) p.off = null; });
+  plan.periods.forEach(p => { if (p.off !== null && p.off >= OFF_MAX_MIN) p.off = null; });   // 60000 s = 1000 min: Save's "no irrigation"
   // the owner's cycle (21 Nov 2026): the cycle restarts every day at sunset — the first irrigation at the night period's
   // start (sunset ± its shift), for every system; one on time for all periods (every valve the same)
   // the first irrigation: at sunset (the night start) or at sunrise (the morning start) — owner, 21 Nov 2026: one window
   // for NFT and vines, an easy switch. Read back from Save's switch-on (the gap: a 4th+ EN period holding 0, of tp 2 or 1)
   const gapP = linked(diy.en) && Array.isArray(diy.en.time) ? diy.en.time.slice(3).find(x => num(x?.bv) === 0) : null;
-  plan.anchorAt = gapP && Number(gapP.tp) === 1 ? 'p1' : 'sunset';
+  void gapP; plan.anchorAt = 'sunset';   // (no first-irrigation choice since 21 Nov 2026)
   plan.anchor = plan.p3;
   plan.sources = sourcesOf(par);
   plan.on = valves.length ? Math.max(...valves.map(v => v.stm)) : null;
@@ -230,7 +232,9 @@ export function simulate(plan, sun) {
     }
     return best;
   };
-  const a0 = d.anchor, stop = a0 + DAY, starts = [], perPeriod = [0, 0, 0];
+  // a day like today, the program running since midnight (owner, 21 Nov 2026: the cycle starts when it is switched on;
+  // no anchor): from 00:00, or from the start of the first period that irrigates after it
+  const a0 = 0, stop = DAY, starts = [], perPeriod = [0, 0, 0];
   let t = a0;
   if (plan.periods[kOf(t)]?.off === null) t = nextOnStart(t);
   let guard = 0;
@@ -239,6 +243,7 @@ export function simulate(plan, sun) {
     starts.push({ at: t % DAY, k }); perPeriod[k]++;
     const end = t + on, ke = kOf(end), off = plan.periods[ke]?.off;
     t = off === null || off === undefined ? nextOnStart(end) : end + Math.max(60, off * 60);
+    if (t !== null && plan.periods[kOf(t)]?.off === null) t = nextOnStart(t);   // on/off is 0 there: nothing starts
   }
   return { starts, perPeriod, on };
 }
@@ -251,7 +256,7 @@ export function offForCycles(plan, sun, k, n) {
   // number typed is the number the day shows (verifier, 21 Nov 2026)
   const count = off => { const p = structuredClone(plan); p.periods[k].off = off; return simulate(p, sun)?.perPeriod[k] ?? 0; };
   if (count(1) < n) return 1;
-  let lo = 1, hi = OFF_MAX_MIN;
+  let lo = 1, hi = OFF_MAX_MIN - 1;   // (1000 min is "no irrigation")
   while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (count(mid) >= n) lo = mid; else hi = mid - 1; }
   return lo;
 }
@@ -268,7 +273,7 @@ export function medianVolume(records, name) {
 export function warningsOf(plan, sun) {
   const d = dayOf(plan, sun); if (!d) return [];
   const a = d.anchor, k = d.periods.findIndex(p => (p.start <= p.end ? a >= p.start && a < p.end : a >= p.start || a < p.end));
-  return k >= 0 && plan.periods[k].off === null ? [`The first irrigation would be at ${clock(a)}, in the ${['morning', 'afternoon', 'night'][k]}, which has no irrigation: the day starts at the next period that irrigates`] : [];
+  void k; void a; return [];   // (no anchor since 21 Nov 2026: the cycle starts when the program is switched on)
 }
 
 // ── the plan checked before anything is sent (the function checks again, against FarmNet's own limits) ──────────────
@@ -276,12 +281,10 @@ export function problemsOf(plan, sun) {
   const out = [];
   const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
   // (the switch-on's gap starts gapOf(plan) before the anchor: the anchor keeps it inside the ± 6 h bound)
-  const lo = sunsetMin(plan);
-  if (plan.anchorAt !== 'p1' && !int(plan.anchor, lo, OFFSET_MAX / 60)) out.push(`Sunset ± min: − ${-lo} to + ${OFFSET_MAX / 60} (the off of one whole run before the first irrigation stays within FarmNet's ± 6 h)`);
-  if (!int(plan.p1, plan.anchorAt === 'p1' ? lo : -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P1: sunrise ± ${OFFSET_MAX / 60} min at most`);
+  if (!int(plan.p1, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P1: sunrise ± ${OFFSET_MAX / 60} min at most`);
   if (!int(plan.p3, -OFFSET_MAX / 60, OFFSET_MAX / 60)) out.push(`P3: sunset ± ${OFFSET_MAX / 60} min at most`);
   plan.periods.forEach((p, i) => {
-    if (p.off !== null && !int(p.off, 0, OFF_MAX_MIN)) out.push(`P${i + 1}: off 0–${OFF_MAX_MIN} min, or OFF`);
+    if (p.off !== null && !int(p.off, 0, OFF_MAX_MIN - 1)) out.push(`P${i + 1}: off 0–${OFF_MAX_MIN - 1} min, or no irrigation`);
     if (!int(p.ramp, 0, 240)) out.push(`P${i + 1}: ramp 0–240 min`);
     for (const [slot, word, key] of [['auto', 'Auto', 'target'], ['weather', 'Weather', 'setpoint']]) {
       const x = p[slot];
@@ -445,23 +448,12 @@ export function enDiy(plan, enLinked, sun = null) {
   const anyOff = plan.periods.some(p => p.off === null);
   const now = plan.enNow || [false, false, false];
   const bv = plan.periods.map((p, i) => (p.off === null ? 0 : plan.switchOn || now[i] ? 100 : 0));
-  // the first cycle: off gapOf(plan) before the anchor, on at it, in the anchor's own period (only where it is on)
-  const d = sun ? dayOf(plan, sun) : null;
-  const k = d ? periodAt(d, d.anchor) : -1;
-  const gap = sun && anchorGap(plan, sun) && k >= 0 && bv[k] === 100;
-  if (!sun) {   // (no sun: the plain rule — written only when a period is OFF or EN is DIY already)
-    if (!anyOff && !enLinked) return null;
-    if (!enLinked && bv.every(v => v === 0)) return null;
-  }
-  const time = [period(1, plan.p1 * 60, bv[0]), period(0, NOON, bv[1]), period(2, plan.p3 * 60, bv[2])];
-  if (sun) {
-    // the gap before the first irrigation, always written (verifier, 21 Nov 2026): its type keeps the sunrise / sunset
-    // choice for a program that is off or an OFF night too; holding 0, it ends a run in the period before in time
-    const [tp, off] = anchorRel(plan);
-    time.push(period(tp, off - gapOf(plan), 0));
-    if (gap && !time.slice(0, 3).some(x => x.tp === tp && x.st === stOf(tp, off))) time.push(period(tp, off, 100));
-  }
-  return { time, influe: [] };
+  void sun;   // (no anchor since 21 Nov 2026: the cycle starts when the program is switched on)
+  // written when a period has no irrigation (0 there, even while the program is off: the 60000 s off time alone would
+  // still give one irrigation at the period's start once it is on — verifier, 21 Nov 2026) or on/off is DIY already
+  if (!anyOff && !enLinked) return null;
+  // P1, P2, P3 only: an on/off DIY written before with a switch-on gap (a 4th / 5th period) loses it here
+  return { time: [period(1, plan.p1 * 60, bv[0]), period(0, NOON, bv[1]), period(2, plan.p3 * 60, bv[2])], influe: [] };
 }
 
 // ── the whole Save, built and checked before the first write ─────────────────────────────────────────────────────────

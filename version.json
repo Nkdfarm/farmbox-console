@@ -1,5 +1,5 @@
 {
-  "version": "0.22.00",
+  "version": "0.23.00",
   "released": "2026-11-21",
-  "note": "History strip: the operation log as a CAD timeline"
+  "note": "Faster start, creation mode and page fixes"
 }

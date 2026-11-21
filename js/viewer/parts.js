@@ -1,9 +1,10 @@
 // The photo viewer's shared parts: chips, risk words, signed URLs and small helpers (split from viewer.js, 16 Nov 2026)
 import { api, URL_BASE, me } from '../api.js';
-import { el, num, avatar, g1Face, farmWhen } from '../ui.js';
+import { el, num, avatar, g1Face, farmWhen, farmDay, parseYmd } from '../ui.js';
 
 export const when = farmWhen;
-export const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
+// a date-only string is a day, never shifted; an instant is printed on the farm's clock
+export const day = ts => !ts ? '—' : /^\d{4}-\d{2}-\d{2}$/.test(ts) ? parseYmd(ts).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : farmDay(ts, { weekday: 'short' });
 export const SEV = ['none', 'slight', 'clear', 'severe'];
 export const partLabel = p => ({ leaf: 'leaf', fruit: 'fruit', head: 'head', root: 'root', stem: 'stem', whole: 'whole plant', other: 'other' })[p] || p || '';
 

@@ -132,11 +132,25 @@ export function editCustomer(c, onSaved) {
   const cancel = el('button', 'btn', 'Cancel'); cancel.onclick = d.close;
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
+    // blank number fields went as '' : the factor is needed (above zero), the others are optional and go as null
+    const numOrNull = (inputEl, label, { min = 0, strict = false } = {}) => {
+      const t = inputEl.value.trim();
+      if (t === '') return { v: null };
+      const n = Number(t);
+      if (!Number.isFinite(n) || (strict ? n <= min : n < min)) { toast(`${label} must be a number${strict ? ' above' : ' of at least'} ${min}`, 'bad'); inputEl.focus(); return null; }
+      return { v: n };
+    };
+    const f = numOrNull(factor, 'The price factor', { min: 0, strict: true });
+    if (!f) return;
+    if (f.v == null) { toast('The price factor is needed (1 = the price book)', 'bad'); factor.focus(); return; }
+    const tm = numOrNull(terms, 'The payment terms'); if (!tm) return;
+    const cl = numOrNull(credit, 'The credit limit'); if (!cl) return;
+    const sk = numOrNull(subKg, 'The basket size'); if (!sk) return;
     busy(go, true, 'Saving…');
     try {
       const saved = await rpc('save_customer', { p_farm: farm.id, p: { id: c?.id || null, kind: kind.value, name: name.value, contact_person: person.value,
-        phone: phone.value, email: email.value, address: address.value, route: route.value, channel: channel.value, price_factor: factor.value,
-        payment_terms_days: terms.value, credit_limit: credit.value, subscription_active: subOn.checked, subscription_kg: subKg.value,
+        phone: phone.value, email: email.value, address: address.value, route: route.value, channel: channel.value, price_factor: f.v,
+        payment_terms_days: tm.v, credit_limit: cl.v, subscription_active: subOn.checked, subscription_kg: sk.v,
         referred_by: ref.value || null, notes: notes.value, active: active.checked } });
       d.close();
       toast('Saved', 'ok');

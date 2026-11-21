@@ -202,7 +202,7 @@ export function lineChart(series, lim, title, dp) {   // also the FarmNet page's
   for (let i = 0; i <= 4; i++) {
     const t = t0 + (t1 - t0) * i / 4;
     const tx = add('text', { x: x(t), y: H - 8, class: 'cx-axis', 'text-anchor': i === 0 ? 'start' : i === 4 ? 'end' : 'middle' });
-    tx.textContent = new Date(t).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    tx.textContent = farmWhen(t);
   }
   series.forEach(s => {
     if (!s.pts.length) return;

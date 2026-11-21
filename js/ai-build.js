@@ -15,6 +15,10 @@
 // The lock can never stay on: Stop leaves building at once (to review, or ended when nothing was staged) whatever the
 // step is waiting for; an exception while staging moves to review with what was staged; a step of Validate that does
 // not answer within STEP_MS stops it ('unknown': it may have been applied — the Timeline says), the rest not applied.
+// Fixes of 21 Nov 2026: the cap's read is raced against BUDGET_MS after the band and the idle clock are up (a hung read
+// never holds the console); a draft the person changes gets its line from the command's preview, marked as theirs for the
+// operation log, and loses the AI's warnings (a water step is said not to be range-checked again); Validate stops before
+// a step when deps.userId() is no longer the person who pressed it; `staged` counts every draft ever staged.
 // Nothing here approves, validates, marks done, pays or gives access: the registry's commands cannot (only class A
 // commands may be staged, and the server's door refuses the rest for actor ai).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,6 +26,7 @@ import { getCommand, validateArgs } from './registry.js';
 
 export const IDLE_MS = 5 * 60 * 1000;
 export const STEP_MS = 45 * 1000;
+export const BUDGET_MS = 8 * 1000;   // the daily cap's read before building: a read that hangs ends the build, never holds it
 export const PHASES = ['building', 'review', 'validating', 'done', 'ended'];
 const LOCKED = new Set(['building', 'review', 'validating']);
 export const IDLE_NOTICE = 'Creation mode ended by itself after 5 minutes without input: the drafts were discarded and nothing was applied.';
@@ -29,14 +34,23 @@ export const IDLE_NOTICE = 'Creation mode ended by itself after 5 minutes withou
 // a step that creates a program switched on, or switches one on: said on its draft and in the tray before Validate
 export const switchesOn = (command, args) => ['program_set', 'program_add', 'program_copy'].includes(command) && args?.changes?.on === true;
 
+// the commands whose EC and pH the assistant checks against the crops' ranges (assistant/water.ts RANGE_COMMANDS): a
+// draft of one changed by the person was not checked again (the check needs FarmNet's programs and the crops on the
+// valves, read by the function), and its card says so
+export const RANGE_COMMANDS = new Set(['formula_set', 'formula_add', 'formula_copy', 'program_set']);
+export const EDITED_RANGE_NOTE = 'Changed by you: not checked again against the crops’ EC and pH ranges — compare it with FarmNet › Irrigation › EC and pH per crop before you validate.';
+export const EDITED_MARK = ' (changed by the person)';
+
 // deps: { run(name, args, opts) (the registry's runCommand), farm, farmFor(unit) → the FarmBox to run a step on,
 //         navigate(page), locate(name, args) → element | null, highlight(element),
 //         fix(step, error) → { ok, step } | { ok: false, error }, mayBuild(family, unit) → true | reason,
 //         budget() → { over, text } | null, newId(), now(), setTimer(fn, ms) → handle, clearTimer(handle), onChange(state),
-//         stepMs (Validate's wait for one step; STEP_MS) }
+//         stepMs (Validate's wait for one step; STEP_MS), budgetMs (the cap's read; BUDGET_MS),
+//         userId() → the person signed in now (Validate stops before a step when it is not the one who pressed it) }
 export function createBuild(plan, deps) {
   const steps = (plan?.steps || []).map((s, i) => ({ ...s, n: i + 1 }));
-  const st = { phase: 'building', at: 0, total: steps.length, drafts: [], notice: '', stopped: false, result: null, group: null };
+  // staged: how many drafts were ever staged (end() empties drafts, not this) — the plan counts as built from the first
+  const st = { phase: 'building', at: 0, total: steps.length, drafts: [], staged: 0, notice: '', stopped: false, result: null, group: null };
   let timer = null, seq = 0;
   const building = () => st.phase === 'building';
   const tell = () => { try { deps.onChange?.(view()); } catch (e) { console.warn('ai-build: onChange failed', e); } };
@@ -98,17 +112,22 @@ export function createBuild(plan, deps) {
       reason: s.reason || '', warnings: Array.isArray(s.warnings) ? s.warnings : [], valves: Array.isArray(s.valves) ? s.valves : undefined,   // P6
       status: 'draft', error: null,
     });
+    st.staged++;
     return { ok: true };
   }
 
   // ── building: every step staged in order, without the model ──
   async function start() {
     if (!steps.length) { end('The plan has no step: nothing to build.'); return view(); }
+    // the band (with its Stop) and the 5 minutes first: a cap read that never answers must not hold the console
+    arm(); tell();
     let b = null;
-    try { b = deps.budget ? await deps.budget() : null; } catch (e) { b = { over: true, text: e?.message || 'The daily cost cap could not be read: nothing is built.' }; }
+    try {
+      b = deps.budget ? await within(Promise.resolve().then(() => deps.budget()), deps.budgetMs || BUDGET_MS,
+        `The daily cost cap could not be read within ${Math.round((deps.budgetMs || BUDGET_MS) / 1000)} s: nothing is built. Try again.`) : null;
+    } catch (e) { b = { over: true, text: e?.message || 'The daily cost cap could not be read: nothing is built.' }; }
     if (!building()) return view();
     if (b && b.over) { end(b.text || 'The daily cost cap of this FarmBox is reached: nothing is built.'); return view(); }
-    arm(); tell();
     try {
       for (let i = 0; i < steps.length && building(); i++) {
         st.at = i + 1; tell();
@@ -138,7 +157,18 @@ export function createBuild(plan, deps) {
     if (!d) return { ok: false, error: 'No such draft.' };
     const v = validateArgs(d.command, args);
     if (!v.ok) return v;
-    d.args = args; d.switches_on = switchesOn(d.command, args); d.edited = true;
+    const changed = JSON.stringify(args) !== JSON.stringify(d.args);
+    d.args = args; d.switches_on = switchesOn(d.command, args);
+    if (changed) {
+      // the AI's words were about its own arguments: the line is rebuilt from what the draft now does (and the operation
+      // log says the person changed it), the AI's warnings go, and a water step is said not to be range-checked again
+      const c = getCommand(d.command);
+      let line;
+      try { line = c.preview(v.args || args); } catch { line = ''; }
+      d.summary = String(line || c.label).slice(0, 300 - EDITED_MARK.length) + EDITED_MARK;
+      d.warnings = RANGE_COMMANDS.has(d.command) ? [EDITED_RANGE_NOTE] : [];
+      d.edited = true;
+    }
     arm(); tell();
     return { ok: true };
   }
@@ -154,8 +184,8 @@ export function createBuild(plan, deps) {
   function discard() { if (st.phase === 'building' || st.phase === 'review') end('Discarded: nothing was applied.'); }
 
   // one step of Validate, waited for at most stepMs
-  const within = (p, ms) => new Promise((ok, bad) => {
-    let h = deps.setTimer(() => { h = null; bad(Object.assign(new Error(`no answer within ${Math.round(ms / 1000)} s — it may still have been applied: check the Timeline`), { timeout: true })); }, ms);
+  const within = (p, ms, text) => new Promise((ok, bad) => {
+    let h = deps.setTimer(() => { h = null; bad(Object.assign(new Error(text || `no answer within ${Math.round(ms / 1000)} s — it may still have been applied: check the Timeline`), { timeout: true })); }, ms);
     Promise.resolve(p).then(x => { if (h != null) { deps.clearTimer(h); ok(x); } }, e => { if (h != null) { deps.clearTimer(h); bad(e); } });
   });
 
@@ -164,10 +194,13 @@ export function createBuild(plan, deps) {
     if (st.phase !== 'review' || !st.drafts.length) return view();
     disarm();
     st.phase = 'validating'; st.group = deps.newId(); st.at = 0; st.total = st.drafts.length; st.notice = ''; tell();
-    let failed = null;
+    // the person who pressed Validate: a sign-out or another sign-in meanwhile stops it before the next step
+    const who = deps.userId ? deps.userId() : undefined;
+    let failed = null, halted = null;
     for (const d of st.drafts) {
       st.at++;
-      if (failed) { d.status = 'not-applied'; continue; }
+      if (failed || halted) { d.status = 'not-applied'; continue; }
+      if (deps.userId && (!who || deps.userId() !== who)) { halted = d; d.status = 'not-applied'; continue; }
       d.status = 'applying'; tell();
       try {
         const farm = deps.farmFor ? deps.farmFor(d.unit) : deps.farm;
@@ -180,9 +213,12 @@ export function createBuild(plan, deps) {
     }
     const applied = st.drafts.filter(d => d.status === 'applied');
     st.result = { group: st.group, applied: applied.length, failed: failed ? { n: failed.n, summary: failed.summary, error: failed.error, status: failed.status } : null,
-                  notApplied: st.drafts.filter(d => d.status === 'not-applied').length };
+                  notApplied: st.drafts.filter(d => d.status === 'not-applied').length,
+                  halted: halted ? { n: halted.n, summary: halted.summary, why: 'session' } : null };
     st.phase = 'done';
-    st.notice = failed
+    st.notice = halted
+      ? `${applied.length} of ${st.drafts.length} applied; stopped before "${halted.summary}": the person signed in to this console changed (signed out, or somebody else signed in) after Validate was pressed. The rest was not applied.`
+      : failed
       ? `${applied.length} of ${st.drafts.length} applied; stopped at "${failed.summary}": ${failed.error}`
       : `${applied.length} change${applied.length === 1 ? '' : 's'} applied as one group on the Timeline, where it can be put back.`;
     tell();

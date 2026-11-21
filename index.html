@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <!-- bump ?v when the stylesheet changes: a static host will serve the old one otherwise -->
-  <link rel="stylesheet" href="styles.css?v=20261121a">
+  <link rel="stylesheet" href="styles.css?v=20261121b">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png?v=6" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=6">
@@ -108,7 +108,79 @@
 </div>
 
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
-<script type="module" src="js/app.js?v=20261121a"></script>
+<!-- after the import map, which must come before any module is fetched; the list is checked by scripts/check-console.mjs -->
+<!-- modulepreload: the modules app.js imports and theirs; node scripts/check-console.mjs --write-preload -->
+<link rel="modulepreload" href="js/api.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/people.js">
+<link rel="modulepreload" href="js/team.js">
+<link rel="modulepreload" href="js/week.js">
+<link rel="modulepreload" href="js/farm.js">
+<link rel="modulepreload" href="js/crops.js">
+<link rel="modulepreload" href="js/dashboard.js">
+<link rel="modulepreload" href="js/procedures.js">
+<link rel="modulepreload" href="js/cropdb.js">
+<link rel="modulepreload" href="js/maintenance.js">
+<link rel="modulepreload" href="js/purchasing.js">
+<link rel="modulepreload" href="js/prices.js">
+<link rel="modulepreload" href="js/reports.js">
+<link rel="modulepreload" href="js/network.js">
+<link rel="modulepreload" href="js/issues.js">
+<link rel="modulepreload" href="js/operations.js">
+<link rel="modulepreload" href="js/feedback.js">
+<link rel="modulepreload" href="js/scouting.js">
+<link rel="modulepreload" href="js/treatments.js">
+<link rel="modulepreload" href="js/harvest.js">
+<link rel="modulepreload" href="js/update.js">
+<link rel="modulepreload" href="js/cameras.js">
+<link rel="modulepreload" href="js/timeline.js">
+<link rel="modulepreload" href="js/orders.js">
+<link rel="modulepreload" href="js/customers.js">
+<link rel="modulepreload" href="js/yield.js">
+<link rel="modulepreload" href="js/hours.js">
+<link rel="modulepreload" href="js/money.js">
+<link rel="modulepreload" href="js/gallery.js">
+<link rel="modulepreload" href="js/forecast.js">
+<link rel="modulepreload" href="js/validation.js">
+<link rel="modulepreload" href="js/baskets.js">
+<link rel="modulepreload" href="js/connect.js">
+<link rel="modulepreload" href="js/farmnet3d.js">
+<link rel="modulepreload" href="js/farmnet.js">
+<link rel="modulepreload" href="js/assistant.js">
+<link rel="modulepreload" href="js/op-strip.js">
+<link rel="modulepreload" href="js/live.js">
+<link rel="modulepreload" href="js/catalog.js">
+<link rel="modulepreload" href="js/families.js">
+<link rel="modulepreload" href="js/settings.js">
+<link rel="modulepreload" href="js/farm-time.js">
+<link rel="modulepreload" href="js/team-ai.js">
+<link rel="modulepreload" href="js/team/index.js">
+<link rel="modulepreload" href="js/team/state.js">
+<link rel="modulepreload" href="js/week/index.js">
+<link rel="modulepreload" href="js/weather.js">
+<link rel="modulepreload" href="js/procedure-edit.js">
+<link rel="modulepreload" href="js/crop-edit.js">
+<link rel="modulepreload" href="js/product.js">
+<link rel="modulepreload" href="js/cases.js">
+<link rel="modulepreload" href="js/registry.js">
+<link rel="modulepreload" href="js/op-actions.js">
+<link rel="modulepreload" href="js/scouting/index.js">
+<link rel="modulepreload" href="js/kinds.js">
+<link rel="modulepreload" href="js/timeline/index.js">
+<link rel="modulepreload" href="js/farmnet/overview.js">
+<link rel="modulepreload" href="js/farmnet/control.js">
+<link rel="modulepreload" href="js/farmnet/irrigation.js">
+<link rel="modulepreload" href="js/farmnet/sensors.js">
+<link rel="modulepreload" href="js/farmnet/shell.js">
+<link rel="modulepreload" href="js/assistant-local.js">
+<link rel="modulepreload" href="js/assistant-shape.js">
+<link rel="modulepreload" href="js/ai-build-ui.js">
+<link rel="modulepreload" href="js/op-glyphs.js">
+<link rel="modulepreload" href="js/op-history.js">
+<link rel="modulepreload" href="js/assistant-settings.js">
+<link rel="modulepreload" href="js/aicost.js">
+<!-- /modulepreload -->
+<script type="module" src="js/app.js?v=20261121b"></script>
 <script>
   // Installable, and it still opens when the signal drops between the
   // office and the container. The worker is network-first, so being

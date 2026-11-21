@@ -89,11 +89,15 @@ async function checked(o) {
 
 const rowsText = d => (d.rows || []).map(r => `${r.table}: ${r.n} ${r.op === 'INSERT' ? 'added' : r.op === 'DELETE' ? 'removed' : 'changed'}`).join(', ');
 
+// the FarmBox a line was made on (operation_detail and operation_group give farm_id): a build of sister units has steps on
+// another unit than the one open, and FarmNet's put-back must go to that unit's controller (send() reads only farm.id)
+export const farmOfOp = (o, farm) => (o?.farm_id && o.farm_id !== farm?.id ? { id: o.farm_id } : farm);
+
 export async function revertOne(o, farm) {
   if (o.source === 'farmnet') {
     const u = farmnetUndo(o);
     if (!u) throw new Error('Nothing was kept to put it back');
-    return runCommand(u.name, u.args, { actor: 'human', source: 'timeline', revertOf: o.id, summary: 'Put back: ' + titleOf(o), ctx: { farm } });
+    return runCommand(u.name, u.args, { actor: 'human', source: 'timeline', revertOf: o.id, summary: 'Put back: ' + titleOf(o), ctx: { farm: farmOfOp(o, farm) } });
   }
   return rpc('revert_operation', { p_op: o.id, p_page: here() });
 }
@@ -134,7 +138,8 @@ export async function revertGroup(id, b, ctx) {
         if (s.revert_class !== 'A' || !s.may_revert) { stopped(n, titleOf(s), s.read_only ? 'read only for you' : 'it cannot be put back'); after(ctx); return; }
         const d = await rpc('operation_detail', { p_op: s.id }, { quiet: true });
         if (d.conflicts?.length) { stopped(n, titleOf(s), d.conflicts.map(conflictText).join('; ')); after(ctx); return; }
-        try { await revertOne(s, ctx.farm); n++; } catch (e) { stopped(n, titleOf(s), say(e)); after(ctx); return; }
+        // the step's own unit (a build of sister units), not the one open on the Timeline
+        try { await revertOne(s, { id: s.farm_id || ctx.farm?.id }); n++; } catch (e) { stopped(n, titleOf(s), say(e)); after(ctx); return; }
       }
       toast(`Put back: ${n} step${n === 1 ? '' : 's'}`, 'ok');
     }
@@ -163,7 +168,7 @@ async function compensate(o, b, ctx) {
   if (!c) { toast('Not any more: something was started, paused or stopped since, or it is over', ''); after(ctx); return; }
   if (!(await confirmDrawer(c.label + '?', `${titleOf(o)}. ${c.text}`, c.label))) { b.disabled = false; return; }
   try {
-    await runCommand(c.command, c.args, { actor: 'human', source: 'timeline', ctx: { farm: ctx.farm } });
+    await runCommand(c.command, c.args, { actor: 'human', source: 'timeline', ctx: { farm: farmOfOp(o, ctx.farm) } });
     toast(`${c.label}: sent to FarmNet`, 'ok');
   } catch (e) { toast(say(e), 'bad'); }
   after(ctx);

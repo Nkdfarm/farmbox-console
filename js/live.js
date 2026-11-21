@@ -33,6 +33,7 @@ function open() {
     if (d.event === 'phx_error' || d.event === 'phx_close' || joinFailed) { again(); return; }
     if (d.event === 'phx_reply' && d.ref === joinRef) { fails = 0; return; }
     if (d.event !== 'broadcast' || d.payload?.event !== 'moved') return;
+    dispatchEvent(new Event('fbc:moved'));   // api.js: a read started before this never answers one asked after
     clearTimeout(debounce);
     debounce = setTimeout(() => { try { onMoved?.(); } catch { /* the page went away */ } }, 1200);
   };

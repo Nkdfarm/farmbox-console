@@ -273,7 +273,9 @@ function paintBuild() {
   if (!buildRow) return;
   buildRow.textContent = '';
   const v = mode === 'chat' ? [...convo().view].reverse().find(x => x.role === 'assistant' && x.plan?.steps?.length) : null;
-  if (!v || v.plan.built || v.plan.dropped) { buildRow.hidden = true; return; }
+  // the saved mark only hides the button (a second tab's copy may be older): one build per plan is the Web Locks lock's job
+  // (ai-build-ui.js startBuild), and the row is hidden while this tab builds
+  if (!v || v.plan.built || v.plan.dropped || building()) { buildRow.hidden = true; return; }
   buildRow.hidden = false;
   const n = v.plan.steps.length;
   buildRow.append(el('span', 'ai-build-what', `Plan ready · ${n} step${n === 1 ? '' : 's'} · ${estimateLine(v.plan.estimate, null)}`));
@@ -284,10 +286,13 @@ function paintBuild() {
   no.onclick = () => { v.plan.dropped = true; save(key); paintBuild(); };
   go.onclick = () => {
     if (building()) { toast('A build is already waiting for your review', 'bad'); return; }
-    v.plan.built = true; save(key); paintBuild();
+    buildRow.hidden = true;
     const w = ctx.where?.() || {};
-    startBuild(v.plan, { farm: ctx.farm(), units: w.unitIds || undefined, refresh: () => ctx.refresh() })
-      .catch(e => { toast('The build could not start: ' + (e?.message || e), 'bad'); abandonBuild(); });
+    // built once its first draft is staged: a build the cap, a Build switch or another tab refused can be tried again
+    const onStaged = () => { v.plan.built = true; save(key); paintBuild(); };
+    startBuild(v.plan, { farm: ctx.farm(), units: w.unitIds || undefined, refresh: () => ctx.refresh(), onStaged })
+      .catch(e => { toast('The build could not start: ' + (e?.message || e), 'bad'); abandonBuild(); })
+      .finally(() => paintBuild());
   };
   buildRow.append(el('div', 'spacer'), no, go);
 }

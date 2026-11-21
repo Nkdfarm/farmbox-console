@@ -1,5 +1,5 @@
 // the Friday plan drawer: roster, load, exceptions, Draft and Validate
-import { drawer, el, parseYmd, once, confirmDrawer, toast, busy, avatar, emptyState } from '../ui.js';
+import { drawer, el, parseYmd, once, confirmDrawer, toast, busy, avatar, emptyState, farmWhen } from '../ui.js';
 import { rpc } from '../api.js';
 import { roleLabel } from '../people.js';
 import { focusWeek, load } from './index.js';
@@ -73,7 +73,7 @@ function summary(plan) {
   pill(`${hrs(dem)} h of work`);
   pill(`${hrs(cap)} h of people`);
   pill(`${pct}% loaded`, pct > 100 ? 'bad' : pct > 85 ? 'warn' : 'ok');
-  if (plan.validated_at) pill('validated ' + new Date(plan.validated_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+  if (plan.validated_at) pill('validated ' + farmWhen(plan.validated_at));
   return row;
 }
 

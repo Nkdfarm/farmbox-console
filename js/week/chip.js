@@ -1,5 +1,5 @@
 // the task chip, its drop targets and the task row
-import { el, subFamilyHue, icon, toast, avatar, subFamilyTag } from '../ui.js';
+import { el, subFamilyHue, icon, toast, avatar, subFamilyTag, farmWhen } from '../ui.js';
 import { rpc } from '../api.js';
 import { FAM_ICON, PRIO, manual, stateOf, hhmm, hrs, longDate, onTask, stateMark, reasonText,
          shortDay, S } from './state.js';
@@ -87,7 +87,7 @@ export function chip(t, opts = {}) {
 }
 
 // a task two people sent (FarmBox 0186): the first report is the task's, the others are kept and named here
-export const secondReports = t => 'Also sent by ' + (t.also_sent || []).map(a => `${firstName(a.by) || 'somebody'}${a.at ? ' at ' + new Date(a.at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}`).join(', ')
+export const secondReports = t => 'Also sent by ' + (t.also_sent || []).map(a => `${firstName(a.by) || 'somebody'}${a.at ? ' at ' + farmWhen(a.at) : ''}`).join(', ')
   + ' — the first report is the one of the task; the other is kept as a second report.';
 // who worked on it, one by one: "Naison 12 min (now) · Dial 5 min"
 export const workedBy = t => ((timeOf(t) || {}).by || []).map(b => `${firstName(b.name) || 'somebody'} ${fmtWork(b.minutes)}${b.running ? ' (now)' : ''}`).join(' · ');

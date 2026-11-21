@@ -11,7 +11,7 @@
 // that way). Sister units are read together unless one is switched off.
 // ═══════════════════════════════════════════════════════════════════════════
 import { openFast, rpc, URL_BASE } from './api.js';
-import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate, ymd, parseYmd, shortDay, emptyState } from './ui.js';
+import { loading, el, pageHead, drawer, toast, cropAvatar, pref, confirmDrawer, farmDate, ymd, parseYmd, addDays, shortDay, emptyState } from './ui.js';
 
 const SPAN_KEY = 'fbc_basket_span', PROP_KEY = 'fbc_basket_proposed', UNITS_KEY = 'fbc_basket_units';
 const SPANS = [[28, '4 weeks'], [91, '3 months'], [182, '6 months']];
@@ -20,7 +20,6 @@ const BACK = 14;   // the window opens two weeks back: the last harvests weighed
 let farm = null, mount = null, data = null, offset = 0, clients = null;
 const span = () => Number(pref.get(SPAN_KEY)) || 91;
 const withProposals = () => pref.get(PROP_KEY) !== 'off';
-const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const dayName = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'short' });
 const longDay = s => parseYmd(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 const kgText = n => { n = Number(n || 0); return n >= 100 ? `${Math.round(n).toLocaleString()} kg` : `${n.toFixed(n >= 10 ? 0 : 1)} kg`; };

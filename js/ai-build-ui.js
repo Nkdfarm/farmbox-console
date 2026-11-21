@@ -11,14 +11,18 @@
 //     review everything but the tray, the build line and the emergency controls is inert (pointer-events, aria-disabled,
 //     focus and keys kept out) and dimmed. The emergency controls are the registry's emergency commands (Stop the run,
 //     Pause, Resume) and anything inside a drawer marked data-emergency: ui.js marks a drawer so when it is opened with
-//     { emergency: true } (FarmNet's Pause, Resume and Stop drawers and their confirms, farmnet/commands.js) or while the
-//     console is locked (only an emergency control can open one then); such a drawer sits above the tray. The console
+//     { emergency: true } (FarmNet's Pause, Resume and Stop drawers and their confirms, farmnet/commands.js), and only
+//     then — a drawer anything else opens during the lock is locked too; such a drawer sits above the tray. The console
 //     has no alarm acknowledgement yet; one would carry data-emergency. A drawer opened before the build is locked too;
 //   - the band always has a way out: Stop while building (to review, or ended when nothing was staged), Discard all in
 //     review; only a Validate in flight has none, and each of its steps is given up after 45 s (ai-build.js);
-//   - 5 minutes without input (pointer or keyboard) ends it by itself (ai-build.js), with a notice.
+//   - 5 minutes without input (pointer or keyboard) ends it by itself (ai-build.js), with a notice;
+//   - one plan is built in one tab only: the Web Locks lock "ai-build:<plan id>" is held from Build it until the build
+//     closes, so a second tab (or window) of the same browser is told it is already being built there (without
+//     navigator.locks, as before: only this tab's own guard); Validate stops before a step when the person signed in
+//     changed since it was pressed.
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn } from './api.js';
+import { rpc, fn, getSession } from './api.js';
 import { el, toast } from './ui.js';
 import { createBuild } from './ai-build.js';
 import { getCommand, listCommands, findAnchor, runCommand } from './registry.js';
@@ -26,10 +30,13 @@ import { pageTitle } from './assistant-shape.js';
 
 const HIGHLIGHT_MS = 900;
 const FIND_MS = 2500;
-let current = null;      // { build, ctx, open (the draft whose form is open) }
+const READ_MS = 8000;    // the Build switches' read before building: one that hangs is taken as unreadable
+let current = null;      // { build, ctx, open (the draft whose form is open), release (the tab lock), staged (told) }
+let starting = false;    // between Build it and the executor's start: the reads of the Build switches
+let startGone = false;   // the FarmBox changed or the person signed out during those reads: the build never begins
 let bandEl = null, trayEl = null, styleEl = null;
 const wait = ms => new Promise(r => setTimeout(r, ms));
-export const building = () => !!current && !!current.build.state().locked;
+export const building = () => starting || (!!current && !!current.build?.state().locked);
 
 // ── the replay (also the history strip's Play, op-strip.js: navigate, locate and highlight, never a click) ───────────
 export async function navigate(page) {
@@ -169,7 +176,7 @@ function draftCard(d, s) {
     head.append(x);
   }
   card.append(head, el('div', 'ai-draft-meta', d.label + (d.edited ? ' · changed by you' : '') + (d.fixed ? ' · fixed by the AI' : '')));
-  if (d.reason) card.append(el('div', 'ai-draft-why', 'Why: ' + d.reason));                                   // P6: its one-line reason
+  if (d.reason) card.append(el('div', 'ai-draft-why', (d.edited ? 'The AI’s reason, before your change: ' : 'Why: ') + d.reason));   // P6: its one-line reason
   (d.warnings || []).forEach(w => card.append(el('div', 'ai-draft-note', '⚠ ' + w)));                         // P6: what was not checked
   if (!d.anchor) card.append(el('div', 'ai-draft-note', 'Its button was not found on the page: staged all the same.'));
   if (d.switches_on) card.append(el('div', 'ai-draft-warn', 'This switches the program ON when you validate.'));
@@ -198,7 +205,7 @@ function paintTray(s) {
   head.append(min);
   trayEl.classList.toggle('min', !!current.min);
   trayEl.append(head);
-  if (s.notice) trayEl.append(el('div', 'ai-tray-notice' + (s.result?.failed || s.stopped ? ' bad' : ''), s.notice));
+  if (s.notice) trayEl.append(el('div', 'ai-tray-notice' + (s.result?.failed || s.result?.halted || s.stopped ? ' bad' : ''), s.notice));
   const switches = s.drafts.filter(d => d.switches_on && d.status === 'draft').length;
   if (switches && s.phase === 'review') trayEl.append(el('div', 'ai-draft-warn', `This build switches ${switches} program${switches === 1 ? '' : 's'} on: check ${switches === 1 ? 'it' : 'them'} before you validate.`));
   const body = el('div', 'ai-tray-body');
@@ -232,6 +239,8 @@ function paintTray(s) {
 
 function paint(s) {
   if (!current) return;
+  // the plan counts as built from its first staged draft (a build refused by the cap or a switch can be tried again)
+  if (s.staged && !current.staged) { current.staged = true; try { current.ctx.onStaged?.(); } catch (e) { console.warn(e); } }
   const on = s.locked;
   document.body.classList.toggle('ai-building', on);
   lock(on);
@@ -245,8 +254,9 @@ function paint(s) {
 }
 function close() {
   if (!current) return;
-  const ctx = current.ctx;
+  const ctx = current.ctx, release = current.release;
   current = null;
+  try { release?.(); } catch { /* the lock goes with the tab anyway */ }
   listen(false); lock(false);
   document.body.classList.remove('ai-building');
   bandEl?.remove(); bandEl = null; trayEl?.remove(); trayEl = null;
@@ -254,18 +264,49 @@ function close() {
 }
 
 // ── starting a build: Build it in the question box ──────────────────────────────────────────────────────────────────
-// ctx: { farm (the FarmBox object), units (ids on screen), refresh() }
+// the Web Locks lock of one plan, held until release() is called (or the tab closes): a release function when this tab
+// has it, null when another tab holds it, undefined when the browser has no navigator.locks or the request failed
+export const PLAN_BUSY = 'This plan is already being built in another tab (or window) of this browser: review it there.';
+export function lockPlan(planId, locks = typeof navigator !== 'undefined' ? navigator.locks : undefined) {
+  if (!planId || typeof locks?.request !== 'function') return Promise.resolve(undefined);
+  return new Promise(resolve => {
+    let p;
+    try {
+      p = locks.request('ai-build:' + planId, { ifAvailable: true }, lock => {
+        if (!lock) { resolve(null); return undefined; }
+        return new Promise(release => resolve(release));   // held until release()
+      });
+    } catch { resolve(undefined); return; }
+    Promise.resolve(p).catch(() => resolve(undefined));
+  });
+}
+const timed = (p, ms) => Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error('no answer')), ms))]);
+
+// ctx: { farm (the FarmBox object), units (ids on screen), refresh(), onStaged() — the first draft is staged }
 export async function startBuild(plan, ctx) {
-  if (current) { toast('A build is already running or waiting for your review', 'bad'); return null; }
+  if (current || starting) { toast('A build is already running or waiting for your review', 'bad'); return null; }
   const farm = ctx.farm;
   if (!farm) { toast('Choose a FarmBox first', 'bad'); return null; }
+  starting = true; startGone = false;
+  let release, run = null;
+  try {
+    release = await lockPlan(plan?.id);
+    if (release === null) { toast(PLAN_BUSY, 'bad'); return null; }
+    run = await begin(plan, ctx, farm, release || null);   // { started: the executor's start() } once it is set up
+  } finally {
+    starting = false;
+    if (!run && release) { try { release(); } catch { /* none */ } }   // never began: let the lock go
+  }
+  return run ? run.started : null;
+}
+async function begin(plan, ctx, farm, release) {
   // the Build switches of each unit the plan touches, read once as the person (0285): a family turned off on a step's
   // unit stops the build at that step
   const units = [...new Set([farm.id, ...(plan.steps || []).map(s => s.unit).filter(u => typeof u === 'string' && u)])];
   const permsOf = new Map();
   await Promise.all(units.map(async u => {
     let p = null;
-    try { p = await rpc('ai_permissions', { p_farm: u }, { quiet: true }); } catch { p = null; }
+    try { p = await timed(rpc('ai_permissions', { p_farm: u }, { quiet: true }), READ_MS); } catch { p = null; }
     permsOf.set(u, p ? new Map((p.families || []).map(f => [f.code, f])) : null);
   }));
   const mayBuild = (family, unit) => {
@@ -286,24 +327,29 @@ export async function startBuild(plan, ctx) {
       fix: { step: { command: step.command, args: step.args, page: step.page, summary: step.summary, unit: step.unit, reason: step.reason, valves: step.valves }, error } }, { quiet: true });
     return r?.ok ? { ok: true, step: r.step } : { ok: false, error: r?.error || 'no answer' };
   };
-  current = { ctx, open: null, build: null };
+  if (current) return null;   // only this function sets it, behind `starting`
+  if (startGone) { toast('The build did not start: the FarmBox or the person changed meanwhile', 'bad'); return null; }
+  current = { ctx, open: null, build: null, release, staged: false };
   current.build = createBuild(plan, {
     farm, farmFor, navigate, locate, highlight, fix, mayBuild, budget, run: runCommand,
     newId: () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16))),
     now: () => Date.now(), setTimer: (f, ms) => setTimeout(f, ms), clearTimer: h => clearTimeout(h),
     onChange: s => paint(s),
+    userId: () => getSession()?.user?.id || null,
   });
   listen(true);
   const mine = current;
-  return current.build.start().catch(e => {
+  // wrapped: the caller of begin() must not wait for the whole build (a step may hang until Stop)
+  return { started: current.build.start().catch(e => {
     // never left locked: whatever went wrong, the build is ended and the screen given back
     toast('The build stopped: ' + (e?.message || e), 'bad');
     if (current === mine) { try { mine.build.discard(); } catch { /* none */ } close(); }
     return null;
-  });
+  }) };
 }
 // sign-out or another FarmBox: a build in progress is discarded, nothing applied
 export function abandonBuild() {
+  if (starting) startGone = true;   // still reading the Build switches: begin() stops before anything is staged
   if (!current) return;
   if (current.build?.state().phase === 'validating') return;   // an apply in flight finishes (each step at most 45 s)
   try { current.build?.discard(); } catch { /* the screen is given back below */ }

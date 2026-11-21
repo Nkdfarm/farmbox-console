@@ -19,7 +19,7 @@
 // when the console is offline, and says how old it is.
 // ═══════════════════════════════════════════════════════════════════════════
 import { select, patch } from './api.js';
-import { el, icon, toast, busy, field, farmToday, ymd, addDays, parseYmd } from './ui.js';
+import { el, icon, toast, busy, field, farmDay, farmTime, farmDayOf, farmToday, ymd, addDays, parseYmd } from './ui.js';
 
 const FORECAST = 'https://api.open-meteo.com/v1/forecast';
 const GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search';
@@ -46,7 +46,7 @@ const wmo = (code, day = 1) => {
 };
 
 const round = (v, dp = 0) => (v == null ? '—' : Number(v).toFixed(dp));
-const clock = t => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+const clock = t => farmTime(t);
 
 // ── wind: average, gust, direction ─────────────────────────────────────────
 // Direction is where the wind comes FROM, as weather reports say it ("a south-
@@ -92,6 +92,9 @@ const readFarm = async id => (await select('farm', `${FARM_FIELDS}&id=eq.${id}`)
 // background only when the saved copy is older than FRESH_MS.
 const FRESH_MS = 15 * 60 * 1000;
 
+// paint() reads wx.current and wx.daily: a forecast without them (an odd answer, an old copy) is not drawn
+const usable = wx => !!(wx && wx.current && wx.daily);
+
 const readKept = id => {
   try { return JSON.parse(localStorage.getItem(KEEP(id)) || 'null'); } catch { return null; }
 };
@@ -100,7 +103,7 @@ export function weatherTile(farm) {
   const tile = el('div', 'tile wx-tile');
   tile.setAttribute('aria-label', 'Weather');
   const kept = readKept(farm.id);
-  if (kept?.wx && kept?.row) {
+  if (kept?.row && usable(kept.wx)) {
     paint(tile, farm, kept.row, kept.wx, kept.at, false);
     if (Date.now() - kept.at > FRESH_MS) load(tile, farm, true);
   } else {
@@ -132,12 +135,13 @@ async function load(tile, farm, quiet = false) {
   let wx, at = Date.now(), offline = false;
   try {
     wx = await getJson(url);
+    if (!usable(wx)) throw new Error('The forecast came back incomplete');
     try { localStorage.setItem(KEEP(farm.id), JSON.stringify({ at, lat, lng, row: keep, wx })); }
     catch { /* private window: no offline copy */ }
   } catch {
     if (quiet) return;                        // the saved copy stays on screen
     const kept = readKept(farm.id);
-    if (!kept || kept.lat !== lat || kept.lng !== lng) {
+    if (!kept || kept.lat !== lat || kept.lng !== lng || !usable(kept.wx)) {
       return note(tile, 'The forecast needs a connection, and none was saved on this device yet.', row);
     }
     wx = kept.wx; at = kept.at; offline = true;
@@ -242,8 +246,8 @@ function paint(tile, farm, row, wx, at, offline) {
   place.append(icon('pin'), el('span', null, row.town || `${round(row.lat, 2)}, ${round(row.lng, 2)}`));
   place.onclick = () => pick(tile, farm, row, () => paint(tile, farm, row, wx, at, offline));
   const stale = Date.now() - at > 3 * 3600_000;              // "now" from hours ago is not now
-  const sameDay = new Date(at).toDateString() === new Date().toDateString();
-  const stamp = sameDay ? clock(at) : new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + clock(at);
+  const sameDay = farmDayOf(at) === farmToday();
+  const stamp = sameDay ? clock(at) : farmDay(at) + ' ' + clock(at);
   const when = el('span', 'wx-when' + (offline || stale ? ' is-old' : ''),
     offline ? `Offline — saved ${stamp}` : `${stale ? 'Saved' : 'Updated'} ${stamp}`);
   foot.append(place, when, forecastLinks(row));

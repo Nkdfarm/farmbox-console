@@ -5,7 +5,7 @@
 // account they sign in with, the access it carries, the job and the week. What
 // they are responsible for, and in which order, is the Team page (team.js).
 // ═══════════════════════════════════════════════════════════════════════════
-import { rpc, fn, select } from './api.js';
+import { rpc, fn } from './api.js';
 import { el, field, input, selectBox, toast, drawer, confirmDrawer, suggestPassword, busy, faceIcon } from './ui.js';
 import { personAiSection } from './team-ai.js';
 
@@ -176,6 +176,7 @@ function openPerson(p) {
   const cancel = el('button', 'btn', 'Cancel');
   cancel.onclick = d.close;
   const save = el('button', 'btn btn-primary', isNew ? 'Add person' : 'Save');
+  let createdId = null;   // the login made by admin-user, kept when save_person fails after it: a second Save only saves the person
   save.onclick = async () => {
     const body = {
       farm_id: farm.id,
@@ -232,9 +233,14 @@ function openPerson(p) {
     const done = [];   // what was already changed on the login when a later step fails: said, so nobody thinks nothing happened
     let id = p?.worker_id ?? null;
     try {
-      if (wantsAccount && (isNew || !p.has_login)) {
+      if (createdId || (wantsAccount && (isNew || !p.has_login))) {
         // account + access + person, in the edge function that holds the key
-        const made = await fn('admin-user', { action: 'create', ...body, password: pw.value.trim() });
+        if (!createdId) {
+          const made = await fn('admin-user', { action: 'create', ...body, password: pw.value.trim() });
+          createdId = made.worker_id;
+        }
+        done.push('the new login');
+        const made = { worker_id: createdId };
         // admin-user writes the account and the roster row; the profile
         // (surname, LinkedIn, picture) goes through save_person like any edit.
         // a login given to somebody switched off brings them back, as admin-user just did: the profile must not undo it
@@ -533,7 +539,3 @@ async function act(body, okMessage) {
     await afterSave();
   } catch (e) { toast(e.message, 'bad'); }
 }
-
-// The farm switcher needs this too.
-export const listFarms = () =>
-  select('farm', 'select=id,name,code,status&order=name&status=eq.active');

@@ -188,9 +188,11 @@ function editCost(e) {
   }
   const go = el('button', 'btn btn-primary', 'Save');
   go.onclick = async () => {
+    const amt = amount.value.trim() === '' ? NaN : Number(amount.value);   // a blank field is not a number: it used to go as ''
+    if (!Number.isFinite(amt) || amt <= 0) { toast('The amount must be a number above zero', 'bad'); amount.focus(); return; }
     busy(go, true, 'Saving…');
     try {
-      await rpc('save_cost', { p_farm: farm.id, p: { id: e?.id || null, day: day.value, category: cat.value, kind: kind.value, amount: amount.value,
+      await rpc('save_cost', { p_farm: farm.id, p: { id: e?.id || null, day: day.value, category: cat.value, kind: kind.value, amount: amt,
         description: desc.value, supplier: sup.value, crop_plan_id: e?.crop_plan_id || null, zone_id: e?.zone_id || null } });   // an edit kept the zone it had
       d.close();
       // the list shows the period on screen only: a cost dated outside it is saved and not in sight (review 13 Oct 2026)

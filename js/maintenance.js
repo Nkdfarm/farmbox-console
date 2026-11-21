@@ -195,16 +195,18 @@ function editAsset(a) {
   d.footer.append(cancel, save);
 }
 
-let maintProcs = null, maintProcsFarm = null;   // the Maintenance procedures a routine may run, read once per farm
+let maintProcs = null, maintProcsFarm = null;   // the Maintenance procedures a routine may run, read again each time the editor opens
 async function editRule(asset, r) {
   const d = drawer((r ? 'Routine' : 'New routine') + ' on ' + asset.name, 'What has to be done, and how often');
-  if (!maintProcs?.length || maintProcsFarm !== farm.id) {
-    maintProcsFarm = farm.id;
+  {
+    // read at each opening (a procedure approved or archived since is seen at once); the last list of this farm stands in when the read fails
+    const had = maintProcsFarm === farm.id && maintProcs?.length;
     try {
       const all = await rpc('procedures', { p_farm: farm.id });
       maintProcs = (all.procedures || []).filter(p => p.family === 'Maintenance' && p.status === 'approved')
         .sort((a, b) => a.title.localeCompare(b.title));
-    } catch (e) { maintProcs = null; toast(e.message, 'bad'); d.close(); return; }
+      maintProcsFarm = farm.id;
+    } catch (e) { if (!had) { maintProcs = null; toast(e.message, 'bad'); d.close(); return; } }
   }
   if (!maintProcs.length) {
     d.body.append(el('div', 'note warn', 'There is no approved Maintenance procedure yet. A routine runs one — add it under Maintenance › Preventive maintenance first.'));

@@ -464,11 +464,12 @@ function paintUnitsLink() {
 }
 
 // What am I here? Franchisor first — it outranks anything farm-level.
-async function paintMyRole() {
+const readMyRoles = () => select('membership', `select=role,farm_id,org_id&user_id=eq.${myUserId}&active=is.true`);
+// pending: the rows already asked for (the start-up reads them beside the FarmBoxes); the pill needs the farm either way
+async function paintMyRole(pending) {
   const pill = $('envPill');
   try {
-    const rows = await select('membership',
-      `select=role,farm_id,org_id&user_id=eq.${myUserId}&active=is.true`);
+    const rows = await (pending || readMyRoles());
     myRoles = rows;
     setMyRoles(rows);
     const franchisor = rows.some(r => r.role === 'franchisor_admin');
@@ -762,28 +763,33 @@ async function startOnce() {
       (user.email || '').split('@')[0].replace(/^./, c => c.toUpperCase());
     $('whoName').textContent = name;
     $('who').textContent = user.email || '';
+    // Everything below needs only who you are, so it is asked at once (21 Nov 2026; one after the other it was six
+    // round trips to Frankfurt before the page): your worker row, everyone's pictures, the systems and families, the
+    // FarmBoxes, your roles. The face waits for the first two, the role pill for the FarmBoxes (it names the farm).
+    bootBar.set(40, 'Reading the systems, task families and your FarmBoxes…');
     // The same face here as on People and the plan: those key on the worker
     // row, so find the signed-in person's. A franchisor admin has none and
     // keeps a face of their own.
-    try {
-      const mine = await select('worker', `select=id&user_id=eq.${user.id}&active=is.true&limit=1`);
-      myWorkerId = mine[0]?.id ?? null;
-    } catch { myWorkerId = null; }
+    const worker = select('worker', `select=id&user_id=eq.${user.id}&active=is.true&limit=1`)
+      .then(mine => { myWorkerId = mine[0]?.id ?? null; }, () => { myWorkerId = null; });
     // everyone's own picture, for every avatar on every page (ui.js setPhotos)
     // … and their colour when they have none: the place at their site (FarmBox 0220); a database before it has no such column
-    try { setPhotos(await select('worker', 'select=id,photo_url,colour_place&order=created_at.asc,id.asc')); }
-    catch { try { setPhotos(await select('worker', 'select=id,photo_url&order=created_at.asc,id.asc')); } catch { /* demo faces */ } }
+    const photos = select('worker', 'select=id,photo_url,colour_place&order=created_at.asc,id.asc').then(setPhotos)
+      .catch(() => select('worker', 'select=id,photo_url&order=created_at.asc,id.asc').then(setPhotos).catch(() => { /* demo faces */ }));
     // Available systems and media, before any page draws a system or a medium
-    bootBar.set(40, 'Reading the systems and task families…');
-    await Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);
+    const lists = Promise.all([loadCatalog().catch(e => console.warn('catalogue', e)), loadFamilies().catch(e => console.warn('families', e))]);
+    const roles = readMyRoles();
+    roles.catch(() => { /* paintMyRole handles it; this only keeps a start that fails first from an unhandled rejection */ });
+    // the others never fail; a failed FarmBox list fails the start as before, once the rest has settled
+    const farmList = loadFarms();
+    await Promise.all([worker, photos, lists, farmList.catch(() => {})]);
+    await farmList;
     $('meAvatar').textContent = '';
     $('meAvatar').append(avatar({ worker_id: myWorkerId, id: user.id, name }));
     const tv = document.getElementById('topVersion');
     if (tv) tv.textContent = 'v' + VERSION;
-    bootBar.set(55, 'Reading your FarmBoxes…');
-    await loadFarms();
     bootBar.set(70, 'Checking your role…');
-    await paintMyRole();
+    await paintMyRole(roles);
     bootBar.set(85, 'Opening the page…');
     // replaceState, not location.hash: that queued a hashchange and drew the start page twice
     if (!location.hash) history.replaceState(null, '', '#/' + startPage());

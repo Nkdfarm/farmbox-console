@@ -77,9 +77,10 @@ export function drawer(title, subtitle, opts = {}) {
   box.append(head, body, footer);
   // opened from the photo viewer (z 60): above it, or it opened unseen behind the photo (0.7.162)
   if (document.querySelector('.viewer')) { scrim.style.zIndex = '62'; box.style.zIndex = '63'; }
-  // an emergency control's drawer (FarmNet's Pause, Resume, Stop) stays usable while an AI build locks the console, and
-  // so does any drawer opened during the lock — only an emergency control can open one then (AI build mode P5)
-  if (opts.emergency || document.body.classList.contains('ai-locked')) { scrim.dataset.emergency = ''; box.dataset.emergency = ''; }
+  // an emergency control's drawer (FarmNet's Pause, Resume, Stop and their confirms, opened with { emergency: true })
+  // stays usable while an AI build locks the console (AI build mode P5). Only those: a drawer that something else opens
+  // during the lock (a late answer, a background read) is locked like the page
+  if (opts.emergency) { scrim.dataset.emergency = ''; box.dataset.emergency = ''; }
   document.body.append(scrim, box);
 
   let closed = false;

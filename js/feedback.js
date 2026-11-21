@@ -13,7 +13,7 @@
 // The AI proposes: nothing here changes a procedure or the app by itself.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast, fn, api, URL_BASE } from './api.js';
-import { loading, el, table, pageHead, drawer, toast, busy } from './ui.js';
+import { loading, el, table, pageHead, drawer, toast, busy, farmDay, farmTime, farmDayOf, farmToday } from './ui.js';
 
 const STATUS = { new: ['New', 'warn'], accepted: ['Accepted', 'info'], done: ['Done', 'ok'], rejected: ['Rejected', ''] };
 const KIND = { procedure: 'Procedure', app_bug: 'App bug', app_idea: 'App idea', equipment: 'Equipment', safety: 'Safety', other: 'Other' };
@@ -39,9 +39,9 @@ async function load(fresh = false) {
 }
 
 const when = t => {
-  const d = new Date(t);
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
-    + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  // on the farm's clock; the year only when it is not this year's
+  const thisYear = farmDayOf(t).slice(0, 4) === farmToday().slice(0, 4);
+  return farmDay(t, thisYear ? {} : { year: 'numeric' }) + ' ' + farmTime(t);
 };
 const count = (r, k) => (r.media || []).filter(m => m.kind === k).length;
 const mediaWords = r => [[count(r, 'audio'), 'voice note'], [count(r, 'photo'), 'photo'], [count(r, 'video'), 'video']]

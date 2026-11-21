@@ -20,7 +20,7 @@
 // The system proposes: a treatment starts when the Admin, the Farm manager or the Agronomist says so.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, openFast } from './api.js';
-import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer, ymd, parseNoon as parse, shortDay, farmDay, farmTime, emptyState } from './ui.js';
+import { el, num, drawer, toast, busy, input, field, selectBox, pageHead, table, loading, confirmDrawer, ymd, parseNoon as parse, shortDay, farmDay, farmTime, farmToday, parseYmd, emptyState } from './ui.js';
 import { openProduct, openChangeLog, openNewProduct, expiryPill } from './product.js';
 import { KIND, GROUPS, kindOk } from './kinds.js';
 
@@ -449,7 +449,7 @@ function openProgram(t) {
 // ── the library: products ────────────────────────────────────────────────────
 let cMount = null, cFarm = null, cLib = null;
 const cf = { stock: '', supplier: '', kind: '', target: '', group: '', q: '', check: '', origin: '' };
-const soonDays = r => r.expires_on ? (new Date(r.expires_on + 'T12:00:00') - new Date()) / 864e5 : Infinity;
+const soonDays = r => r.expires_on ? Math.round((parseYmd(r.expires_on) - parseYmd(farmToday())) / 864e5) : Infinity;   // whole days from the farm's today
 export async function renderIpmProducts(container, farm) {
   cMount = container; cFarm = farm;
   const here = container;

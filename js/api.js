@@ -208,11 +208,15 @@ const keyOf = (path, opts) =>
 
 // at: when the request left, not when it answered (review 16 Nov 2026): a read that left before a save and answered
 // after it holds the state from before the save, and cachedRpc must not take it for newer than that save
+// The copy is written out before the first await (21 Nov 2026): the caller gets the same object at once, and a page that
+// changed it in place used to have its change kept as the server's answer. x-saved-at lets pruneData date an entry
+// without reading it.
 async function remember(key, body, at = Date.now()) {
   try {
+    const text = JSON.stringify({ saved_at: at, body });
     const c = await caches.open(DATA_CACHE);
-    await c.put(key, new Response(JSON.stringify({ saved_at: at, body }),
-      { headers: { 'Content-Type': 'application/json' } }));
+    await c.put(key, new Response(text,
+      { headers: { 'Content-Type': 'application/json', 'x-saved-at': String(at) } }));
   } catch { /* no Cache API (private window): offline simply has nothing to show */ }
 }
 
@@ -225,11 +229,18 @@ async function recall(key) {
 
 // Copies older than 45 days go (review 3 Oct 2026): one entry per week, period and day ever opened — a day's
 // thumbnails are a few MB — and nothing pruned it until sign-out. Run once a visit, when the page is idle.
+// Dated by the x-saved-at header (21 Nov 2026): parsing every entry froze the page for as long as its megabytes took;
+// only a copy kept before the header existed is still read.
 export async function pruneData(maxDays = 45) {
   try {
     const c = await caches.open(DATA_CACHE), cut = Date.now() - maxDays * 864e5;
     for (const req of await c.keys()) {
-      try { const j = await (await c.match(req)).json(); if (!(j?.saved_at > cut)) await c.delete(req); }
+      try {
+        const res = await c.match(req);
+        const h = Number(res.headers.get('x-saved-at'));
+        const at = h > 0 ? h : (await res.json())?.saved_at;
+        if (!(at > cut)) await c.delete(req);
+      }
       catch { await c.delete(req); }
     }
   } catch { /* no Cache API: nothing kept */ }
@@ -334,12 +345,35 @@ export async function api(path, opts = {}) {
   inFlight++;
   try { return await api0(path, opts); } finally { inFlight--; }
 }
+// The same read asked twice while the first is on its way is asked once (21 Nov 2026): the start-up, warm() and a page
+// often want the same list in the same second. Only a plain read (a GET or a READ_RPCS call with nothing but its
+// method and body: no signal, no headers of its own) of the same person, path and body joins, and only within one
+// generation: every request that is not a read moves it when it leaves and when it ends, and so does a "moved" from
+// another device — a read asked after a change never takes the answer of one asked before it. The first caller gets
+// the answer, every joiner its own copy (structuredClone), an error goes to all of them.
+let readGen = 0;
+const joinable = new Map();
+const readsMoved = () => { readGen++; };
+addEventListener('fbc:moved', readsMoved);   // live.js: somebody else changed something
+const plainRead = opts => Object.keys(opts).every(k => k === 'method' || k === 'body');
 async function api0(path, opts = {}) {
   if (!session) throw new ApiError('sign in first', 401);
   const read = isRead(path, opts);
+  if (!read || !plainRead(opts)) return api1(path, opts, read);
+  const k = (session.user?.id || 'me') + '\n' + readGen + '\n' + path + '\n' + (opts.body ?? '');
+  const going = joinable.get(k);
+  if (going) return structuredClone(await going);
+  const own = api1(path, opts, true);
+  joinable.set(k, own);
+  const done = () => { if (joinable.get(k) === own) joinable.delete(k); };
+  own.then(done, done);
+  return own;
+}
+async function api1(path, opts, read) {
   // the key and the person are fixed when the request leaves: an answer landing after a sign-out (or after the
   // next person signed in) must not be kept, nor kept under somebody else's name (review 3 Oct 2026)
   const s0 = session, key = read ? keyOf(path, opts) : null, t0 = Date.now();
+  if (!read) readGen++;
   try {
     const body = await live(path, opts);
     setOnline(true);
@@ -362,6 +396,8 @@ async function api0(path, opts = {}) {
     }
     servedFromCopy(copy.saved_at);
     return copy.body;
+  } finally {
+    if (!read) readGen++;   // a read asked while the change was on its way does not answer one asked after it
   }
 }
 

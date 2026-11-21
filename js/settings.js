@@ -474,7 +474,7 @@ function syncCard(ctx, o) {
       }
     } catch (e) {
       busy(button, false, label);
-      const missing = e.status === 404 || /not found|failed to fetch/i.test(e.message);
+      const missing = e.status === 404 || (e instanceof TypeError && /failed to fetch/i.test(e.message));   // a bare network failure (a missing function answers without CORS headers); any other "not found" is its own message
       out.append(el('div', 'note bad', missing
         ? `The ${o.fnName} function is not installed on the server yet.`
         : e.message));

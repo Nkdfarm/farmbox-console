@@ -20,7 +20,6 @@ export async function loadFamilies() {
   try { LIST = await rpc('task_families', {}); } catch { /* the built-in three stand in */ }
   return LIST;
 }
-export const familyList = () => LIST;
 // [value, label] pairs for a family menu (active ones, plus `keep` if it is off)
 export const familyOptions = (keep) => LIST.families
   .filter(f => f.active || f.name === keep).map(f => [f.name, f.name]);

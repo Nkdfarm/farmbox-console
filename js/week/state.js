@@ -33,7 +33,6 @@ export const manual = { on: false, worker: null, tasks: new Set(), drop: new Set
 export const onTask = (t, w) => t.hub ? openIds(t).length > 0 && (t.all || t.members).filter(isOpenTask).every(m => (m.workers || []).some(x => x.id === w))
                             : (t.workers || []).some(x => x.id === w);
 export const resetManual = on => { manual.on = on; manual.worker = null; manual.tasks.clear(); manual.drop.clear(); manual.seen.clear(); };
-try { S.filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }
 
 // This page works in ISO strings; the date arithmetic is ui.js's, in local parts.
 export const mondayOf = s => ymd(mondayOfDate(parseYmd(s)));
@@ -63,4 +62,5 @@ export const S = {
   loadGen: 0,  // bumped by load(): a minute's refresh read before a change must not undo it on screen
   peopleCol: null,
 };
-
+// the filters saved by toolbar.js: restored once S exists (this ran above S before: a swallowed TDZ error)
+try { S.filters = { ...EMPTY_FILTERS, ...(JSON.parse(pref.get(FILTER_KEY) || '{}')), q: '' }; } catch { /* keep defaults */ }

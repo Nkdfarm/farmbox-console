@@ -403,12 +403,18 @@ export async function editCrop(c, onSaved, farm) {
           .map(y => ({ system_type: y.system_type, yield_per_position: y.ypp ?? '',
                        yield_per_m2_cycle: y.ym2 ?? '' })),
       } });
-      if (targetsTouched || bomTouched) {
-        await rpc('save_crop_extras', { p_crop: c.id,
-          p_targets: targetsTouched ? targets.map(t => ({ ...t })) : null,
-          p_bom: bomTouched ? bom.map(b => ({ id: b.id || null, item_id: b.item_id, quantity: b.quantity, per: b.per, phase_type: b.phase_type || null, notes: b.notes || null })) : null });
+      try {
+        if (targetsTouched || bomTouched) {
+          await rpc('save_crop_extras', { p_crop: c.id,
+            p_targets: targetsTouched ? targets.map(t => ({ ...t })) : null,
+            p_bom: bomTouched ? bom.map(b => ({ id: b.id || null, item_id: b.item_id, quantity: b.quantity, per: b.per, phase_type: b.phase_type || null, notes: b.notes || null })) : null });
+        }
+        if (trk && trkTouched) await rpc('save_crop_tracking', { p_crop: c.id, p: trk });
+      } catch (later) {
+        // the crop itself is saved: the page behind is made fresh now, and the window stays open to say what failed
+        try { await onSaved?.(); } catch { /* the message below is the one that matters */ }
+        throw new Error(`The crop was saved, but a later part was not: ${later.message}`);
       }
-      if (trk && trkTouched) await rpc('save_crop_tracking', { p_crop: c.id, p: trk });
       toast(`${name.value.trim()} saved · ${r.cycle_days} day cycle` + (r.replanned ? ` · ${r.replanned} batch${r.replanned === 1 ? '' : 'es'} replanned` : ''), 'ok');
       d.close();
       await onSaved?.();

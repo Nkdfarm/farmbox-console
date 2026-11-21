@@ -10,7 +10,7 @@
 // close with its outcome.
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc, select } from './api.js';
-import { el, drawer, field, input, selectBox, toast, busy, num, farmToday, farmDate, confirmDrawer, ymd, once, addDays, parseYmd, shortDay, emptyState } from './ui.js';
+import { el, drawer, field, input, selectBox, toast, busy, num, farmDay, farmToday, farmDate, confirmDrawer, ymd, once, addDays, parseYmd, shortDay, emptyState } from './ui.js';
 import { openViewer, photoTitle, tagChips } from './viewer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -19,7 +19,8 @@ const KIND_WORD = { pest: 'Pest', disease: 'Disease', disorder: 'Disorder', bene
 const OUTCOMES = [['resolved', 'Resolved — gone'], ['contained', 'Contained — held at a low level'],
                   ['crop_removed', 'Crop removed'], ['false_alarm', 'False alarm']];
 const METHODS = [['biological', 'Biological'], ['chemical', 'Chemical'], ['cultural', 'Cultural'], ['mechanical', 'Mechanical']];
-const day = ts => ts ? new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : '—';
+// a date-only string (harvest_after, an application's date) is a day, never shifted; an instant is printed on the farm's clock
+const day = ts => !ts ? '—' : /^\d{4}-\d{2}-\d{2}$/.test(ts) ? shortDay(ts) : farmDay(ts);
 
 // The farm the case windows act on: set by the Pest & diseases page (useFarm)
 // before any case or photo is opened (0.7.101 — the Cases tab became part of it).
@@ -290,7 +291,7 @@ export function caseChart(det) {
   const first = new Date(t0); first.setHours(12, 0, 0, 0); first.setDate(first.getDate() + ((8 - first.getDay()) % 7));
   for (let wk = first, t = wk.getTime(), i = 0; t <= tEnd; wk = new Date(wk.getFullYear(), wk.getMonth(), wk.getDate() + 7, 12), t = wk.getTime(), i++) {
     mk('line', { x1: x(t), x2: x(t), y1: T, y2: H - B, class: 'cc-grid' });
-    if (i % (span > 70 * 864e5 ? 2 : 1) === 0) mk('text', { x: x(t), y: H - B + 16, class: 'cc-label', 'text-anchor': 'middle' }, day(t));
+    if (i % (span > 70 * 864e5 ? 2 : 1) === 0) mk('text', { x: x(t), y: H - B + 16, class: 'cc-label', 'text-anchor': 'middle' }, shortDay(ymd(new Date(t))));
   }
   // severity axis (left)
   const ys = s => H - B - s * (H - B - T) / 3;

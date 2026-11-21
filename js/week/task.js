@@ -1,5 +1,5 @@
 // the task drawer and the hub drawer
-import { drawer, el, subFamilyTag, sowingLine, busy, toast, confirmDrawer, field, input, selectBox, once } from '../ui.js';
+import { drawer, el, subFamilyTag, sowingLine, busy, toast, confirmDrawer, field, input, selectBox, once, farmWhen } from '../ui.js';
 import { rpc } from '../api.js';
 import { weeks, mondayOf, longDate, hhmm, hrs, PRIO, reasonText, stateMark, S } from './state.js';
 import { SLOT_WORD, slotOf, unitOf, bandOf, timeOf, heldBy, unitMark, timeWord, SLOTS, openIds } from './data.js';
@@ -45,7 +45,7 @@ export function openTask(t) {
   if (((timeOf(t) || {}).by || []).length > 1 || timeOf(t)?.running) fact('By', workedBy(t));
   if ((t.also_sent || []).length) d.body.append(el('div', 'note warn', secondReports(t)));
   fact('Priority', (PRIO[t.priority] || ['', t.priority])[1]);
-  fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + new Date(t.done_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
+  fact('Status', t.status === 'done' ? 'Done' + (t.done_at ? ' · ' + farmWhen(t.done_at) : '') + (t.closed_by ? ' · ' + t.closed_by : '')
     : t.status === 'skipped' ? 'Cancelled · ' + reasonText(t.skip_reason) + (t.skip_note ? ' — ' + t.skip_note : '') + (t.closed_by ? ' · ' + t.closed_by : '')
     : 'Planned · ' + t.status.replace('_', ' '));
   fact('Who', t.workers.length ? t.workers.map(w => w.name).join(', ') : 'nobody yet');

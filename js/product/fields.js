@@ -1,6 +1,6 @@
 // The product drawer's shared words, formatters, the label-photo helpers and the expiry pill (split from product.js, 16 Nov 2026)
 import { api, URL_BASE } from '../api.js';
-import { el, num, selectBox, FARM_TZ } from '../ui.js';
+import { el, num, selectBox, FARM_TZ, farmToday, parseYmd } from '../ui.js';
 import { KIND, KIND_HINT } from '../kinds.js';
 
 export const EFFECT = { safe: 'Safe', moderate: 'Moderate', harmful: 'Harmful', unknown: 'Not known' };
@@ -42,7 +42,7 @@ export const when = iso => new Date(iso).toLocaleString('en-GB', { timeZone: FAR
 export const day = s => !s ? '—' : String(s).length <= 10
   ? new Date(String(s) + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
   : new Date(s).toLocaleDateString('en-GB', { timeZone: FARM_TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
-export const daysTo = s => Math.round((new Date(String(s).slice(0, 10) + 'T12:00:00') - new Date()) / 864e5);
+export const daysTo = s => Math.round((parseYmd(String(s).slice(0, 10)) - parseYmd(farmToday())) / 864e5);   // from the farm's today
 export const show = v => v == null || v === '' || (Array.isArray(v) && !v.length) ? '—' : Array.isArray(v) ? v.join(', ') : String(v);
 export const qtyText = (q, unit) => q == null ? '—' : unit === 'kg' && Math.abs(q) < 1 && q !== 0 ? `${num(q * 1000, Math.abs(q) < 0.01 ? 2 : 0)} g` : unit === 'ml' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} L` : unit === 'g' && Math.abs(q) >= 1000 ? `${num(q / 1000, 2)} kg`
   : `${num(q, Math.abs(q) < 10 ? 2 : Math.abs(q) < 100 ? 1 : 0)} ${unit || ''}`.trim();

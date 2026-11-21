@@ -22,10 +22,13 @@ const fnSend = (action, fixed) => async (a, ctx) => {
   const ch = diy !== undefined ? { ...(changes || {}), diy, ...(switch_on === true ? { switch_on: true } : {}) } : changes;
   return send(ctx.farm, action, { ...args, ...(fixed || {}) }, ch, ctx.op);   // op: its row of the operation log (0286)
 };
-// the button of one program or recipe first (data-cmd-key = its number), else any button of the command on screen
-const keyed = (name, keyOf) => (a, root) => {
+// the button of one program or recipe first (data-cmd-key = its number); then, for a command whose button lives only in
+// that program's or recipe's drawer (Copy…), the row that opens the drawer (rowCmd, same key; seen live on 21 Nov 2026);
+// else any button of the command on screen
+const keyed = (name, keyOf, rowCmd) => (a, root) => {
   const k = keyOf(a);
-  return (k != null && root.querySelector(`[data-cmd="${name}"][data-cmd-key="${String(k).replace(/["\\]/g, '')}"]`)) || root.querySelector(`[data-cmd="${name}"]`);
+  const at = cmd => k != null && root.querySelector(`[data-cmd="${cmd}"][data-cmd-key="${String(k).replace(/["\\]/g, '')}"]`);
+  return at(name) || (rowCmd && at(rowCmd)) || root.querySelector(`[data-cmd="${name}"]`);
 };
 
 const centre = { type: 'int', required: true, min: 0, label: 'Fertigation centre' };
@@ -52,7 +55,7 @@ const FARMNET = [
     preview: a => what(a, 'New program') + ', switched off' },
   { name: 'program_copy', family: 'water', label: 'Copy an irrigation program', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, proId, changes: { type: 'object', required: true, label: 'The copy\'s name' } },
-    preview: a => what(a, `Copy of program ${a.proId}`) + ', switched off', anchor: keyed('program_copy', a => a.proId) },
+    preview: a => what(a, `Copy of program ${a.proId}`) + ', switched off', anchor: keyed('program_copy', a => a.proId, 'program_set') },
   { name: 'program_remove', family: 'water', label: 'Delete an irrigation program', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, proId }, preview: a => `Delete program ${a.proId} (kept, to make again)`, anchor: keyed('program_remove', a => a.proId) },
   { name: 'program_restore', family: 'water', label: 'Put an irrigation program back as it was', pages: IRR, revert: 'A', stageable: true,
@@ -79,7 +82,7 @@ const FARMNET = [
     preview: a => what(a, 'New recipe') },
   { name: 'formula_copy', family: 'water', label: 'Copy a recipe', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, proId: recId, changes: { type: 'object', required: true, label: 'The copy\'s name' } },
-    preview: a => what(a, `Copy of recipe ${a.proId}`), anchor: keyed('formula_copy', a => a.proId) },
+    preview: a => what(a, `Copy of recipe ${a.proId}`), anchor: keyed('formula_copy', a => a.proId, 'formula_set') },
   { name: 'formula_remove', family: 'water', label: 'Delete a recipe', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, proId: recId }, preview: a => `Delete recipe ${a.proId} (kept, to make again)`, anchor: keyed('formula_remove', a => a.proId) },
   { name: 'formula_restore', family: 'water', label: 'Put a recipe back as it was', pages: IRR, revert: 'A', stageable: true,

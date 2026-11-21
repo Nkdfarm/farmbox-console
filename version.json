@@ -1,5 +1,5 @@
 {
-  "version": "0.24.02",
+  "version": "0.24.03",
   "released": "2026-11-21",
-  "note": "Creation mode shows each step's button"
+  "note": "Copy steps show the program they copy"
 }

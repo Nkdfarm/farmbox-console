@@ -27,6 +27,12 @@ const LANES = [
   { id: 'res', name: 'New resources', sub: 'people and equipment' },
 ];
 const STATUSES = [['planned', 'Planned'], ['proposed', 'Proposed'], ['built', 'Built'], ['key', 'Key date']];
+// which years the board shows (owner, 22 Nov 2026: "a selection on top with 2026, 2027, both for a better 2027
+// visual"): the columns of each choice; remembered on this computer, 2027 first
+const YEARS = [['2026', '2026', [0, 1]], ['2027', '2027', [2, 3, 4, 5]], ['both', 'Both', [0, 1, 2, 3, 4, 5]]];
+const YEAR_KEY = 'fbc_roadmap_years';
+let years = (() => { try { const v = localStorage.getItem(YEAR_KEY); return YEARS.some(y => y[0] === v) ? v : '2027'; } catch { return '2027'; } })();
+const shownCols = () => (YEARS.find(y => y[0] === years) || YEARS[1])[2];
 
 let blocks = [];      // [{id, lane, col, ord, when, text, status, note, updated_at}]
 let questions = [];   // [{id, ord, tag, title, context, answer, updated_at}]
@@ -89,7 +95,22 @@ function paintBoard() {
   const nc = nowCol();
   const root = el('div', 'rm-page');
 
-  const head = pageHead(null, 'May 2026 – Dec 2027 · tech, funding, resources · click a block to edit it, drag it to move it.');
+  const cols = shownCols();
+  const seg = el('div', 'seg rm-years');
+  seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Years shown');
+  for (const [key, label] of YEARS) {
+    const b = el('button', 'seg-btn', label);
+    b.type = 'button'; b.setAttribute('aria-pressed', String(key === years));
+    b.onclick = () => {
+      if (key === years) return;
+      years = key;
+      try { localStorage.setItem(YEAR_KEY, key); } catch { /* private window: the choice lasts this visit */ }
+      paintBoard();
+    };
+    seg.append(b);
+  }
+  const span = years === '2026' ? 'May – Dec 2026' : years === '2027' ? 'Jan – Dec 2027' : 'May 2026 – Dec 2027';
+  const head = pageHead(null, `${span} · tech, funding, resources · click a block to edit it, drag it to move it.`, seg);
   root.append(head);
 
   const legend = el('div', 'rm-legend');
@@ -100,8 +121,11 @@ function paintBoard() {
 
   const wrap = el('div', 'rm-wrap');
   const board = el('div', 'rm-board');
-  PERIODS.forEach((p, i) => {
-    const h = el('div', 'rm-qh' + (i < nc ? ' past' : ''), p);
+  // fewer columns, wider ones: four quarters of 2027 fill the width a six-column board shared
+  board.style.gridTemplateColumns = `repeat(${cols.length}, minmax(${cols.length > 2 ? 170 : 220}px, 1fr))`;
+  board.style.minWidth = `${cols.length * (cols.length > 2 ? 170 : 220)}px`;
+  cols.forEach(i => {
+    const h = el('div', 'rm-qh' + (i < nc ? ' past' : ''), PERIODS[i]);
     if (i === nc) h.append(el('span', 'rm-now', 'Now'));
     board.append(h);
   });
@@ -109,7 +133,7 @@ function paintBoard() {
     const lh = el('div', 'rm-lane ' + lane.id, lane.name);
     lh.append(el('span', null, lane.sub));
     board.append(lh);
-    PERIODS.forEach((_, c) => {
+    cols.forEach(c => {
       const cell = el('div', 'rm-cell');
       cell.dataset.lane = lane.id; cell.dataset.col = c;
       for (const b of cellList(lane.id, c)) cell.append(cardEl(b));

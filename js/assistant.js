@@ -32,7 +32,7 @@
 import { rpc, fn } from './api.js';
 import { el, toast, pref, escapeHtml } from './ui.js';
 import { createMic, readAllOn } from './assistant-local.js';
-import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine, planPagesLine, estimateLine, STEP_MARK } from './assistant-shape.js';
+import { SHAPE_CHIPS, splitShape, answerLines, planLines, cardsAfter, cardsLine, planPagesLine, effortBadge, STEP_MARK } from './assistant-shape.js';
 import { runCommand, getCommand } from './registry.js';
 import { startBuild, abandonBuild, building } from './ai-build-ui.js';
 
@@ -203,7 +203,8 @@ function buildPlanBox(text, plan) {
     box.append(line);
   });
   lines.filter(l => l.kind === 'ask').forEach(l => { const d = el('div', 'ai-blk ask'); d.innerHTML = inline(l.text); box.append(d); });
-  box.append(el('div', 'ai-plan-cards', planPagesLine(plan.pages)), el('div', 'ai-plan-cost', estimateLine(plan.estimate, plan.budget)));
+  const cost = el('div', 'ai-plan-cost'); cost.append(effortBadge(plan.estimate, el));   // effort by colour, no amount (21 Nov 2026)
+  box.append(el('div', 'ai-plan-cards', planPagesLine(plan.pages)), cost);
   return box;
 }
 function planBox(text, cards) {
@@ -291,7 +292,8 @@ function paintBuild() {
   if (!v || v.plan.built || v.plan.dropped || building()) { buildRow.hidden = true; return; }
   buildRow.hidden = false;
   const n = v.plan.steps.length;
-  buildRow.append(el('span', 'ai-build-what', `Plan ready · ${n} step${n === 1 ? '' : 's'} · ${estimateLine(v.plan.estimate, null)}`));
+  const what = el('span', 'ai-build-what', `Plan ready · ${n} step${n === 1 ? '' : 's'}${v.plan.estimate ? ' · ' : ''}`); what.append(effortBadge(v.plan.estimate, el));
+  buildRow.append(what);
   const go = el('button', 'btn btn-sm btn-primary ai-build-go', 'Build it'); go.type = 'button';
   go.title = 'Stage every step as a draft on its page, for you to review and validate — nothing is applied before';
   const no = el('button', 'btn btn-sm btn-ghost', '✕'); no.type = 'button'; no.title = 'Not now: drop this plan'; no.setAttribute('aria-label', 'Drop this plan');

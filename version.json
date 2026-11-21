@@ -1,5 +1,5 @@
 {
-  "version": "0.26.00",
+  "version": "0.26.01",
   "released": "2026-11-21",
-  "note": "The AI can propose more, and checks itself"
+  "note": "AI effort by colour, no costs"
 }

@@ -98,13 +98,33 @@ export function planPagesLine(pages) {
   if (!n) return 'No cards.';
   return `${n} card${n === 1 ? '' : 's'} on ${list.length} page${list.length === 1 ? '' : 's'}: ` + list.map(p => `${pageTitle(p.page)} ×${p.n}`).join(', ');
 }
-const money = x => '$' + (Number(x) || 0).toFixed(Number(x) >= 10 ? 0 : 2);
 const secs = s => (s = Math.max(1, Math.round(Number(s) || 0))) < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60 ? (s % 60) + ' s' : ''}`.trim();
-// "About $0.40 (planning $0.30, up to 1 fix $0.10) · about 12 s" — and today's spend against the farm's daily cap
-export function estimateLine(e, budget) {
-  if (!e) return '';
-  const fix = e.fix_calls ? `, up to ${e.fix_calls} fix${e.fix_calls === 1 ? '' : 'es'} ${money(e.fix_usd)}` : '';
-  const cap = budget && Number.isFinite(Number(budget.cap_usd)) ? ` · today ${money(budget.spent_usd)} of the ${money(budget.cap_usd)} daily cap` : '';
-  return `About ${money(e.cost_usd)} (planning ${money(e.planning_usd)}${fix}) · about ${secs(e.seconds)}${cap}`;
+// A build's effort, by colour, instead of its cost (owner, 21 Nov 2026: "remove the cost of the ai actions, just put a
+// color budget to anticipate low effort, medium effort and long effort"). From the estimate the function sends: what
+// the AI's work costs (its calls and the fixes it may need) and how long building takes on screen; the larger of the two
+// decides. No amount is shown anywhere in the panel.
+export const EFFORT = [
+  { level: 'low', label: 'Low effort', usd: 0.30, s: 60 },
+  { level: 'medium', label: 'Medium effort', usd: 1.00, s: 180 },
+  { level: 'long', label: 'Long effort', usd: Infinity, s: Infinity },
+];
+export function effortOf(e) {
+  if (!e) return null;
+  const usd = Number(e.cost_usd) || 0, s = Number(e.seconds) || 0;
+  const byUsd = EFFORT.findIndex(x => usd < x.usd), byS = EFFORT.findIndex(x => s < x.s);
+  return EFFORT[Math.max(byUsd < 0 ? 2 : byUsd, byS < 0 ? 2 : byS)];
+}
+// "● Medium effort · about 2 min to build" — the dot carries the colour (styles.css .ai-effort-*)
+export function effortLine(e) {
+  const x = effortOf(e);
+  return x ? x.label + (Number(e.seconds) > 0 ? ` · about ${secs(e.seconds)} to build` : '') : '';
+}
+export function effortBadge(e, el) {
+  const x = effortOf(e);
+  if (!x) return el('span', 'ai-effort');
+  const b = el('span', `ai-effort ai-effort-${x.level}`);
+  b.append(el('span', 'ai-effort-dot'), el('span', null, effortLine(e)));
+  b.title = 'How much work this build is for the AI: green low, amber medium, red long';
+  return b;
 }
 export const STEP_MARK = { '+': 'new', '~': 'changed', '-': 'removed' };

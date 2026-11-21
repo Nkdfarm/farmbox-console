@@ -335,7 +335,7 @@ async function begin(plan, ctx, farm, release) {
   const budget = async () => {
     const b = await rpc('ai_build_budget', { p_farm: farm.id }, { quiet: true });
     const over = !b || Number(b.spent_usd) >= Number(b.cap_usd);
-    return { over, text: over ? `Today this FarmBox's AI has cost $${Number(b?.spent_usd || 0).toFixed(2)} of its daily cap of $${Number(b?.cap_usd || 0).toFixed(2)}: nothing is built. The farm admin or the farm manager can raise it in Settings › Assistant.` : '' };
+    return { over, text: over ? `This FarmBox's AI has used its daily allowance: nothing is built today. The farm admin or the farm manager can raise it in Settings › Assistant.` : '' };
   };
   const fix = async (step, error) => {
     const r = await fn('assistant', { farm_id: farm.id, units: ctx.units || undefined, messages: [{ role: 'user', content: 'Fix one step of a build.' }],

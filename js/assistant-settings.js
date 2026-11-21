@@ -72,7 +72,7 @@ function capCard(farmId) {
       };
       box.append(save);
     } else box.append(el('div', 'ai-card-state', 'Only the farm admin or the farm manager changes the cap.'));
-    box.append(el('div', 'ai-card-state', 'Every AI call of this FarmBox counts (questions, photos, plans). Before a build the assistant says what it will cost and how long it takes.'));
+    box.append(el('div', 'ai-card-state', 'Every AI call of this FarmBox counts (questions, photos, plans). Before a build the assistant shows its effort by colour (green low, amber medium, red long) and how long it takes.'));
   })();
   return box;
 }

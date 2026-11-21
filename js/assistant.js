@@ -453,7 +453,28 @@ const doCard = (name, args, summary, unit) => {
   return runCommand(name, args, { actor: 'human', source: 'assistant', summary, ctx: { farm } });
 };
 
+// A roadmap card (0293, the franchisor's only): not a registry command and not run_command — the roadmap has no farm —
+// so Do it calls the roadmap's own door as the person, which refuses anyone but the franchisor. No ai_card row (card_id
+// null), no Timeline entry: the Roadmap page is where it is changed back.
+const ROADMAP_DOORS = new Set(['roadmap_save_block', 'roadmap_delete_block', 'roadmap_save_question', 'roadmap_delete_question']);
+async function doRoadmap(v, btn) {
+  const c = convo(), key = ckey();
+  btn.disabled = true; btn.textContent = 'Doing…';
+  try {
+    await rpc(v.rpc, v.args || {});
+    v.state = 'done'; v.result = '';
+    c.notes.push(`did: ${v.summary}`);
+    toast('Done: ' + (v.summary || v.rpc), 'ok');
+    ctx.refresh();
+  } catch (e) {
+    v.state = 'failed'; v.result = e.message;
+    c.notes.push(`tried "${v.summary}" and it failed: ${e.message}`);
+  }
+  save(key); paint();
+}
+
 async function doIt(v, btn) {
+  if (ROADMAP_DOORS.has(v.rpc)) return doRoadmap(v, btn);
   if (!ALLOWED.has(v.rpc)) { toast('That change is not allowed from the assistant', 'bad'); return; }
   const c = convo(), key = ckey();   // the page it was pressed on: a slow change must not write into the page shown by then
   btn.disabled = true; btn.textContent = 'Doing…';

@@ -23,6 +23,8 @@ import { el, loading, pageHead, drawer, confirmDrawer, field, input, selectBox,
 const PERIODS = ['May–Sep 2026', 'Q4 2026', 'Q1 2027', 'Q2 2027', 'Q3 2027', 'Q4 2027'];
 const LANES = [
   { id: 'tech', name: 'Build & Tech', sub: 'Naked Heart, AI, vision, robot' },
+  // 0296 (owner, 22 Nov 2026): growing the crops — varieties, nutrition, IPM, trials; starts empty
+  { id: 'agro', name: 'Agronomy', sub: 'crops, nutrition, IPM, trials' },
   // 0295 (owner, 22 Nov 2026): a lane of its own for how the produce and the franchise reach buyers; starts empty
   { id: 'market', name: 'Route to market', sub: 'customers, channels, sales, partners' },
   { id: 'fund', name: 'Funding & scale', sub: 'raise, FarmBox 2.0, new farms' },

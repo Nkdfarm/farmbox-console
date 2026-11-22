@@ -3265,10 +3265,11 @@ body.ai-building .toast { z-index: 1004; }
 .rm-now { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-full); padding: 1px 8px; }
 .rm-lane { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px; font-size: var(--text-sm); font-weight: 650; color: var(--text); border-bottom: 1px solid var(--divider); }
 .rm-lane::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--rm-lane, var(--text-faint)); }
-.rm-lane.tech { --rm-lane: var(--fam-mt-fg); }
-.rm-lane.fund { --rm-lane: var(--fam-of-fg); }
-.rm-lane.res { --rm-lane: var(--fam-ag-fg); }
-.rm-lane.market { --rm-lane: var(--coral); }
+.rm-lane.tech, .rm-cell[data-lane="tech"] { --rm-lane: var(--fam-mt-fg); }
+.rm-lane.fund, .rm-cell[data-lane="fund"] { --rm-lane: var(--fam-of-fg); }
+.rm-lane.res, .rm-cell[data-lane="res"] { --rm-lane: var(--fam-ag-fg); }
+.rm-lane.agro, .rm-cell[data-lane="agro"] { --rm-lane: #14b8a6; }
+.rm-lane.market, .rm-cell[data-lane="market"] { --rm-lane: var(--coral); }
 .rm-lane span { color: var(--text-faint); font-weight: 400; font-size: var(--text-xs); }
 .rm-cell { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 64px; border-bottom: 1px solid var(--divider); transition: background 120ms; }
 .rm-cell + .rm-cell { border-left: 1px solid var(--divider); }
@@ -3282,6 +3283,11 @@ body.ai-building .toast { z-index: 1004; }
 .rm-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rm-txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .rm-card b { color: var(--text); font-weight: 600; margin-right: 4px; }
+/* a planned block takes its lane's colour, the dot's (owner, 22 Nov 2026); built, key and proposed keep theirs */
+.rm-card:not(.built):not(.key):not(.proposed) { background: color-mix(in srgb, var(--rm-lane, transparent) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--rm-lane, var(--border)) 55%, transparent); }
+.rm-card:not(.built):not(.key):not(.proposed):hover { background: color-mix(in srgb, var(--rm-lane, transparent) 22%, var(--surface)); }
+.rm-card:not(.built):not(.key):not(.proposed) b { color: color-mix(in srgb, var(--rm-lane, var(--text)) 70%, var(--text)); }
 .rm-card.built { background: var(--success-bg); border-color: transparent; color: var(--text); }
 .rm-card.built b { color: var(--success); }
 .rm-card.key { background: var(--warning-bg); border-color: var(--warning); color: var(--text); font-weight: 600; }

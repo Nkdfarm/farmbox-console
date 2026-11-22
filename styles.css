@@ -3267,7 +3267,7 @@ body.ai-building .toast { z-index: 1004; }
 .rm-lane::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--rm-lane, var(--text-faint)); }
 .rm-lane.tech, .rm-cell[data-lane="tech"] { --rm-lane: var(--fam-mt-fg); }
 .rm-lane.fund, .rm-cell[data-lane="fund"] { --rm-lane: var(--fam-of-fg); }
-.rm-lane.res, .rm-cell[data-lane="res"] { --rm-lane: var(--fam-ag-fg); }
+.rm-lane.res, .rm-cell[data-lane="res"] { --rm-lane: #f97316; }   /* orange, not green: green is built */
 .rm-lane.agro, .rm-cell[data-lane="agro"] { --rm-lane: #14b8a6; }
 .rm-lane.market, .rm-cell[data-lane="market"] { --rm-lane: var(--coral); }
 .rm-lane span { color: var(--text-faint); font-weight: 400; font-size: var(--text-xs); }
@@ -3292,7 +3292,8 @@ body.ai-building .toast { z-index: 1004; }
 .rm-card.built b { color: var(--success); }
 .rm-card.key { background: var(--warning-bg); border-color: var(--warning); color: var(--text); font-weight: 600; }
 .rm-card.key b { color: var(--warning); }
-.rm-card.proposed { border-style: dashed; border-color: var(--border-strong); background: transparent; }
+.rm-card.proposed { border-style: dashed; border-color: color-mix(in srgb, var(--rm-lane, var(--border-strong)) 45%, transparent);
+  background: color-mix(in srgb, var(--rm-lane, transparent) 6%, var(--surface)); }
 .rm-grip { flex: none; width: 12px; color: var(--text-faint); font-size: 12px; line-height: 18px; touch-action: none; cursor: grab; opacity: .7; }
 .rm-card.dragging { opacity: .35; }
 .rm-card.flash { animation: rm-flash 900ms ease-out; }

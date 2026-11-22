@@ -3268,6 +3268,7 @@ body.ai-building .toast { z-index: 1004; }
 .rm-lane.tech { --rm-lane: var(--fam-mt-fg); }
 .rm-lane.fund { --rm-lane: var(--fam-of-fg); }
 .rm-lane.res { --rm-lane: var(--fam-ag-fg); }
+.rm-lane.market { --rm-lane: var(--coral); }
 .rm-lane span { color: var(--text-faint); font-weight: 400; font-size: var(--text-xs); }
 .rm-cell { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 64px; border-bottom: 1px solid var(--divider); transition: background 120ms; }
 .rm-cell + .rm-cell { border-left: 1px solid var(--divider); }

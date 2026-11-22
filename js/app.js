@@ -15,7 +15,7 @@ import { renderPurchasing, renderStock } from './purchasing.js';
 import { renderPrices } from './prices.js';
 import { renderReports, reportRange } from './reports.js';
 import { renderNetwork } from './network.js';
-import { renderRoadmapBoard, renderRoadmapQuestions, renderRoadmapBrief } from './roadmap.js';
+import { renderRoadmapBoard, renderRoadmapQuestions } from './roadmap.js';
 import { renderPresentations } from './presentations.js';
 import { renderIssues } from './issues.js';
 import { renderOperations } from './operations.js';
@@ -127,7 +127,7 @@ const SECTIONS = {
   farm: { title: 'Farm setup', tabs: [['zones', 'Zones & positions', renderFarm]] },
   units: { title: 'All FarmBoxes', tabs: [['all', 'All FarmBoxes', renderNetwork]] },
   // Roadmap (0292): the franchisor's company roadmap; currentRoute sends anybody else to the dashboard
-  roadmap: { title: 'Roadmap', tabs: [['board', 'Roadmap', renderRoadmapBoard], ['questions', 'Questions for the team', renderRoadmapQuestions], ['brief', 'Company brief', renderRoadmapBrief]] },
+  roadmap: { title: 'Roadmap', tabs: [['board', 'Roadmap', renderRoadmapBoard], ['questions', 'Questions for the team', renderRoadmapQuestions]] },
 };
 // Roadmap › Presentations (0294): the decks made in Claude Slides, played full screen with their click steps
 SECTIONS.roadmap.tabs.push(['presentations', 'Presentations', renderPresentations]);

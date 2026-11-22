@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { rpc } from './api.js';
 import { el, loading, pageHead, drawer, confirmDrawer, field, input, selectBox,
-         toast, busy, emptyState, isFranchisor } from './ui.js';
+         toast, emptyState, isFranchisor } from './ui.js';
 
 const PERIODS = ['May–Sep 2026', 'Q4 2026', 'Q1 2027', 'Q2 2027', 'Q3 2027', 'Q4 2027'];
 const LANES = [
@@ -36,7 +36,6 @@ const shownCols = () => (YEARS.find(y => y[0] === years) || YEARS[1])[2];
 
 let blocks = [];      // [{id, lane, col, ord, when, text, status, note, updated_at}]
 let questions = [];   // [{id, ord, tag, title, context, answer, updated_at}]
-let brief = { body: '', updated_at: null };   // the company brief (0293): what the assistant is told about FarmBox
 let boardMount = null, qMount = null;
 let drag = null, pendingPaint = false;
 let tmpSeq = 0;
@@ -50,7 +49,6 @@ async function load(mount, paint) {
     if (!mount.isConnected) return false;
     blocks = (d?.blocks || []).map(b => ({ ...b, col: clampCol(b.col) }));
     questions = d?.questions || [];
-    brief = d?.brief || { body: '', updated_at: null };
     paint();
     return true;
   } catch (e) {
@@ -326,49 +324,6 @@ function openBlock(id, preset) {
     d.footer.append(del);
   }
   d.footer.append(el('div', 'spacer'), cancel, save);
-}
-
-// ── the company brief (0293) ──────────────────────────────────────────────
-// One text about FarmBox as a company (farms, the raise, markets, team). The assistant is given it whenever the
-// franchisor asks a question, so it answers about the company and not only about the farm on screen.
-export async function renderRoadmapBrief(container) {
-  if (!isFranchisor()) return notFranchisor(container);
-  await load(container, () => paintBrief(container));
-}
-
-function paintBrief(mount) {
-  if (!mount?.isConnected) return;
-  const root = el('div', 'rm-page');
-  const save = el('button', 'btn btn-primary', 'Save');
-  save.type = 'button'; save.disabled = true;
-  root.append(pageHead(null, 'What the assistant knows about FarmBox as a company: the farms, the raise, markets, the team, FarmBox 2.0. It reads this whenever you ask it something. Keep it short and factual.', save));
-  const box = el('textarea', 'rm-brief');
-  box.id = 'rmBrief'; box.value = brief.body || ''; box.rows = 22;
-  box.setAttribute('aria-label', 'Company brief');
-  const when = el('div', 'hint', brief.updated_at ? 'Saved ' + new Date(brief.updated_at).toLocaleString() : 'Not saved yet');
-  const count = el('span', 'hint');
-  const paintCount = () => { count.textContent = ` · ${box.value.length.toLocaleString()} of 20,000 characters`; };
-  paintCount();
-  box.addEventListener('input', () => { save.disabled = box.value === (brief.body || '') || box.value.length > 20000; paintCount(); });
-  save.onclick = async () => {
-    busy(save, true, 'Saving…');
-    try {
-      const r = await rpc('roadmap_save_brief', { p_body: box.value });
-      brief = r || { body: box.value, updated_at: new Date().toISOString() };
-      when.textContent = 'Saved ' + new Date(brief.updated_at).toLocaleString();
-      toast('Company brief saved', 'ok');
-      save.disabled = true;
-    } catch (e) {
-      toast(e.message, 'bad');
-    } finally {
-      busy(save, false);
-      save.disabled = box.value === (brief.body || '');
-    }
-  };
-  const foot = el('div', 'rm-brief-foot');
-  foot.append(when, count);
-  root.append(box, foot);
-  mount.replaceChildren(root);
 }
 
 // ── the questions ──────────────────────────────────────────────────────────

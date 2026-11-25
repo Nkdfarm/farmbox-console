@@ -59,7 +59,7 @@ const PROGRAM_CHANGES = {
   fields: {
     name: fnName(false),
     on: { type: 'boolean', label: 'switched on (true) or off; on only when the person asked for it in words' },
-    mode: { type: 'int', enum: [0, 1], label: '0 timer, 1 cycle' },
+    mode: { type: 'int', enum: [0, 1], label: '0 timer, 1 cycle (from a timer: with cycle, the interval)' },
     cmd: { type: 'int', enum: [0, 1], label: 'programs sharing a pump: 0 wait, 1 run together' },
     rsif: { type: 'boolean', label: 'irrigate once at the start time' },
     mint: secs('the minimum gap between runs', 0, 60000),
@@ -148,8 +148,8 @@ const FARMNET = [
   // programs and recipes: FarmNet keeps no history, the function does (0283) — every change can be put back (A)
   { name: 'program_set', family: 'water', label: 'Change an irrigation program', pages: [...new Set([...IRR, ...WIN])], revert: 'A', stageable: true,
     args: { id: centre, proId, changes: PROGRAM_CHANGES },
-    hint: 'Read farmnet_programs (and program_param) first; send only the keys that change, every time in seconds. A valve\'s run time is stm, NEVER run_s (that is only how farmnet_programs reports it); sid and id come from farmnet_programs. sources REPLACES the whole list of water sources and valves (one left out is removed): for run times or a recipe alone use valves or recipes. on true only when the person asked for it in words.',
-    preview: a => `Change program ${a.proId}: ${Object.keys(a.changes || {}).join(', ') || 'nothing'}`,
+    hint: 'Read farmnet_programs (and program_param) first; send only the keys that change, every time in seconds. A valve\'s run time is stm, NEVER run_s; sid and id come from farmnet_programs. sources REPLACES the whole list of water sources and valves: for run times or a recipe alone use valves or recipes. on true only when the person asked for it in words. TIMER → CYCLE: send mode 1 WITH cycle (the interval, at least 60 s: a timer has none and the change is refused without it) and starts (slot 0 use true, st, et; other slots in use: use false) in that one change; diy_add / diy_edit of the interval (SR 3) come after.',
+    preview: a => `Change program ${a.proId}:${Object.keys(a.changes || {}).join(', ') || 'nothing'}`,
     anchor: keyed('program_set', a => a.proId) },
   { name: 'program_add', family: 'water', label: 'Add an irrigation program', pages: IRR, revert: 'A', stageable: true,
     args: { id: centre, changes: NEW_NAME('The new program') },

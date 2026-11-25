@@ -1,5 +1,5 @@
 {
-  "version": "0.28.06",
-  "released": "2026-11-22",
-  "note": "Roadmap: New resources in orange, proposed blocks coloured"
+  "version": "0.28.07",
+  "released": "2026-11-25",
+  "note": "The AI builds a timer-to-cycle change in one step"
 }

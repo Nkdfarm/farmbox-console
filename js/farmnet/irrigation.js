@@ -104,7 +104,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
 
       const th = el('div', 'fc-head fc-subhead');
       th.append(el('h4', 'fc-sub', 'Today'), el('div', 'spacer'),
-        el('span', 'hint', ctx.may ? 'Press a program to see it in full and change it.' : 'Press a program to see it in full.'));
+        el('span', 'hint', `${ctx.may ? 'Press a program to see it in full and change it.' : 'Press a program to see it in full.'} Drag it up or down to change the order shown.`));
       if (ctx.may && !programs.e) {
         const nb = tagCmd(el('button', 'btn btn-sm', '＋ New program'), 'program_add'); nb.type = 'button';
         nb.onclick = () => newProgram(ctx, c, recipes, programs.v || [], ctx.redraw);
@@ -148,6 +148,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
             assignRecipe(ctx, c, p, par, r, recipes);
           };
         });
+        sortable(box, `fbc_fn_irr_order_${farm.id}_${c.id}`);
         k.append(box);
       }
 
@@ -492,6 +493,54 @@ function clock(programs, params, suns, records, colourOf, recipeOfProgram, valve
   key.append(sw('ir-plan', 'planned start'), sw('ir-window', 'cycling window'), sw('ir-done', 'ran today'), sw('ir-now', 'now'));
   box.append(key);
   return box;
+}
+// The order of the programs on the clock (owner, 26 Nov 2026: "drag and drop programs just to change the showed order"):
+// for the eye only, kept on this computer per centre — nothing is sent to FarmNet. A program not in the kept order (a new
+// one) comes after the others, in FarmNet's order. Alt + ↑ / ↓ on a row moves it too.
+function sortable(box, key) {
+  const rows = () => [...box.querySelectorAll('.ir-row[data-pid]')];
+  const end = box.querySelector('.ir-key');
+  let kept = [];
+  try { const v = JSON.parse(pref.get(key) || '[]'); if (Array.isArray(v)) kept = v.map(String); } catch { /* a bad value: FarmNet's order */ }
+  const rank = r => { const k = kept.indexOf(r.dataset.pid); return k < 0 ? Infinity : k; };
+  rows().map((r, i) => [r, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).forEach(([r]) => box.insertBefore(r, end));
+  const save = () => pref.set(key, JSON.stringify(rows().map(r => r.dataset.pid)));
+  const TYPE = 'text/x-fn-program';
+  const unmark = () => rows().forEach(r => r.classList.remove('is-before', 'is-after'));
+  rows().forEach(row => {
+    row.draggable = true;
+    row.addEventListener('dragstart', e => {
+      if (e.target !== row) return;
+      e.dataTransfer.setData(TYPE, row.dataset.pid); e.dataTransfer.effectAllowed = 'move';
+      row.classList.add('is-dragging');
+    });
+    row.addEventListener('dragend', () => { row.classList.remove('is-dragging'); unmark(); });
+    row.addEventListener('dragover', e => {
+      if (!e.dataTransfer?.types?.includes(TYPE)) return;   // a recipe dropped on the row is the row's own handler
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      const r = row.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2;
+      unmark(); row.classList.add(after ? 'is-after' : 'is-before');
+    });
+    row.addEventListener('dragleave', e => { if (!row.contains(e.relatedTarget)) row.classList.remove('is-before', 'is-after'); });
+    row.addEventListener('drop', e => {
+      const pid = e.dataTransfer?.getData(TYPE);
+      if (!pid) return;
+      e.preventDefault();
+      const src = rows().find(r => r.dataset.pid === pid), after = row.classList.contains('is-after');
+      unmark();
+      if (!src || src === row) return;
+      if (after) row.after(src); else row.before(src);
+      save();
+    });
+    row.addEventListener('keydown', e => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault();
+      const list = rows(), k = list.indexOf(row), to = list[k + (e.key === 'ArrowUp' ? -1 : 1)];
+      if (!to) return;
+      if (e.key === 'ArrowUp') to.before(row); else to.after(row);
+      save(); row.focus();
+    });
+  });
 }
 const fmt = m => { const x = Math.round(m); return `${String(Math.floor(x / 60) % 24).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
 

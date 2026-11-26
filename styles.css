@@ -1701,6 +1701,8 @@ table.table td.warn { color: var(--warning); font-weight: 700; }
 .ir-clock { display: grid; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
 .ir-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(420px, 1fr); gap: 10px; align-items: center; }
 .ir-row.is-off { opacity: .45; }
+.ir-row.is-dragging { opacity: .35; }
+.ir-row.is-before { box-shadow: 0 -2px 0 var(--accent); } .ir-row.is-after { box-shadow: 0 2px 0 var(--accent); }
 .ir-row.is-open { cursor: pointer; border-radius: 6px; }
 .ir-row.is-open:hover .ir-track, .ir-row.is-open:focus-visible .ir-track { box-shadow: 0 0 0 1px var(--border-strong); }
 .ir-row.is-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

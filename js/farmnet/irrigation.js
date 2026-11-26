@@ -22,7 +22,7 @@ import { centreButtons } from './overview.js';
 import { openRecipe, newRecipe, recipeCard, gauge, EC_SCALE, PH_SCALE } from './recipes.js';
 import { openProgram, newProgram } from './programs.js';
 import { openSunCycle, newSunCycle } from './suncycle.js';
-import { isSunCycle } from './windows-plan.js';
+import { isSunCycle, srsOf, diyOf, planFromFarmnet, sunOf, simulate } from './windows-plan.js';
 import { quickDelete, assignRecipe, deletedList } from './irrigation-actions.js';
 import { valvesSection, rangesSection } from './valves.js';
 import { tagCmd } from '../registry.js';
@@ -53,12 +53,22 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       const params = await Promise.all((programs.v || []).map(p => soft(ask(farm, 'program_param', { id: c.id, proId: p.ID }))));
       // each mixer's own programs: a recipe a mixing program uses is "in use" too
       const mixProgs = await Promise.all((c.status.v?.fertList || []).map(f => soft(ask(farm, 'fert_programs', { id: c.id, devId: f.id }))));
-      return { programs, manual, formulas, records, params, mixProgs };
+      // a sun-cycle program's window is the whole day: its irrigations come from its interval and on/off per period (DIY),
+      // so the clock reads those too and draws the day the sun-cycle panel shows (owner, 26 Nov 2026: Tomato 1's row was
+      // one full-day band, not its morning cycles)
+      const suns = await Promise.all((programs.v || []).map((p, j) => {
+        const par = params[j]?.v;
+        if (!isSunCycle(par)) return null;
+        const sr = srsOf(par);
+        const get = s => soft(ask(farm, 'diy_get', { id: c.id, type: 0, proId: p.ID, SR: s }).then(diyOf));
+        return Promise.all([get(sr.cst), get(sr.en)]).then(([cst, en]) => ({ cst: cst.v, en: en.v, e: cst.e || en.e }));
+      }));
+      return { programs, manual, formulas, records, params, mixProgs, suns };
     }));
     if (!ctx.live()) return;
 
     cl.forEach((c, i) => {
-      const { programs, manual, formulas, records, params, mixProgs } = per[i];
+      const { programs, manual, formulas, records, params, mixProgs, suns } = per[i];
       const s = c.status.v || {};
       const recipes = formulas.v || [];
       // a recipe's colour is its place in FarmNet's list; a program's recipe is the one its water source mixes
@@ -106,7 +116,7 @@ export async function renderFnIrrigation(mount, farm, _app, quiet) {
       k.append(th);
       if (programs.e) k.append(bad(programs.e));
       else {
-        const box = clock(programs.v || [], params, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
+        const box = clock(programs.v || [], params, suns, (records.v?.record || []), colourOf, recipeOfProgram, valvesOf,
           (p, at) => (isSunCycle(parOf(p.ID))
             ? openSunCycle(ctx, c, p, { recipes, records: records.v?.record || [], programs: programs.v || [], after: ctx.redraw })
             : openProgram(ctx, c, p, recipes, at, undefined, { records: records.v?.record || [], programs: programs.v || [] })));
@@ -373,7 +383,7 @@ export function tod(v) {
 }
 const diyV = x => (x && typeof x === 'object' && 'V' in x ? x.V : x);
 
-function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf, open) {
+function clock(programs, params, suns, records, colourOf, recipeOfProgram, valvesOf, open) {
   const today = nowLocal().slice(0, 10), now = tod(nowLocal());
   const box = el('div', 'ir-clock');
   const pct = m => `${(Math.max(0, Math.min(1440, m)) / 1440) * 100}%`;
@@ -414,7 +424,23 @@ function clock(programs, params, records, colourOf, recipeOfProgram, valvesOf, o
     const starts = par && Array.isArray(par.TM) ? par.TM.filter(x => x && x.USE !== false) : [];
     const runLen = Math.max(2, tod(p.TM) ?? 2);   // minutes in all
     let drawn = 0;
-    if (par && Number(par.SMD) === 1) {           // cycling: a window from start to end, every CST
+    // a sun cycle: every irrigation of today, as its panel works them out (windows-plan.js simulate); its window (the
+    // whole day) only when FarmNet did not give the periods or the sun
+    const sc = suns?.[i];
+    const scSun = sc && !sc.e ? sunOf(sc.cst, sc.en) : null;
+    const scDay = scSun ? simulate(planFromFarmnet(p, par, { cst: sc.cst, en: sc.en, isDrain: () => false, isWeather: () => false }), scSun) : null;
+    if (scDay) {
+      const on = (scDay.on || 60) / 60;
+      scDay.starts.forEach(x => {
+        const a = x.at / 60;
+        const s = el('div', 'ir-plan');
+        s.style.left = pct(a); s.style.width = `max(3px, calc(${pct(a + on)} - ${pct(a)}))`;
+        s.title = `starts ${fmt(a)} · ${['morning', 'afternoon', 'night'][x.k] || ''} · ${Math.round(on * 60)} s`;
+        tr.append(s); drawn++;
+      });
+      if (!drawn) tr.title = 'No irrigation today: every period is set to none';
+      drawn = Math.max(drawn, 1);   // a sun cycle with no irrigation today draws no "next start" guess either
+    } else if (par && Number(par.SMD) === 1) {    // cycling: a window from start to end, every CST
       const every = tod(diyV(par.CST));
       starts.forEach(x => {
         const a = tod(diyV(x.ST)), b = tod(diyV(x.ET));

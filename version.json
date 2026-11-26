@@ -1,5 +1,5 @@
 {
-  "version": "0.28.07",
-  "released": "2026-11-25",
-  "note": "The AI builds a timer-to-cycle change in one step"
+  "version": "0.28.08",
+  "released": "2026-11-26",
+  "note": "Irrigation clock: sun-cycle programs show their own irrigations"
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.28.08",
+  "version": "0.28.09",
   "released": "2026-11-26",
-  "note": "Irrigation clock: sun-cycle programs show their own irrigations"
+  "note": "Sun-cycle panel: the day's colours follow the sun"
 }

@@ -200,10 +200,21 @@ export async function openSunCycle(ctx, c, p, { recipes = [], records = [], prog
     svg.setAttribute('aria-label', `Today: ${sim?.starts.length ?? 0} irrigations`);
     const add = (tag, attrs) => { const n = document.createElementNS(ns, tag); Object.entries(attrs).forEach(([a, v]) => n.setAttribute(a, String(v))); svg.append(n); return n; };
     const m = s => (((s % DAY) + DAY) % DAY) / 60;
-    dd?.periods.forEach((p, k) => {
-      const a = m(p.start), b = m(p.end);
+    // the day's colours stay on the sun (owner, 26 Nov 2026: "fixed with sunrise and sunset, not moving with the irrigation
+    // sunset delay/advance"): sunrise → noon, noon → sunset, sunset → sunrise; a shifted period's start is a line of its colour
+    const fixed = [sun.rise, W.NOON, sun.set];
+    fixed.forEach((s, k) => {
+      const a = m(s), b = m(fixed[(k + 1) % 3]);
       const segs = a < b ? [[a, b]] : [[a, 1440], [0, b]];
       segs.forEach(([x0, x1]) => add('rect', { x: x0, y: 44, width: Math.max(0, x1 - x0), height: 76, class: `sc-band sc-p${k}${plan.periods[k].off === null ? ' is-off' : ''}` }));
+    });
+    [[0, sun.rise, plan.p1], [2, sun.set, plan.p3]].forEach(([k, s, shift]) => {
+      const pd = dd?.periods[k];
+      if (!pd || !shift) return;   // (drawn for a period with no irrigation too: it is where the one before it stops)
+      const ln = add('line', { x1: m(pd.start), x2: m(pd.start), y1: 40, y2: 124, class: `sc-shift sc-p${k}` });
+      const t = document.createElementNS(ns, 'title');
+      t.textContent = `${PN[k]} period from ${W.clock(pd.start)} (${k ? 'sunset' : 'sunrise'} ${shift > 0 ? '+' : '−'} ${Math.abs(shift)} min)`;
+      ln.append(t);
     });
     (sim?.starts || []).forEach(s => add('rect', { x: m(s.at), y: 36, width: Math.max(4, (sim.on || 60) / 60), height: 92, class: 'sc-tick' }));
     [[sun.rise, '☀ ' + W.clock(sun.rise)], [sun.set, '☾ ' + W.clock(sun.set)]].forEach(([t, label]) => {

@@ -3230,6 +3230,7 @@ body.ai-building .toast { z-index: 1004; }
 .sc-band { opacity: .55; }
 .sc-band.sc-p0 { fill: #f2b84b; } .sc-band.sc-p1 { fill: #e8894a; } .sc-band.sc-p2 { fill: #5b6fd6; }
 .sc-band.is-off { opacity: .15; }
+.sc-shift { stroke-width: 5; } .sc-shift.sc-p0 { stroke: #f2b84b; } .sc-shift.sc-p2 { stroke: #5b6fd6; }
 .sc-tick { fill: var(--text); opacity: .85; }
 .sc-first { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .sc-sun { stroke: var(--text-muted); stroke-dasharray: 3 3; }
